@@ -348,8 +348,12 @@ class SelectActiveRegionDialog {
 			std::vector<std::filesystem::path> files = GetNormalFilesInDirectory(surveyRegionsFolderPath);
 			m_regionList.clear();
 			m_regionList.reserve(files.size());
-			for (auto const & file : files)
-				m_regionList.push_back(file.stem().string());
+			for (auto const & file : files) {
+				std::string filename = file.stem().string(); //Without file extension
+				if ((! filename.empty()) && (filename[0] != '.'))
+					m_regionList.push_back(filename);
+				
+			}
 			std::sort(m_regionList.begin(), m_regionList.end(),
 			          [](std::string const & A, std::string const & B) -> bool { return StringNumberAwareCompare_LessThan(A, B); });
 			

@@ -96,7 +96,7 @@ recon: folders $(OBJFILES)
 
 #Reproduce the folder structure of SRC in OBJ and create an External sub-directory for external object files
 folders:
-	@mkdir DEP
+	@mkdir -p DEP
 	@mkdir -p OBJ/External
 	@find SRC/ -type d -printf '%P\n' | sed 's/^/OBJ\//' | xargs mkdir -p
 
