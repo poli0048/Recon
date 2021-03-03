@@ -92,11 +92,12 @@ namespace DroneInterface {
 		public:
 			using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 			
-			//TODO: There needs to be some thought given to thread safety. Best option:
-			//Add a private mutex field and scope-lock it in each public method
-			
-			DroneManager();
-			~DroneManager() = default;
+			DroneManager() : m_thread(&Drone::DroneMain, this), m_abort(false) { /* Initialization Here (Retrieve serial number, etc.) */ }
+			~DroneManager() {
+				m_abort = true;
+				if (m_thread.joinable())
+					m_thread.join();
+			}
 			
 			//Basic hardware info (should be available on construction)
 			std::string GetDroneSerial(void);
@@ -120,6 +121,8 @@ namespace DroneInterface {
 			void StartDJICamImageFeed(double TargetFPS); //Start sending frames of live video (as close as possible to the given framerate (frame / s))
 			void StopDJICamImageFeed(void); //Stop sending frames of live video
 			bool GetMostRecentFrame(cv::Mat & Frame, unsigned int & FrameNumber, TimePoint & Timestamp);
+			inline int  RegisterCallback(std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)> Callback); //Regester callback for new frames
+			inline void UnRegisterCallback(int Handle); //Unregister callback for new frames (input is token returned by RegisterCallback()
 			
 			//Drone Command & Control. If a method returns bool, it should return True if the requested info is known (even if very old) and set the
 			//Timestamp argument to the instant of validity of the most recently received value. If the requested info is unknown, these return False.
@@ -136,8 +139,56 @@ namespace DroneInterface {
 			void Hover(void); //Stop any running missions an leave virtualStick mode (if in it) and hover in place (P mode)
 			void LandNow(void); //Initiate landing sequence immediately at current vehicle location
 			void GoHomeAndLand(void); //Initiate a Return-To-Home sequence that lands the vehicle at it's take-off location
+		
+		private:
+			//Some modules that use imagery can't handle missing frames gracefully. Thus, we use provide a callback mechanism to ensure that such a module
+			//can have a guarantee that each frame received by the drone interface module will be provided downstream.
+			std::unordered_map<int, std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)>> m_ImageryCallbacks;
+			
+			std::thread       m_thread;
+			std::atomic<bool> m_abort;
+			std::mutex        m_mutex; //Lock in each public method for thread safety
+			
+			inline void DroneMain(void);
 	};
+
+	//Regester callback for new frames
+	inline int Drone::RegisterCallback(std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)> Callback) {
+		std::scoped_lock lock(m_mutex);
+		int token = 0;
+		while (m_ImageryCallbacks.count(token) > 0U)
+			token++;
+		m_ImageryCallbacks[token] = Callback;
+		return token;
+	}
+
+	//Unregister callback for new frames (input is token returned by RegisterCallback()
+	inline void Drone::UnRegisterCallback(int Handle) {
+		std::scoped_lock lock(m_mutex);
+		m_ImageryCallbacks.erase(Handle);
+	}
+	
+	//Function for internal thread managing drone object
+	inline void Drone::DroneMain(void) {
+		while (! m_abort) {
+			m_mutex.lock();
+			
+			//Check to see if there is new data on the socket to process and process it.
+			//Decode received packets and update private state
+			
+			//If a new image was received and decoded, call the callbacks:
+			/*if (newImageProcessed) {
+				for (auto const & kv : m_ImageryCallbacks)
+					kv.second(NewImage, NewImageTimestamp);
+			}*/
+			
+			//At the end of the loop, if we did useful work do:
+			//m_mutex.unlock();
+			//If we did not do useful work do:
+			//m_mutex.unlock();
+			//std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
+	}
+	
 }
-
-
 
