@@ -13,6 +13,7 @@
 #include <ctime>
 #include <sstream>
 #include <system_error>
+#include <unordered_map>
 
 //External Includes
 //OpenCV basic headers for use of cv::Mat
@@ -59,20 +60,21 @@ namespace ShadowDetection {
 			bool              m_running;
 			std::atomic<bool> m_abort;
 			std::mutex        m_mutex;
+			std::unordered_map<int, std::function<void(InstantaneousShadowMap const & ShadowMap)>> m_callbacks;
 			
 			std::string m_ImageProviderDroneSerial; //Empty if none
 			Drone * m_ImageProviderDrone = nullptr; //Pointer to image provider drone
+			int m_DroneImageCallbackHandle = -1;    //Handle for image callback (if registered). -1 if none registered.
 			
 			cv::Mat m_ReferenceFrame;
 			std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> m_Fiducials; //See SetFiducials() for structure
 			
-			unsigned int m_FrameNumber = 0U;    //Frame number of the most recently processed frame
-			TimePoint m_FrameTimestamp;         //Timestamp of the most recent processed frame
-			cv::Mat m_Frame;                    //Most recently processed frame
+			std::vector<std::tuple<cv::Mat, TimePoint>> m_unprocessedFrames;
 			InstantaneousShadowMap m_ShadowMap; //Shadow map based on most recently processed frame
 			std::Evector<ShadowMapHistory> m_History; //Record of all computed shadow maps - add new element when ref frame changes (since registration changes)
 			
 			inline void ModuleMain(void);
+			inline void ProcessFrame(cv::Mat const & Frame, TimePoint const & Timestamp);
 			
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -83,6 +85,7 @@ namespace ShadowDetection {
 			//Constructors and Destructors
 			ShadowDetectionEngine() : m_engineThread(&ShadowDetectionEngine::ModuleMain, this), m_running(false), m_abort(false) { }
 			~ShadowDetectionEngine() {
+				Stop();
 				m_abort = true;
 				if (m_engineThread.joinable())
 					m_engineThread.join();
@@ -91,6 +94,8 @@ namespace ShadowDetection {
 			inline void Start(std::string const & DroneSerial); //Start or restart continuous processing of fisheye imagery from the given drone
 			inline void Stop(void);                             //Stop processing
 			inline bool IsRunning(void);                        //Returns true if running, false if stopped
+			inline int  RegisterCallback(std::function<void(InstantaneousShadowMap const & ShadowMap)> Callback); //Regester callback for new shadow maps
+			inline void UnRegisterCallback(int Handle); //Unregister callback for new shadow maps (input is token returned by RegisterCallback()
 			
 			//Set the reference frame to be used for registration and stabilization (all other frames are aligned to the reference frame)
 			inline bool SetReferenceFrame(cv::Mat const & RefFrame);
@@ -115,19 +120,35 @@ namespace ShadowDetection {
 
 	//Save the shadow map history to an FRF file with the given path. Return true on success and false on failure
 	inline bool ShadowMapHistory::SaveFRFFile(std::filesystem::path const & Filepath) {
-		//TODO - Implement
+		//TODO - Implement Me
 		std::cerr << "ShadowMapHistory::SaveFRFFile() Not implemented yet.\r\n";
 		return false;
 	}
 
 	inline void ShadowDetectionEngine::Start(std::string const & DroneSerial) {
 		std::scoped_lock lock(m_mutex);
-		m_ImageProviderDroneSerial = DroneSerial;
+		//If we already have a drone object pointer with a registered callback - unregister it and clear our pointer
+		if (m_ImageProviderDrone != nullptr) {
+			if (m_DroneImageCallbackHandle >= 0) {
+				m_ImageProviderDrone->UnRegisterCallback(m_DroneImageCallbackHandle);
+				m_DroneImageCallbackHandle = -1;
+			}
+			m_ImageProviderDrone = nullptr;
+		}
+		m_ImageProviderDroneSerial = DroneSerial; //Actual connection will occur in ModuleMain()
 		m_running = true;
 	}
 
 	inline void ShadowDetectionEngine::Stop(void) {
 		std::scoped_lock lock(m_mutex);
+		m_ImageProviderDroneSerial.clear();
+		if (m_ImageProviderDrone != nullptr) {
+			if (m_DroneImageCallbackHandle >= 0) {
+				m_ImageProviderDrone->UnRegisterCallback(m_DroneImageCallbackHandle);
+				m_DroneImageCallbackHandle = -1;
+			}
+			m_ImageProviderDrone = nullptr;
+		}
 		m_running = false;
 	}
 
@@ -135,77 +156,89 @@ namespace ShadowDetection {
 		std::scoped_lock lock(m_mutex);
 		return m_running;
 	}
-
+	
+	//Regester callback for new shadow maps (returns handle)
+	inline int ShadowDetectionEngine::RegisterCallback(std::function<void(InstantaneousShadowMap & ShadowMap)> Callback) {
+		std::scoped_lock lock(m_mutex);
+		int token = 0;
+		while (m_callbacks.count(token) > 0U)
+			token++;
+		m_callbacks[token] = Callback;
+		return token;
+	}
+	
+	//Unregister callback for new shadow maps (input is token returned by RegisterCallback()
+	inline void ShadowDetectionEngine::UnRegisterCallback(int Handle) {
+		std::scoped_lock lock(m_mutex);
+		m_callbacks.erase(Handle);
+	}
+	
+	//When we stop or restart processing we immediately unregister any image callback and trash our pointer to the drone. However, we don't
+	//immediately connect to a drone when told to start processing because that drone may not be available yet. We periodically check and try
+	//to connect in the main loop. We also periodically check to see if we have unprocessed imagery waiting and process a frame when we do.
+	//Note: We don't chain callbacks - the callback copies data and returns and our own processing happens in our private thread (and any
+	//extra threads that it might want to create). Doing the heavy lifting in the callback itself is simpler but could slow down the drone
+	//objects internal thread, which is not good practice.
 	inline void ShadowDetectionEngine::ModuleMain(void) {
 		while (! m_abort) {
 			m_mutex.lock();
-			if (! m_running) {
+			if (m_running) {
+				if ((! m_ImageProviderDroneSerial.empty()) && (m_ImageProviderDrone == nullptr)) {
+					//We haven't been able to get a pointer to the desired drone yet and register a callback. Try now
+					m_ImageProviderDrone = DroneInterface::DroneManager::Instance().GetDrone(m_ImageProviderDroneSerial);
+					if (m_ImageProviderDrone != nullptr) {
+						//We connected to the drone - register an imagery callback
+						m_DroneImageCallbackHandle = m_ImageProviderDrone->RegisterCallback([this](cv::Mat const & Frame, TimePoint const & Timestamp) {
+							std::scoped_lock lock(m_mutex);
+							//Only queue frames when we have what we need to process them or the buffer could grow without end
+							if ((! m_ReferenceFrame.empty()) && (m_Fiducials.size() >= 3U)) {
+								cv::Mat frameCopy;
+								Frame.copyTo(frameCopy);
+								m_unprocessedFrames.push_back(std::make_tuple(frameCopy, Timestamp));
+							}
+						});
+					}
+				}
+				
+				if ((! m_unprocessedFrames.empty()) && (! m_ReferenceFrame.empty()) && (m_Fiducials.size() >= 3U)) {
+					//Process the first unprocessed frame and pop it from m_unprocessedFrames.
+					ProcessFrame(std::get<0>(m_unprocessedFrames[0]), std::get<1>(m_unprocessedFrames[0]));
+					m_unprocessedFrames.erase(m_unprocessedFrames.begin()); //Will cause vector re-allocation but it's actually not a big deal
+					
+					//We did useful work so unlock the mutex but dont snooze
+					m_mutex.unlock();
+				}
+				else {
+					m_mutex.unlock();
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				}
+			}
+			else {
 				m_mutex.unlock();
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
-				continue;
 			}
-			
-			//If we get here, the engine is running
-			if (m_ReferenceFrame.empty() || (m_Fiducials.size() < 3U)) {
-				m_mutex.unlock();
-				std::this_thread::sleep_for(std::chrono::milliseconds(100));
-				continue;
-			}
-			
-			//If we get here, the engine is running and we have a ref frame and enough fiducials to pose-solve
-			if (m_ImageProviderDroneSerial.empty()) {
-				m_mutex.unlock();
-				std::this_thread::sleep_for(std::chrono::milliseconds(100));
-				continue; //We have not been provided a drone serial to fetch imagery from
-			}
-			if ((m_ImageProviderDrone == nullptr) || (m_ImageProviderDrone->GetDroneSerial() != m_ImageProviderDroneSerial))
-				//Try to fetch a pointer to the drone we need to be getting imagery from
-				m_ImageProviderDrone = DroneInterface::DroneManager::Instance().GetDrone(m_ImageProviderDroneSerial);
-			if (m_ImageProviderDrone == nullptr) {
-				m_mutex.unlock();
-				std::this_thread::sleep_for(std::chrono::milliseconds(100));
-				continue; //We can't get a pointer to the drone we need imagery from
-			}
-			
-			//If we get here, we have a valid pointer to the drone providing us imagery
-			cv::Mat Frame;
-			unsigned int FrameNumber;
-			TimePoint FrameTimestamp;
-			if (! m_ImageProviderDrone->GetMostRecentFrame(Frame, FrameNumber, Timestamp)) {
-				m_mutex.unlock();
-				std::this_thread::sleep_for(std::chrono::milliseconds(100));
-				continue; //No imagery is available yet for this drone
-			}
-			if (FrameNumber == m_FrameNumber) {
-				m_mutex.unlock();
-				std::this_thread::sleep_for(std::chrono::milliseconds(100));
-				continue; //We have already processed to most recent frame
-			}
-			
-			//If we get here we have a new frame to process
-			m_FrameNumber = FrameNumber;
-			m_FrameTimestamp = FrameTimestamp;
-			Frame.copyTo(m_Frame);
-			
-			
-			
-			//TODO: *********************************************************************************
-			//TODO: ***************************** Magic sauce goes here *****************************
-			//TODO: *********************************************************************************
-			//Compute new shadow map based on the newly received frame
-			
-			//Update m_ShadowMap
-			//Update m_History
-			
-			//TODO: *********************************************************************************
-			//TODO: *********************************************************************************
-			//TODO: *********************************************************************************
-			
-			
-			
-			//Unlock but don't snooze if we actually did work
-			m_mutex.unlock();
 		}
+	}
+	
+	//A lock is already held on the object when this function is called so don't lock it here
+	//On entry we also already know that we have at least 3 fiducials and a non-empty reference frame
+	//TODO: Ideally, this function will lose the "inline" specifier and be moved to a CPP file.
+	inline void ShadowDetectionEngine::ProcessFrame(cv::Mat const & Frame, TimePoint const & Timestamp) {
+		//TODO: *********************************************************************************
+		//TODO: ***************************** Magic sauce goes here *****************************
+		//TODO: *********************************************************************************
+		//Compute new shadow map based on the newly received frame
+		
+		//Update m_ShadowMap
+		//Update m_History
+		
+		//TODO: *********************************************************************************
+		//TODO: *********************************************************************************
+		//TODO: *********************************************************************************
+		
+		//Call any registered callbacks
+		for (auto const & kv : m_callbacks)
+			kv.second(m_ShadowMap);
 	}
 
 	//Set the reference frame to be used for registration and stabilization (all other frames are aligned to the reference frame)
