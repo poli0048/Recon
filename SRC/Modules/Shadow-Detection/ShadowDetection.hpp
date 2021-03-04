@@ -136,6 +136,7 @@ namespace ShadowDetection {
 			m_ImageProviderDrone = nullptr;
 		}
 		m_ImageProviderDroneSerial = DroneSerial; //Actual connection will occur in ModuleMain()
+		m_unprocessedFrames.clear(); //Clear any unprocessed imagery
 		m_running = true;
 	}
 
