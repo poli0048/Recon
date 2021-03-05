@@ -60,7 +60,9 @@ class SurveyRegion {
 		inline void LoadFromDisk(void); //Immediately load from disk, overwriting current object
 };
 
-//Singleton Class
+//Singleton Class - anyone off the main draw loop should be very careful using this since the active region can be changed
+//in the draw loop, invalidating any pointers to the old survey region object. Everyone but the main draw loop should retrieve
+//a copy of the data they want instead of holding a pointer to the SurveyRegion object.
 class SurveyRegionManager {
 	public:
 		static SurveyRegionManager & Instance() { static SurveyRegionManager Obj; return Obj; }
@@ -73,6 +75,23 @@ class SurveyRegionManager {
 		SurveyRegion * GetActiveSurveyRegion(void) {
 			std::scoped_lock lock(m_mutex);
 			return m_ActiveRegion.get();
+		}
+		
+		//Get a copy of the data defining the active survey region. Returns false if there is no active region.
+		//Set any argument to null if you don't want to copy the respective field. This is the only safe way for components that are not
+		//part of the draw loop to access the active region.
+		bool GetCopyOfActiveRegionData(std::string * Name, PolygonCollection * Region, std::Evector<Triangle> * Triangulation) {
+			std::scoped_lock lock1(m_mutex);
+			if (m_ActiveRegion == nullptr)
+				return false;
+			std::scoped_lock lock2(m_ActiveRegion->m_mutex);
+			if (Name != nullptr)
+				*Name = m_ActiveRegion->m_Name;
+			if (Region != nullptr)
+				*Region = m_ActiveRegion->m_Region;
+			if (Triangulation != nullptr)
+				*Triangulation = m_ActiveRegion->m_triangulation;
+			return true;
 		}
 		
 		//Change the active survey region to the one with the given name (which may or may not exist on disk)
