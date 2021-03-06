@@ -50,10 +50,10 @@ COMPILE_WARNING_FLAGS = -Wall -Wno-unused-variable -Wno-unused-but-set-variable 
 COMPILE_DEPGEN_FLAGS  = -MT $@ -MMD -MP -MF DEP/$(*F).d
 ELF_FLAGS             = -fdata-sections -ffunction-sections
 COMPILE_FLAGS         = -c -fdiagnostics-color=auto -pthread $(COMPILE_WARNING_FLAGS) $(RECON_INCLUDE_FLAGS) $(COMPILE_DEPGEN_FLAGS) \
-                        $(DEBUGFLAGS) $(PROFILEFLAGS) $(LINKER_TRIM_FLAGS) $(DEFINE_FLAGS) $(STANDARDFLAGS) $(OPTFLAGS) $(ELF_FLAGS)
+                        $(DEBUGFLAGS) $(PROFILEFLAGS) $(LINKER_TRIM_FLAGS) $(DEFINE_FLAGS) $(STANDARDFLAGS) $(OPTFLAGS) $(ELF_FLAGS) `pkg-config --cflags opencv`
 LINK_FLAGS            = -fdiagnostics-color=auto -static-libstdc++ -static-libgcc -lstdc++ -lstdc++fs \
                         -Wl,-Bdynamic -lpthread -lm -ldl -luuid -lGL -fopenmp \
-                        `pkg-config --static --libs freetype2 libcurl gtk+-3.0` ../glfw/Build-Linux-Release/src/libglfw3.a
+                        `pkg-config --static --libs freetype2 libcurl gtk+-3.0` ../glfw/Build-Linux-Release/src/libglfw3.a `pkg-config --libs opencv`
 
 # **********************************************   Populate Source File Lists   *********************************************
 #Populate source files that are part of Recon project
