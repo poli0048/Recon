@@ -11,6 +11,7 @@
 #include <iostream>
 
 //External Includes
+#include <opencv2/opencv.hpp>
 
 //Project Includes
 #include "../../EigenAliases.h"

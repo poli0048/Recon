@@ -14,6 +14,7 @@
 #include "Polygon.hpp"
 #include "SurveyRegionManager.hpp"
 #include "Maps/MapUtils.hpp"
+#include "Modules/Guidance/Guidance.hpp"
 
 #define PI 3.14159265358979
 
@@ -24,6 +25,7 @@ static bool TestBench2(void);
 static bool TestBench3(void);
 static bool TestBench4(void);
 static bool TestBench5(void);
+static bool TestBench6(void);
 
 // ************************************************************************************************************************************************
 // *********************************************************   Public Function Definitions   ******************************************************
@@ -45,6 +47,7 @@ namespace TestBenches {
 			case 3: result = TestBench3(); break;
 			case 4: result = TestBench4(); break;
 			case 5: result = TestBench5(); break;
+			case 6: result = TestBench6(); break;
 			default: break;
 		}
 		if (result)
@@ -355,7 +358,27 @@ static bool TestBench5(void) {
 	return true;
 }
 
-
+static bool TestBench6(void) {
+	//First test bench for guidance module - setup test case and call EstimateMissionTime() for mission time flying between two points
+	DroneInterface::Waypoint A;
+	DroneInterface::Waypoint B;
+	double TargetSpeed = 15.0; //Max mission speed for DJI drones being controlled through SDK (m/s)
+	
+	//First point about 100 feet above the ground in Lamberton test area
+	A.Latitude  =  0.772121618310453;
+	A.Longitude = -1.663470726988503;
+	A.Altitude  = 380.0;
+	
+	//Second point about 100 feet above the ground in Lamberton test area
+	B.Latitude  =  0.772065994667192;
+	B.Longitude = -1.663426622518305;
+	B.Altitude  = 380.0;
+	
+	double time = Guidance::EstimateMissionTime(A, B, TargetSpeed);
+	std::cerr << "Estimated flight fime from point A to point B (stopped at beginning and end) is: " << time << " seconds.\r\n";
+	
+	return false; //Ideally check result somehow and return true on success and false on failure (otherwise manually verify result somehow)
+}
 
 
 

@@ -15,7 +15,8 @@ namespace TestBenches {
 		"Geometry: Simple Polygon intersection fragmentation",
 		"Geometry: Polygon Triangulation",
 		"Survey Regions: Serialization",
-		"Survey Regions: Create Sample Minneapolis Region"
+		"Survey Regions: Create Sample Minneapolis Region",
+		"Guidance: EstimateMissionTime() - Between 2 points"
 	};
 	
 	void RunTestBench(int TestNum);

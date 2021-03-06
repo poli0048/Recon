@@ -16,17 +16,20 @@
 #include <unordered_map>
 
 //External Includes
-//OpenCV basic headers for use of cv::Mat
+#include "../../../../handycpp/Handy.hpp"
+#include <opencv2/opencv.hpp>
 
 //Project Includes
 #include "../../EigenAliases.h"
 #include "../DJI-Drone-Interface/DroneManager.hpp"
 
 namespace ShadowDetection {
+	using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
+	
 	class InstantaneousShadowMap {
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-			using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
+			//using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 			
 			cv::Mat Map;           //fixed-size (512 x 512) shadow map image. Use uint8_t type with 0-127 = unshadowed, and 128-256 = shadowed
 			Eigen::Vector2d UL_LL; //(Latitude, Longitude) of center of upper-left pixel, in radians
@@ -41,7 +44,7 @@ namespace ShadowDetection {
 	class ShadowMapHistory {
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-			using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
+			//using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 			
 			std::vector<cv::Mat> Maps;         //Same definition as in InstantaneousShadowMap
 			std::vector<TimePoint> Timestamps; //Item n is the timestamp for Maps[n]
@@ -63,7 +66,7 @@ namespace ShadowDetection {
 			std::unordered_map<int, std::function<void(InstantaneousShadowMap const & ShadowMap)>> m_callbacks;
 			
 			std::string m_ImageProviderDroneSerial; //Empty if none
-			Drone * m_ImageProviderDrone = nullptr; //Pointer to image provider drone
+			DroneInterface::Drone * m_ImageProviderDrone = nullptr; //Pointer to image provider drone
 			int m_DroneImageCallbackHandle = -1;    //Handle for image callback (if registered). -1 if none registered.
 			
 			cv::Mat m_ReferenceFrame;
@@ -78,7 +81,7 @@ namespace ShadowDetection {
 			
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-			using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
+			//using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 			
 			static ShadowDetectionEngine & Instance() { static ShadowDetectionEngine Obj; return Obj; }
 			
@@ -98,7 +101,7 @@ namespace ShadowDetection {
 			inline void UnRegisterCallback(int Handle); //Unregister callback for new shadow maps (input is token returned by RegisterCallback()
 			
 			//Set the reference frame to be used for registration and stabilization (all other frames are aligned to the reference frame)
-			inline bool SetReferenceFrame(cv::Mat const & RefFrame);
+			inline void SetReferenceFrame(cv::Mat const & RefFrame);
 			inline bool IsReferenceFrameSet(void);
 			
 			//Set the fiducials used for registration. Each fiducial is a tuple of the form <PixCoords, LLA> where:
@@ -159,7 +162,7 @@ namespace ShadowDetection {
 	}
 	
 	//Regester callback for new shadow maps (returns handle)
-	inline int ShadowDetectionEngine::RegisterCallback(std::function<void(InstantaneousShadowMap & ShadowMap)> Callback) {
+	inline int ShadowDetectionEngine::RegisterCallback(std::function<void(InstantaneousShadowMap const & ShadowMap)> Callback) {
 		std::scoped_lock lock(m_mutex);
 		int token = 0;
 		while (m_callbacks.count(token) > 0U)
@@ -243,7 +246,7 @@ namespace ShadowDetection {
 	}
 
 	//Set the reference frame to be used for registration and stabilization (all other frames are aligned to the reference frame)
-	inline bool ShadowDetectionEngine::SetReferenceFrame(cv::Mat const & RefFrame) {
+	inline void ShadowDetectionEngine::SetReferenceFrame(cv::Mat const & RefFrame) {
 		std::scoped_lock lock(m_mutex);
 		RefFrame.copyTo(m_ReferenceFrame);
 	}
@@ -292,8 +295,8 @@ namespace ShadowDetection {
 		std::filesystem::path TargetDir = Handy::Paths::ThisExecutableDirectory() / "Shadow Map Files";
 		std::error_code ec;
 		if (! std::filesystem::exists(TargetDir))
-			std::filesystem::create_directory(TargetDir, ec)
-		std::vector<std::filesystem::path> subDirs = SubDirectories(TargetDir);
+			std::filesystem::create_directory(TargetDir, ec);
+		std::vector<std::filesystem::path> subDirs = Handy::SubDirectories(TargetDir);
 		std::unordered_set<int> existingMissionNumbers;
 		for (std::filesystem::path const & p : subDirs) {
 			std::string folderName = p.filename().string();

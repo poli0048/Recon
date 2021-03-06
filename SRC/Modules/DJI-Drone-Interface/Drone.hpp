@@ -8,7 +8,7 @@
 #include <string>
 
 //External Includes
-//OpenCV basic headers for use of cv::Mat
+#include <opencv2/opencv.hpp>
 
 //Project Includes
 
@@ -92,8 +92,8 @@ namespace DroneInterface {
 		public:
 			using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 			
-			DroneManager() : m_thread(&Drone::DroneMain, this), m_abort(false) { /* Initialization Here (Retrieve serial number, etc.) */ }
-			~DroneManager() {
+			Drone() : m_thread(&Drone::DroneMain, this), m_abort(false) { /* Initialization Here (Retrieve serial number, etc.) */ }
+			~Drone() {
 				m_abort = true;
 				if (m_thread.joinable())
 					m_thread.join();
