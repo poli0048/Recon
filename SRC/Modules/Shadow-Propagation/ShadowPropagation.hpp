@@ -17,13 +17,19 @@
 #include "../Shadow-Detection/ShadowDetection.hpp"
 
 namespace ShadowPropagation {
-	//Class for a time-stamped, geo-registered time available function
+	//Class for a time-stamped, geo-registered time available function - each pixel corresponds to a patch of ground. We use type uint16_t and
+	//interperet the value for a pixel as the number of seconds that patch of ground is expected to be free of shadows (measured from the timestamp).
+	//If we don't see anything in our forcast that is expected to hit a given pixel then the pixel is predicted to be clear for the full prediction
+	//horizon. That horizon is different for different pixels though (e.g. a pixel on our periphery may have almost no prediction horizon), and it may not
+	//be easy to estimate the horizon for a given pixel (it depends on cloud speed and direction). It is likily also not very actionable information so
+	//to avoid the added complexity of trying to estimate this we will just use a sentinal value to indicate this condition (that nothing currently visible
+	//is expected to hit a given pixel). We will use std::numeric_limits<uint16_t>::max() to indicate this.
 	class TimeAvailableFunction {
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 			using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 			
-			cv::Mat TimeAvailable; //Raster data. Type: uint16_t, and values represents time available (in seconds)
+			cv::Mat TimeAvailable; //Raster data. Type: uint16_t, and values represents time available (in seconds).
 			Eigen::Vector2d UL_LL; //(Latitude, Longitude) of center of upper-left pixel, in radians
 			Eigen::Vector2d UR_LL; //(Latitude, Longitude) of center of upper-right pixel, in radians
 			Eigen::Vector2d LL_LL; //(Latitude, Longitude) of center of lower-left pixel, in radians
