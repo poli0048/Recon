@@ -99,7 +99,7 @@ inline void VisWidget::LoadFromDisk(void) {
 	std::string filePath = (Handy::Paths::CacheDirectory("SentekRecon") / "VisParams.txt").string();
 	std::ifstream fileStream(filePath, std::ifstream::in | std::ifstream::binary);
 	if (! fileStream.is_open()) {
-		Log.print("Error in VisWidget::LoadFromDisk: Could not open file for reading.");
+		Log.print("Warning in VisWidget::LoadFromDisk: Could not open file for reading. Loading defaults.");
 		LoadDefaults();
 	}
 	else {

@@ -90,7 +90,7 @@ inline void ProgOptions::SaveToDisk(void) {
 inline void ProgOptions::LoadFromDisk(void) {
 	std::ifstream fileStream(m_optionFilePath.string(), std::ifstream::in | std::ifstream::binary);
 	if (! fileStream.is_open()) {
-		Log.print("Error in ProgOptions::LoadFromDisk: Could not open file for reading.");
+		Log.print("Warning in ProgOptions::LoadFromDisk: Could not open file for reading. Loading default.");
 		LoadDefaults();
 	}
 	else {
