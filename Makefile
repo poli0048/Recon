@@ -32,8 +32,8 @@ else
 endif
 
 # ****************************************************   Include Paths   ****************************************************
-RECON_INCLUDE_FLAGS1 = -I.. -I../eigen -I../FRF -I../imgui -I../restclient-cpp/include -I../cereal/include `pkg-config --cflags freetype2 libcurl gtk+-3.0`
-RECON_INCLUDE_FLAGS2 = -I../glfw/include -I../imgui/examples/libs/gl3w
+RECON_INCLUDE_FLAGS1 = -I.. -I../eigen -I../Flexible-Raster-Format -I../imgui -I../restclient-cpp/include -I../cereal/include
+RECON_INCLUDE_FLAGS2 = `pkg-config --cflags freetype2 libcurl gtk+-3.0` -I../glfw/include -I../imgui/examples/libs/gl3w
 RECON_INCLUDE_FLAGS  = $(RECON_INCLUDE_FLAGS1) $(RECON_INCLUDE_FLAGS2)
 
 # ****************************   Set C++ Standard, profiling and linker trim flags and Defines   ****************************
@@ -53,7 +53,7 @@ COMPILE_FLAGS         = -c -fdiagnostics-color=auto -pthread $(COMPILE_WARNING_F
                         $(DEBUGFLAGS) $(PROFILEFLAGS) $(LINKER_TRIM_FLAGS) $(DEFINE_FLAGS) $(STANDARDFLAGS) $(OPTFLAGS) $(ELF_FLAGS) `pkg-config --cflags opencv`
 LINK_FLAGS            = -fdiagnostics-color=auto -static-libstdc++ -static-libgcc -lstdc++ -lstdc++fs \
                         -Wl,-Bdynamic -lpthread -lm -ldl -luuid -lGL -fopenmp \
-                        `pkg-config --static --libs freetype2 libcurl gtk+-3.0` ../glfw/Build-Linux-Release/src/libglfw3.a `pkg-config --libs opencv`
+                        `pkg-config --static --libs freetype2 libcurl gtk+-3.0` ../glfw/Release/src/libglfw3.a `pkg-config --libs opencv`
 
 # **********************************************   Populate Source File Lists   *********************************************
 #Populate source files that are part of Recon project
@@ -78,7 +78,7 @@ EXTERNAL_SRCFILES = ../restclient-cpp/source/connection.cc \
                     ../imgui/app/main_GL.cpp \
                     ../nativefiledialog/src/nfd_common.c \
                     ../nativefiledialog/src/nfd_gtk.c \
-                    ../FRF/FRF.cpp \
+                    ../Flexible-Raster-Format/FRF.cpp \
                     ../handycpp/Handy.cpp
 
 # **********************************************   Populate Object File Lists   *********************************************

@@ -49,7 +49,17 @@ Recon is designed and developed with a goal of maintaining platform independence
 **Guidance Module Dependencies:** TBD
 
 # Building On Linux
-Create a directory somewhere, let's call it "Repos". Clone the Recon repository into this directory (so this file has path "Repos/Recon/README.md"). Similarly clone the following dependencies into the Repos folder: Eigen, Dear ImGUI, HandyCPP, RestClient-CPP, Native File Dialog, Flexible Raster Format, and Cereal. These dependencies are all referenced using relative paths in the Recon project. The Makefile will build each of them and statically link them in as part of the build process (some of them are header only and don't appear in the Makefile at all). Next, make sure you have GLFW, OpenGL, FreeType, and LibCURL development packages installed on your system. In it's current state this should be enough to build Recon. Open a terminal to the Recon directory and run "make". If the build succeeds, the binary program will end up in Repos/Recon/Bin.
+You need GCC version 8 or newer to build Recon. Create a directory somewhere, let's call it "Repos". Clone the Recon repository into this directory (so this file has path "Repos/Recon/README.md"). Similarly clone the following dependencies into the Repos folder: Eigen, Dear ImGUI, HandyCPP, RestClient-CPP, Native File Dialog, Flexible Raster Format, Cereal, and GLFW. These dependencies are all referenced using relative paths in the Recon project. Next, GLFW needs to be compiled as follows:
+ * Open a terminal to the GLFW directory
+ * mkdir Release
+ * cd Release
+ * cmake -DCMAKE_BUILD_TYPE=Release -DGLFW_BUILD_DOCS=false -DGLFW_BUILD_EXAMPLES=false -DGLFW_BUILD_TESTS=false -S ../ -B .
+ * make
+This will create an archive that will be linked into Recon as part of the build process - note that you do not need to "make install" anything.
+
+Next, use your package manager to ensure that you have the following libraries installed on your system (when available also install the "-dev" version): OpenGL, FreeType, LibCURL, and OpenCV. In Debian, you can get the needed dependencies by installing the following packages: libglu1-mesa-dev freeglut3-dev mesa-common-dev, libfreetype6, libfreetype6-dev, libcurl4, libcurl4-openssl-dev, and libopencv-dev.
+
+Now open a terminal in the Recon directory and run "make". If the build succeeds, the binary program will end up in Repos/Recon/Bin.
 
 # Building On Windows
 TBD
