@@ -56,7 +56,7 @@ You need GCC version 8 or newer to build Recon. Create a directory somewhere, le
  * cmake -DCMAKE_BUILD_TYPE=Release -DGLFW_BUILD_DOCS=false -DGLFW_BUILD_EXAMPLES=false -DGLFW_BUILD_TESTS=false -S ../ -B .
  * make
  
-This will create an archive that will be linked into Recon as part of the build process - note that you do not need to "make install" anything.
+This will create an archive that will be linked into Recon as part of the build process - note that you do not need to "make install" anything. **Important Note:** The given instructions for building GLFW may not work with versions of CMake prior to 3.13.4. If you run into problems you can build on top of the source directory and manually copy the file "libglfw3.a" to path Repos/glfw/Release/src/libglfw3.a.
 
 Next, use your package manager to ensure that you have the following libraries installed on your system (when available also install the "-dev" version): OpenGL, FreeType, LibCURL, and OpenCV. In Debian, you can get the needed dependencies by installing the following packages: libglu1-mesa-dev freeglut3-dev mesa-common-dev, libfreetype6, libfreetype6-dev, libcurl4, libcurl4-openssl-dev, and libopencv-dev.
 
