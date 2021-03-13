@@ -19,13 +19,19 @@
 #define PI 3.14159265358979
 
 // Local function declarations (static linkage)
-static bool TestBench0(void);
-static bool TestBench1(void);
-static bool TestBench2(void);
-static bool TestBench3(void);
-static bool TestBench4(void);
-static bool TestBench5(void);
-static bool TestBench6(void);
+static bool TestBench0(void);   static bool TestBench1(void);
+static bool TestBench2(void);   static bool TestBench3(void);
+static bool TestBench4(void);   static bool TestBench5(void);
+static bool TestBench6(void);   static bool TestBench7(void);
+static bool TestBench8(void);   static bool TestBench9(void);
+static bool TestBench10(void);  static bool TestBench11(void);
+static bool TestBench12(void);  static bool TestBench13(void);
+static bool TestBench14(void);  static bool TestBench15(void);
+static bool TestBench16(void);  static bool TestBench17(void);
+static bool TestBench18(void);  static bool TestBench19(void);
+static bool TestBench20(void);  static bool TestBench21(void);
+static bool TestBench22(void);  static bool TestBench23(void);
+static bool TestBench24(void);  static bool TestBench25(void);
 
 // ************************************************************************************************************************************************
 // *********************************************************   Public Function Definitions   ******************************************************
@@ -41,13 +47,32 @@ namespace TestBenches {
 		std::cerr << "TestBench description: " << AvailableTestBenches[TestNum] << "\r\n";
 		bool result = false;
 		switch (TestNum) {
-			case 0: result = TestBench0(); break;
-			case 1: result = TestBench1(); break;
-			case 2: result = TestBench2(); break;
-			case 3: result = TestBench3(); break;
-			case 4: result = TestBench4(); break;
-			case 5: result = TestBench5(); break;
-			case 6: result = TestBench6(); break;
+			case 0:  result = TestBench0();  break;
+			case 1:  result = TestBench1();  break;
+			case 2:  result = TestBench2();  break;
+			case 3:  result = TestBench3();  break;
+			case 4:  result = TestBench4();  break;
+			case 5:  result = TestBench5();  break;
+			case 6:  result = TestBench6();  break;
+			case 7:  result = TestBench7();  break;
+			case 8:  result = TestBench8();  break;
+			case 9:  result = TestBench9();  break;
+			case 10: result = TestBench10(); break;
+			case 11: result = TestBench11(); break;
+			case 12: result = TestBench12(); break;
+			case 13: result = TestBench13(); break;
+			case 14: result = TestBench14(); break;
+			case 15: result = TestBench15(); break;
+			case 16: result = TestBench16(); break;
+			case 17: result = TestBench17(); break;
+			case 18: result = TestBench18(); break;
+			case 19: result = TestBench19(); break;
+			case 20: result = TestBench20(); break;
+			case 21: result = TestBench21(); break;
+			case 22: result = TestBench22(); break;
+			case 23: result = TestBench23(); break;
+			case 24: result = TestBench24(); break;
+			case 25: result = TestBench25(); break;
 			default: break;
 		}
 		if (result)
@@ -380,6 +405,25 @@ static bool TestBench6(void) {
 	return false; //Ideally check result somehow and return true on success and false on failure (otherwise manually verify result somehow)
 }
 
+static bool TestBench7(void)  { return false; }
+static bool TestBench8(void)  { return false; }
+static bool TestBench9(void)  { return false; }
+static bool TestBench10(void) { return false; }
+static bool TestBench11(void) { return false; }
+static bool TestBench12(void) { return false; }
+static bool TestBench13(void) { return false; }
+static bool TestBench14(void) { return false; }
+static bool TestBench15(void) { return false; }
+static bool TestBench16(void) { return false; }
+static bool TestBench17(void) { return false; }
+static bool TestBench18(void) { return false; }
+static bool TestBench19(void) { return false; }
+static bool TestBench20(void) { return false; }
+static bool TestBench21(void) { return false; }
+static bool TestBench22(void) { return false; }
+static bool TestBench23(void) { return false; }
+static bool TestBench24(void) { return false; }
+static bool TestBench25(void) { return false; }
 
 
 
