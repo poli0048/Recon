@@ -6,8 +6,14 @@
 //System Includes
 #include <vector>
 #include <string>
+#include <chrono>
+#include <functional>
+#include <thread>
+#include <mutex>
+#include <atomic>
 
 //External Includes
+#include "../../../handycpp/Handy.hpp" //Provides std::filesystem and Handy::File
 #include <opencv2/opencv.hpp>
 
 //Project Includes
@@ -87,58 +93,91 @@ namespace DroneInterface {
 		bool CurvedTrajectory; //If true, cut corners when hitting waypoints, resulting in curved trajectory. If false, fly point-to-point, stopping at each waypoint.
 	};
 	
-	//The Drone class provides an interface to interact with a single drone
+	//Abstract class for drones - This means that an object of this type cannot actually exist... only objects of a derived type. We have two derived types:
+	//RealDrone and SimulatedDrone
 	class Drone {
 		public:
 			using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
-			
-			Drone() : m_thread(&Drone::DroneMain, this), m_abort(false) { /* Initialization Here (Retrieve serial number, etc.) */ }
-			~Drone() {
-				m_abort = true;
-				if (m_thread.joinable())
-					m_thread.join();
-			}
+			Drone() = default;
+			virtual ~Drone() = default;
 			
 			//Basic hardware info (should be available on construction)
-			std::string GetDroneSerial(void);
+			virtual std::string GetDroneSerial(void) = 0;
 			
 			//Telemetry - all methods return true if at least one valid reading has been received (regardless of age) and false otherwise
-			bool GetPosition(double & Latitude, double & Longitude, double & Altitude, TimePoint & Timestamp); //Lat and Lon (radians) and WGS84 Altitude (m)
-			bool GetVelocity(double & V_North, double & V_East, double & V_Down, TimePoint & Timestamp); //NED velocity vector (m/s)
-			bool GetOrientation(double & Yaw, double & Pitch, double & Roll, TimePoint & Timestamp); //Yaw, Pitch, Roll (radians) using DJI definitions
-			bool GetHAG(double & HAG, TimePoint & Timestamp); //Barometric height above ground (m) - Drone altitude minus takeoff altitude
+			virtual bool GetPosition(double & Latitude, double & Longitude, double & Altitude, TimePoint & Timestamp) = 0; //Lat & Lon (radians) and WGS84 Altitude (m)
+			virtual bool GetVelocity(double & V_North, double & V_East, double & V_Down, TimePoint & Timestamp) = 0; //NED velocity vector (m/s)
+			virtual bool GetOrientation(double & Yaw, double & Pitch, double & Roll, TimePoint & Timestamp) = 0; //Yaw, Pitch, Roll (radians) using DJI definitions
+			virtual bool GetHAG(double & HAG, TimePoint & Timestamp) = 0; //Barometric height above ground (m) - Drone altitude minus takeoff altitude
 			
 			//Drone state and warnings
-			bool GetVehicleBatteryLevel(double & BattLevel, TimePoint & Timestamp); //Drone Battery level (0 = Empty, 1 = Full)
-			bool GetActiveLimitations(bool & MaxHAG, bool & MaxDistFromHome, TimePoint & Timestamp); //Whether the drone has hit height or radius limits
-			bool GetActiveWarnings(std::vector<std::string> & ActiveWarnings, TimePoint & Timestamp); //Wind and other vehicle warnings as human-readable strings
-			bool GetGNSSStatus(unsigned int & SatCount, int & SignalLevel, TimePoint & Timestamp); //GNSS status (-1 for none, 0-5 following DJI definitions)
+			virtual bool GetVehicleBatteryLevel(double & BattLevel, TimePoint & Timestamp) = 0; //Drone Battery level (0 = Empty, 1 = Full)
+			virtual bool GetActiveLimitations(bool & MaxHAG, bool & MaxDistFromHome, TimePoint & Timestamp) = 0; //Whether the drone has hit height or radius limits
+			virtual bool GetActiveWarnings(std::vector<std::string> & ActiveWarnings, TimePoint & Timestamp) = 0; //Wind & other vehicle warnings as strings
+			virtual bool GetGNSSStatus(unsigned int & SatCount, int & SignalLevel, TimePoint & Timestamp) = 0; //GNSS status (-1 for none, 0-5: DJI definitions)
 			
 			//Drone live video access - The mobile client should decode the live video feed and extract every N'th frame and send it to the server.
 			//N should be detirmined when StartDJICamImageFeed() is called in order to achieve the given frame rate as closely as possible.
 			//There is a frame counter that starts at 0 and increments each time a new frame is received by the server.
-			bool IsDJICamConnected(void); //Should be available on construction
-			void StartDJICamImageFeed(double TargetFPS); //Start sending frames of live video (as close as possible to the given framerate (frame / s))
-			void StopDJICamImageFeed(void); //Stop sending frames of live video
-			bool GetMostRecentFrame(cv::Mat & Frame, unsigned int & FrameNumber, TimePoint & Timestamp);
-			inline int  RegisterCallback(std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)> Callback); //Regester callback for new frames
-			inline void UnRegisterCallback(int Handle); //Unregister callback for new frames (input is token returned by RegisterCallback()
+			virtual bool IsDJICamConnected(void) = 0; //Should be available on construction
+			virtual void StartDJICamImageFeed(double TargetFPS) = 0; //Start sending frames of live video (as close as possible to the given framerate (frame / s))
+			virtual void StopDJICamImageFeed(void) = 0; //Stop sending frames of live video
+			virtual bool GetMostRecentFrame(cv::Mat & Frame, unsigned int & FrameNumber, TimePoint & Timestamp) = 0;
+			virtual int  RegisterCallback(std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)> Callback) = 0; //Regester callback for new frames
+			virtual void UnRegisterCallback(int Handle) = 0; //Unregister callback for new frames (input is token returned by RegisterCallback()
 			
 			//Drone Command & Control. If a method returns bool, it should return True if the requested info is known (even if very old) and set the
 			//Timestamp argument to the instant of validity of the most recently received value. If the requested info is unknown, these return False.
 			//There is a method provided to get an ID for the currently running waypoint mission (if one is running). An unfortunate quirk of the DJI
 			//SDK design though is that it doesn't look like you can choose your own IDs when creating a mission, so to use this to see if a new mission
 			//is running you need to get the mission ID, start your new mission, and then check the ID again after some time to see if the ID has changed.
-			bool GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp); //Get flight mode as a human-readable string
-			void ExecuteWaypointMission(WaypointMission & Mission); //Stop current mission, if running. Then load, verify, and start new waypoint mission.
-			bool IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp);
-			bool GetCurrentWaypointMissionID(uint16_t & MissionID, TimePoint & Timestamp);
-			void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command); //Put in virtualStick Mode and issue command (stop mission if running)
-			void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command); //Put in virtualStick Mode and issue command (stop mission if running)
+			virtual bool GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp) = 0; //Get flight mode as a human-readable string
+			virtual void ExecuteWaypointMission(WaypointMission & Mission) = 0; //Stop current mission, if running. Then load, verify, and start new waypoint mission.
+			virtual bool IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) = 0;
+			virtual bool GetCurrentWaypointMissionID(uint16_t & MissionID, TimePoint & Timestamp) = 0;
+			virtual void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command) = 0; //Put in virtualStick Mode and send command (stop mission if running)
+			virtual void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command) = 0; //Put in virtualStick Mode and send command (stop mission if running)
 			
-			void Hover(void); //Stop any running missions an leave virtualStick mode (if in it) and hover in place (P mode)
-			void LandNow(void); //Initiate landing sequence immediately at current vehicle location
-			void GoHomeAndLand(void); //Initiate a Return-To-Home sequence that lands the vehicle at it's take-off location
+			virtual void Hover(void) = 0; //Stop any running missions an leave virtualStick mode (if in it) and hover in place (P mode)
+			virtual void LandNow(void) = 0; //Initiate landing sequence immediately at current vehicle location
+			virtual void GoHomeAndLand(void) = 0; //Initiate a Return-To-Home sequence that lands the vehicle at it's take-off location
+	};
+	
+	//The RealDrone class provides an interface to interact with a single real drone
+	class RealDrone : public Drone {
+		public:
+			RealDrone();
+			~RealDrone();
+			
+			std::string GetDroneSerial(void) override;
+			
+			bool GetPosition(double & Latitude, double & Longitude, double & Altitude, TimePoint & Timestamp) override;
+			bool GetVelocity(double & V_North, double & V_East, double & V_Down, TimePoint & Timestamp)       override;
+			bool GetOrientation(double & Yaw, double & Pitch, double & Roll, TimePoint & Timestamp)           override;
+			bool GetHAG(double & HAG, TimePoint & Timestamp)                                                  override;
+			
+			bool GetVehicleBatteryLevel(double & BattLevel, TimePoint & Timestamp)                   override;
+			bool GetActiveLimitations(bool & MaxHAG, bool & MaxDistFromHome, TimePoint & Timestamp)  override;
+			bool GetActiveWarnings(std::vector<std::string> & ActiveWarnings, TimePoint & Timestamp) override;
+			bool GetGNSSStatus(unsigned int & SatCount, int & SignalLevel, TimePoint & Timestamp)    override;
+			
+			bool IsDJICamConnected(void)                                                                            override;
+			void StartDJICamImageFeed(double TargetFPS)                                                             override;
+			void StopDJICamImageFeed(void)                                                                          override;
+			bool GetMostRecentFrame(cv::Mat & Frame, unsigned int & FrameNumber, TimePoint & Timestamp)             override;
+			int  RegisterCallback(std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)> Callback) override;
+			void UnRegisterCallback(int Handle)                                                                     override;
+			
+			bool GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp)         override;
+			void ExecuteWaypointMission(WaypointMission & Mission)                         override;
+			bool IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) override;
+			bool GetCurrentWaypointMissionID(uint16_t & MissionID, TimePoint & Timestamp)  override;
+			void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command)       override;
+			void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command)       override;
+			
+			void Hover(void)         override;
+			void LandNow(void)       override;
+			void GoHomeAndLand(void) override;
 		
 		private:
 			//Some modules that use imagery can't handle missing frames gracefully. Thus, we use provide a callback mechanism to ensure that such a module
@@ -149,46 +188,60 @@ namespace DroneInterface {
 			std::atomic<bool> m_abort;
 			std::mutex        m_mutex; //Lock in each public method for thread safety
 			
-			inline void DroneMain(void);
+			void DroneMain(void);
 	};
-
-	//Regester callback for new frames
-	inline int Drone::RegisterCallback(std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)> Callback) {
-		std::scoped_lock lock(m_mutex);
-		int token = 0;
-		while (m_ImageryCallbacks.count(token) > 0U)
-			token++;
-		m_ImageryCallbacks[token] = Callback;
-		return token;
-	}
-
-	//Unregister callback for new frames (input is token returned by RegisterCallback()
-	inline void Drone::UnRegisterCallback(int Handle) {
-		std::scoped_lock lock(m_mutex);
-		m_ImageryCallbacks.erase(Handle);
-	}
 	
-	//Function for internal thread managing drone object
-	inline void Drone::DroneMain(void) {
-		while (! m_abort) {
-			m_mutex.lock();
+	//The SimulatedDrone class provides an interface to interact with a single virtual/simulated drone
+	class SimulatedDrone : public Drone {
+		public:
+			SimulatedDrone();
+			~SimulatedDrone();
 			
-			//Check to see if there is new data on the socket to process and process it.
-			//Decode received packets and update private state
+			std::string GetDroneSerial(void) override;
 			
-			//If a new image was received and decoded, call the callbacks:
-			/*if (newImageProcessed) {
-				for (auto const & kv : m_ImageryCallbacks)
-					kv.second(NewImage, NewImageTimestamp);
-			}*/
+			bool GetPosition(double & Latitude, double & Longitude, double & Altitude, TimePoint & Timestamp) override;
+			bool GetVelocity(double & V_North, double & V_East, double & V_Down, TimePoint & Timestamp)       override;
+			bool GetOrientation(double & Yaw, double & Pitch, double & Roll, TimePoint & Timestamp)           override;
+			bool GetHAG(double & HAG, TimePoint & Timestamp)                                                  override;
 			
-			//At the end of the loop, if we did useful work do:
-			//m_mutex.unlock();
-			//If we did not do useful work do:
-			//m_mutex.unlock();
-			//std::this_thread::sleep_for(std::chrono::milliseconds(100));
-		}
-	}
+			bool GetVehicleBatteryLevel(double & BattLevel, TimePoint & Timestamp)                   override;
+			bool GetActiveLimitations(bool & MaxHAG, bool & MaxDistFromHome, TimePoint & Timestamp)  override;
+			bool GetActiveWarnings(std::vector<std::string> & ActiveWarnings, TimePoint & Timestamp) override;
+			bool GetGNSSStatus(unsigned int & SatCount, int & SignalLevel, TimePoint & Timestamp)    override;
+			
+			bool IsDJICamConnected(void)                                                                            override;
+			void StartDJICamImageFeed(double TargetFPS)                                                             override;
+			void StopDJICamImageFeed(void)                                                                          override;
+			bool GetMostRecentFrame(cv::Mat & Frame, unsigned int & FrameNumber, TimePoint & Timestamp)             override;
+			int  RegisterCallback(std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)> Callback) override;
+			void UnRegisterCallback(int Handle)                                                                     override;
+			
+			bool GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp)         override;
+			void ExecuteWaypointMission(WaypointMission & Mission)                         override;
+			bool IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) override;
+			bool GetCurrentWaypointMissionID(uint16_t & MissionID, TimePoint & Timestamp)  override;
+			void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command)       override;
+			void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command)       override;
+			
+			void Hover(void)         override;
+			void LandNow(void)       override;
+			void GoHomeAndLand(void) override;
+			
+			//SimulatedDrone-specific methods
+			void SetRealTime(bool Realtime); //True: Imagery will be provided at close-to-real-time rate. False: Imagery is provided as fast as possible
+			void SetSourceVideoFile(std::filesystem::path const & VideoPath); //Should be set before calling StartDJICamImageFeed()
+		
+		private:
+			//Some modules that use imagery can't handle missing frames gracefully. Thus, we use provide a callback mechanism to ensure that such a module
+			//can have a guarantee that each frame received by the drone interface module will be provided downstream.
+			std::unordered_map<int, std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)>> m_ImageryCallbacks;
+			
+			std::thread       m_thread;
+			std::atomic<bool> m_abort;
+			std::mutex        m_mutex; //Lock in each public method for thread safety
+			
+			void DroneMain(void);
+	};
 	
 }
 
