@@ -26,7 +26,7 @@ namespace DroneInterface {
 		public:
 			static DroneManager & Instance() { static DroneManager Obj; return Obj; }
 			
-			DroneManager();
+			DroneManager() = default;
 			~DroneManager() = default;
 			
 			inline std::vector<std::string> GetConnectedDroneSerialNumbers(void) const;

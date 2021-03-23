@@ -192,6 +192,11 @@ namespace DroneInterface {
 	};
 	
 	//The SimulatedDrone class provides an interface to interact with a single virtual/simulated drone
+	//Note: Right now the simulated drone is very dumb... we don't pretend to fly missions or send warnings or any of the other
+	//standard things one might expect of a simulated drone. We just mimic a drone in a stationary hover (P mode) over a fixed
+	//point in Lamberton, MN. We do provide meaningful implementations of all image-related functions however, so the simulated
+	//drone can be used to test anything involving live drone imagery. Imagery is pulled from a video file and dispatched either
+	//at real-time speed or as fast as possible, depending on configuration.
 	class SimulatedDrone : public Drone {
 		public:
 			SimulatedDrone();
@@ -230,6 +235,7 @@ namespace DroneInterface {
 			//SimulatedDrone-specific methods
 			void SetRealTime(bool Realtime); //True: Imagery will be provided at close-to-real-time rate. False: Imagery is provided as fast as possible
 			void SetSourceVideoFile(std::filesystem::path const & VideoPath); //Should be set before calling StartDJICamImageFeed()
+			bool IsSimVideoFinished(void); //Returns true if end of video file reached and sim is done
 		
 		private:
 			//Some modules that use imagery can't handle missing frames gracefully. Thus, we use provide a callback mechanism to ensure that such a module
@@ -240,8 +246,31 @@ namespace DroneInterface {
 			std::atomic<bool> m_abort;
 			std::mutex        m_mutex; //Lock in each public method for thread safety
 			
+			//Additional State Data
+			bool m_realtime = false;
+			std::filesystem::path m_videoPath;
+			double m_targetFPS = -1.0;
+			cv::VideoCapture m_videoCap;
+			int m_videoCap_NextFrameIndex = 0;
+			int m_videoCap_NumFrames = -1;
+			int m_videoCap_FPS = -1;
+			bool m_imageFeedActive = false;
+			cv::Mat m_Frame;            //Most recent frame
+			unsigned int m_FrameNumber = 0; //Frame number of most recent frame (increments on each *used* frame)
+			TimePoint m_FrameTimestamp; //Timestamp of most recent frame
+			TimePoint m_VideoFeedStartTimestamp; //Timestamp of start of video feed
+			bool m_videoFeedStarted = false;
+			
 			void DroneMain(void);
+			
+			//Utilities to get seconds into a video from a video file frame number, and to get the next usable video frame (skipping unused frames)
+			double FrameNumToTimeIntoVid(int FrameNum) { return double(FrameNum) / double(m_videoCap_FPS); }
+			bool GetNextVideoFrame(void); //Advance to and decode the next video from that needs to be used
+			bool ResizeTo720p(void);      //Make sure the frame is 720p... resize if needed.
+			bool Resize_4K_to_720p(void); //Drop a 4K m_frame down to 720p
 	};
 	
 }
+
+
 

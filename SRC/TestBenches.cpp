@@ -5,9 +5,11 @@
 //System Includes
 //#include <tuple>
 #include <iostream>
+#include <chrono>
 
 //External Includes
 #include "../../handycpp/Handy.hpp"
+#include <opencv2/opencv.hpp>
 
 //Project Includes
 #include "TestBenches.hpp"
@@ -15,6 +17,7 @@
 #include "SurveyRegionManager.hpp"
 #include "Maps/MapUtils.hpp"
 #include "Modules/Guidance/Guidance.hpp"
+#include "Modules/DJI-Drone-Interface/DroneManager.hpp"
 
 #define PI 3.14159265358979
 
@@ -419,8 +422,75 @@ static bool TestBench17(void) { return false; }
 static bool TestBench18(void) { return false; }
 static bool TestBench19(void) { return false; }
 static bool TestBench20(void) { return false; }
-static bool TestBench21(void) { return false; }
-static bool TestBench22(void) { return false; }
+
+//DJI Drone Interface: Simulated Drone Imagery. This test bench sets up the simulated drone for non-realtime operation and just displays video
+static bool TestBench21(void) {
+	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation"s);
+	if (myDrone == nullptr) {
+		std::cerr << "Error: Unable to get simulated drone from drone manager.\r\n";
+		return false;
+	}
+	DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(myDrone);
+	if (mySimDrone == nullptr) {
+		std::cerr << "Error: Could not down-cast Drone to SimulatedDrone.\r\n";
+		return false;
+	}
+	mySimDrone->SetRealTime(false);
+	mySimDrone->SetSourceVideoFile(Handy::Paths::ThisExecutableDirectory() / "SimSourceVideo.mov"s);
+	
+	//Register a callback with the drone for imagery
+	myDrone->RegisterCallback([](cv::Mat const & Frame, DroneInterface::Drone::TimePoint const & Timestamp) {
+		auto duration = Timestamp.time_since_epoch();
+		double secondsSinceEpoch = double(duration.count()) * double(std::chrono::system_clock::period::num) / double(std::chrono::system_clock::period::den);
+		std::cerr << "Image received. Timestamp: " << secondsSinceEpoch << "\r\n";
+		cv::imshow("Sim Drone Imagery", Frame);
+		cv::waitKey(1);
+	});
+	
+	//Start video feed
+	myDrone->StartDJICamImageFeed(1.0);
+	
+	//wait until video feed is done
+	while (! mySimDrone->IsSimVideoFinished())
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	
+	return true;
+}
+
+//DJI Drone Interface: Simulated Drone Imagery. This test bench sets up the simulated drone for realtime operation and just displays video
+static bool TestBench22(void) {
+	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation"s);
+	if (myDrone == nullptr) {
+		std::cerr << "Error: Unable to get simulated drone from drone manager.\r\n";
+		return false;
+	}
+	DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(myDrone);
+	if (mySimDrone == nullptr) {
+		std::cerr << "Error: Could not down-cast Drone to SimulatedDrone.\r\n";
+		return false;
+	}
+	mySimDrone->SetRealTime(true);
+	mySimDrone->SetSourceVideoFile(Handy::Paths::ThisExecutableDirectory() / "SimSourceVideo.mov"s);
+	
+	//Register a callback with the drone for imagery
+	myDrone->RegisterCallback([](cv::Mat const & Frame, DroneInterface::Drone::TimePoint const & Timestamp) {
+		auto duration = Timestamp.time_since_epoch();
+		double secondsSinceEpoch = double(duration.count()) * double(std::chrono::system_clock::period::num) / double(std::chrono::system_clock::period::den);
+		std::cerr << "Image received. Timestamp: " << secondsSinceEpoch << "\r\n";
+		cv::imshow("Sim Drone Imagery", Frame);
+		cv::waitKey(1);
+	});
+	
+	//Start video feed
+	myDrone->StartDJICamImageFeed(1.0);
+	
+	//wait until video feed is done
+	while (! mySimDrone->IsSimVideoFinished())
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	
+	return true;
+}
+
 static bool TestBench23(void) { return false; }
 static bool TestBench24(void) { return false; }
 static bool TestBench25(void) { return false; }
