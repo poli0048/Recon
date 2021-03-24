@@ -245,6 +245,30 @@ namespace DroneInterface {
 		return (m_videoFeedStarted && (! m_imageFeedActive));
 	}
 	
+	//Get a single frame - will fail if the video feed is running
+	bool SimulatedDrone::GetReferenceFrame(double SecondsIntoVideo, cv::Mat & Frame) {
+		std::scoped_lock lock(m_mutex);
+		
+		if (m_videoCap.isOpened() || m_imageFeedActive)
+			return false;
+		
+		m_videoCap.open(m_videoPath.string());
+		if (! m_videoCap.isOpened())
+			return false;
+		
+		double refFrameNum = SecondsIntoVideo * round(m_videoCap.get(cv::CAP_PROP_FPS));
+		if (refFrameNum >= m_videoCap.get(cv::CAP_PROP_FRAME_COUNT) - 1.0)
+			return false;
+		
+		m_videoCap.set(cv::CAP_PROP_POS_FRAMES, refFrameNum);
+		if (! GetNextVideoFrame())
+			return false;
+		
+		Frame = m_Frame;
+		m_videoCap.release();
+		return true;
+	}
+	
 	//Function for internal thread managing drone object
 	void SimulatedDrone::DroneMain(void) {
 		while (! m_abort) {

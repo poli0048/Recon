@@ -236,6 +236,7 @@ namespace DroneInterface {
 			void SetRealTime(bool Realtime); //True: Imagery will be provided at close-to-real-time rate. False: Imagery is provided as fast as possible
 			void SetSourceVideoFile(std::filesystem::path const & VideoPath); //Should be set before calling StartDJICamImageFeed()
 			bool IsSimVideoFinished(void); //Returns true if end of video file reached and sim is done
+			bool GetReferenceFrame(double SecondsIntoVideo, cv::Mat & Frame); //Get a single frame - will fail if the video feed is running
 		
 		private:
 			//Some modules that use imagery can't handle missing frames gracefully. Thus, we use provide a callback mechanism to ensure that such a module
