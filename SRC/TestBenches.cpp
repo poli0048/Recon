@@ -10,6 +10,7 @@
 //External Includes
 #include "../../handycpp/Handy.hpp"
 #include <opencv2/opencv.hpp>
+//#include <opencv2/core/persistence.hpp>
 
 //Project Includes
 #include "TestBenches.hpp"
@@ -412,8 +413,175 @@ static bool TestBench7(void)  { return false; }
 static bool TestBench8(void)  { return false; }
 static bool TestBench9(void)  { return false; }
 static bool TestBench10(void) { return false; }
-static bool TestBench11(void) { return false; }
-static bool TestBench12(void) { return false; }
+
+//Shadow Detection: Non-realtime simulation
+static bool TestBench11(void) {
+	//Set up drone sim
+	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation"s);
+	if (myDrone == nullptr) {
+		std::cerr << "Error: Unable to get simulated drone from drone manager.\r\n";
+		return false;
+	}
+	DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(myDrone);
+	if (mySimDrone == nullptr) {
+		std::cerr << "Error: Could not down-cast Drone to SimulatedDrone.\r\n";
+		return false;
+	}
+	mySimDrone->SetRealTime(false);
+	mySimDrone->SetSourceVideoFile(Handy::Paths::ThisExecutableDirectory() / "SimSourceVideo.mov"s);
+	
+	//Get reference frame - this is provided by the drone sim, but must come after setting the video file path
+	cv::Mat refFrame;
+	if (! mySimDrone->GetReferenceFrame(1.0, refFrame)) {
+		std::cerr << "Error: Failed to get reference frame from SimulatedDrone.\r\n";
+		return false;
+	}
+	
+	//Get fiducials from file - we use Ben's file formats
+	cv::FileStorage GCP_LLA_FileStoreObj((Handy::Paths::ThisExecutableDirectory() / "Sim_GCPs_LLA.xml"s).string(), cv::FileStorage::READ);
+	cv::FileStorage GCP_PixCoords_FileStoreObj((Handy::Paths::ThisExecutableDirectory() / "Sim_GCPs_PixCoords.xml"s).string(), cv::FileStorage::READ);
+	if ((! GCP_LLA_FileStoreObj.isOpened()) || (! GCP_PixCoords_FileStoreObj.isOpened())) {
+		std::cerr << "Error: Unable to read Ground Control Points (GCPs) from disk.\r\n";
+		std::cerr << "Latitude, Longitude, and Altitude are read from file: Sim_GCPs_LLA.xml\r\n";
+		std::cerr << "Pixel coordinates are read from file ---------------: Sim_GCPs_PixCoords.xml\r\n";
+		return false;
+	}
+	cv::Mat fiducials_LLA; //Stored row-by-row (Lat (deg), Lon (deg), Alt (m))
+	std::vector<cv::Point2d> fiducials_PX; //OpenCV defs for X, Y... units are pixels
+	GCP_LLA_FileStoreObj["gcp"] >> fiducials_LLA;
+	GCP_PixCoords_FileStoreObj["pixel_coords"] >> fiducials_PX;
+	
+	//Convert fiducials to format expected by the shadow detection engine
+	std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> Fiducials;
+	if (fiducials_LLA.rows != int(fiducials_PX.size())) {
+		std::cerr << "GCP size mismatch (we should have as many Lat/Lon/Alts as we have pixel coords)\r\n";
+		return false;
+	}
+	Fiducials.reserve(fiducials_PX.size());
+	for (int row = 0; row < fiducials_LLA.rows; row++) {
+		Eigen::Vector2d PixCoords(fiducials_PX[row].x, fiducials_PX[row].y);
+		Eigen::Vector3d LLA(fiducials_LLA.at<double>(row, 0)*PI/180.0, fiducials_LLA.at<double>(row, 1)*PI/180.0, fiducials_LLA.at<double>(row, 2));
+		Fiducials.push_back(std::make_tuple(PixCoords, LLA));
+	}
+	
+	//Set reference frame and fiducials in shadow detection module
+	ShadowDetection::ShadowDetectionEngine::Instance().SetReferenceFrame(refFrame);
+	ShadowDetection::ShadowDetectionEngine::Instance().SetFiducials(Fiducials);
+	
+	//Register callback with the shadow detection engine for monitoring its output (if desired)
+	bool showLiveOutput = false;
+	if (showLiveOutput) {
+		ShadowDetection::ShadowDetectionEngine::Instance().RegisterCallback([](ShadowDetection::InstantaneousShadowMap const & ShadowMap) {
+			auto duration = ShadowMap.Timestamp.time_since_epoch();
+			double secondsSinceEpoch = double(duration.count()) * double(std::chrono::system_clock::period::num) / double(std::chrono::system_clock::period::den);
+			std::cerr << "Shadow map received. Timestamp: " << secondsSinceEpoch << "\r\n";
+			cv::imshow("Live Shadow Map", ShadowMap.Map);
+			cv::waitKey(1);
+		});
+	}
+	
+	//Start the shadow detection engine, using imagery from the sim drone
+	ShadowDetection::ShadowDetectionEngine::Instance().Start("Simulation"s);
+	
+	//Start the sim drone video feed
+	myDrone->StartDJICamImageFeed(1.0);
+	
+	//wait until video feed is done
+	while (! mySimDrone->IsSimVideoFinished())
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	
+	//Stop the shadow detection engine and instruct it to save it's shadow map history
+	ShadowDetection::ShadowDetectionEngine::Instance().Stop();
+	ShadowDetection::ShadowDetectionEngine::Instance().SaveAndFlushShadowMapHistory();
+	std::cerr << "Shadow map history saved to FRF files. Look in 'Shadow Map Files' folder in BIN directory.\r\n";
+	
+	return true;
+}
+
+//Shadow Detection: Realtime simulation
+static bool TestBench12(void) {
+	//Set up drone sim
+	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation"s);
+	if (myDrone == nullptr) {
+		std::cerr << "Error: Unable to get simulated drone from drone manager.\r\n";
+		return false;
+	}
+	DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(myDrone);
+	if (mySimDrone == nullptr) {
+		std::cerr << "Error: Could not down-cast Drone to SimulatedDrone.\r\n";
+		return false;
+	}
+	mySimDrone->SetRealTime(true);
+	mySimDrone->SetSourceVideoFile(Handy::Paths::ThisExecutableDirectory() / "SimSourceVideo.mov"s);
+	
+	//Get reference frame - this is provided by the drone sim, but must come after setting the video file path
+	cv::Mat refFrame;
+	if (! mySimDrone->GetReferenceFrame(1.0, refFrame)) {
+		std::cerr << "Error: Failed to get reference frame from SimulatedDrone.\r\n";
+		return false;
+	}
+	
+	//Get fiducials from file - we use Ben's file formats
+	cv::FileStorage GCP_LLA_FileStoreObj((Handy::Paths::ThisExecutableDirectory() / "Sim_GCPs_LLA.xml"s).string(), cv::FileStorage::READ);
+	cv::FileStorage GCP_PixCoords_FileStoreObj((Handy::Paths::ThisExecutableDirectory() / "Sim_GCPs_PixCoords.xml"s).string(), cv::FileStorage::READ);
+	if ((! GCP_LLA_FileStoreObj.isOpened()) || (! GCP_PixCoords_FileStoreObj.isOpened())) {
+		std::cerr << "Error: Unable to read Ground Control Points (GCPs) from disk.\r\n";
+		std::cerr << "Latitude, Longitude, and Altitude are read from file: Sim_GCPs_LLA.xml\r\n";
+		std::cerr << "Pixel coordinates are read from file ---------------: Sim_GCPs_PixCoords.xml\r\n";
+		return false;
+	}
+	cv::Mat fiducials_LLA; //Stored row-by-row (Lat (deg), Lon (deg), Alt (m))
+	std::vector<cv::Point2d> fiducials_PX; //OpenCV defs for X, Y... units are pixels
+	GCP_LLA_FileStoreObj["gcp"] >> fiducials_LLA;
+	GCP_PixCoords_FileStoreObj["pixel_coords"] >> fiducials_PX;
+	
+	//Convert fiducials to format expected by the shadow detection engine
+	std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> Fiducials;
+	if (fiducials_LLA.rows != int(fiducials_PX.size())) {
+		std::cerr << "GCP size mismatch (we should have as many Lat/Lon/Alts as we have pixel coords)\r\n";
+		return false;
+	}
+	Fiducials.reserve(fiducials_PX.size());
+	for (int row = 0; row < fiducials_LLA.rows; row++) {
+		Eigen::Vector2d PixCoords(fiducials_PX[row].x, fiducials_PX[row].y);
+		Eigen::Vector3d LLA(fiducials_LLA.at<double>(row, 0)*PI/180.0, fiducials_LLA.at<double>(row, 1)*PI/180.0, fiducials_LLA.at<double>(row, 2));
+		Fiducials.push_back(std::make_tuple(PixCoords, LLA));
+	}
+	
+	//Set reference frame and fiducials in shadow detection module
+	ShadowDetection::ShadowDetectionEngine::Instance().SetReferenceFrame(refFrame);
+	ShadowDetection::ShadowDetectionEngine::Instance().SetFiducials(Fiducials);
+	
+	//Register callback with the shadow detection engine for monitoring its output (if desired)
+	bool showLiveOutput = false;
+	if (showLiveOutput) {
+		ShadowDetection::ShadowDetectionEngine::Instance().RegisterCallback([](ShadowDetection::InstantaneousShadowMap const & ShadowMap) {
+			auto duration = ShadowMap.Timestamp.time_since_epoch();
+			double secondsSinceEpoch = double(duration.count()) * double(std::chrono::system_clock::period::num) / double(std::chrono::system_clock::period::den);
+			std::cerr << "Shadow map received. Timestamp: " << secondsSinceEpoch << "\r\n";
+			cv::imshow("Live Shadow Map", ShadowMap.Map);
+			cv::waitKey(1);
+		});
+	}
+	
+	//Start the shadow detection engine, using imagery from the sim drone
+	ShadowDetection::ShadowDetectionEngine::Instance().Start("Simulation"s);
+	
+	//Start the sim drone video feed
+	myDrone->StartDJICamImageFeed(1.0);
+	
+	//wait until video feed is done
+	while (! mySimDrone->IsSimVideoFinished())
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	
+	//Stop the shadow detection engine and instruct it to save it's shadow map history
+	ShadowDetection::ShadowDetectionEngine::Instance().Stop();
+	ShadowDetection::ShadowDetectionEngine::Instance().SaveAndFlushShadowMapHistory();
+	std::cerr << "Shadow map history saved to FRF files. Look in 'Shadow Map Files' folder in BIN directory.\r\n";
+	
+	return true;
+}
+
 static bool TestBench13(void) { return false; }
 static bool TestBench14(void) { return false; }
 static bool TestBench15(void) { return false; }
