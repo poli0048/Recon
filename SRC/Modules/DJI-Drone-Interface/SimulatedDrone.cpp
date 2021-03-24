@@ -253,6 +253,7 @@ namespace DroneInterface {
 			if (! m_imageFeedActive) {
 				m_mutex.unlock();
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				continue;
 			}
 			
 			//If we get here, our image feed is active - we don't have to worry about opening/closing the video file... that's handled in the start()/stop() functions
