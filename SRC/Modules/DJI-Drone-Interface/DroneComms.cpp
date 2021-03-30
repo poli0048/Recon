@@ -199,6 +199,11 @@ namespace DroneInterface {
 	// ****************************************************************************************************************************************
 	// ******************************************************   Packet Implementation   *******************************************************
 	// ****************************************************************************************************************************************
+	void Packet::Clear(void) {
+		m_data.clear();
+		M_highLevelFieldsValid = false;
+	}
+	
 	bool Packet::IsFinished(void) {
 		if (m_data.size() < 7U)
 			return false;
@@ -228,7 +233,7 @@ namespace DroneInterface {
 	void Packet::AddHeader(uint32_t Size, uint8_t PID) {
 		encodeField_uint16(m_data, (uint16_t) 55975U);
 		encodeField_uint32(m_data, Size);
-		encodeField_uint32(m_data, PID);
+		encodeField_uint8 (m_data, PID);
 	}
 
 	//Based on current contents of m_data (which should be fully populated except for the hash field) compute and add hash field
@@ -281,8 +286,22 @@ namespace DroneInterface {
 	// ****************************************************************************************************************************************
 	// ************************************************   Packet_CoreTelemetry Implementation   ***********************************************
 	// ****************************************************************************************************************************************
+	bool Packet_CoreTelemetry::operator==(Packet_CoreTelemetry const & Other) const {
+		return (this->IsFlying  == Other.IsFlying)  &&
+		       (this->Latitude  == Other.Latitude)  &&
+		       (this->Longitude == Other.Longitude) &&
+		       (this->Altitude  == Other.Altitude)  &&
+		       (this->HAG       == Other.HAG)       &&
+		       (this->V_N       == Other.V_N)       &&
+		       (this->V_E       == Other.V_E)       &&
+		       (this->V_D       == Other.V_D)       &&
+		       (this->Yaw       == Other.Yaw)       &&
+		       (this->Pitch     == Other.Pitch)     &&
+		       (this->Roll      == Other.Roll);
+	}
+	
 	void Packet_CoreTelemetry::Serialize(Packet & TargetPacket) const {
-		TargetPacket.m_data.clear();
+		TargetPacket.Clear();
 		TargetPacket.AddHeader(uint32_t(9U + 69U), uint8_t(0U));
 		encodeField_uint8  (TargetPacket.m_data, IsFlying);
 		encodeField_float64(TargetPacket.m_data, Latitude);
@@ -322,8 +341,22 @@ namespace DroneInterface {
 	// ****************************************************************************************************************************************
 	// **********************************************   Packet_ExtendedTelemetry Implementation   *********************************************
 	// ****************************************************************************************************************************************
+	bool Packet_ExtendedTelemetry::operator==(Packet_ExtendedTelemetry const & Other) const {
+		return (this->GNSSSatCount == Other.GNSSSatCount) &&
+		       (this->GNSSSignal   == Other.GNSSSignal)   &&
+		       (this->MaxHeight    == Other.MaxHeight)    &&
+		       (this->MaxDist      == Other.MaxDist)      &&
+		       (this->BatLevel     == Other.BatLevel)     &&
+		       (this->BatWarning   == Other.BatWarning)   &&
+		       (this->WindLevel    == Other.WindLevel)    &&
+		       (this->DJICam       == Other.DJICam)       &&
+		       (this->FlightMode   == Other.FlightMode)   &&
+		       (this->MissionID    == Other.MissionID)    &&
+		       (this->DroneSerial  == Other.DroneSerial);
+	}
+	
 	void Packet_ExtendedTelemetry::Serialize(Packet & TargetPacket) const {
-		TargetPacket.m_data.clear();
+		TargetPacket.Clear();
 		TargetPacket.AddHeader(uint32_t(9U + 12U + 4U + DroneSerial.size()), uint8_t(1U));
 		encodeField_uint16(TargetPacket.m_data, GNSSSatCount);
 		encodeField_uint8 (TargetPacket.m_data, GNSSSignal);
@@ -366,8 +399,26 @@ namespace DroneInterface {
 	// ****************************************************************************************************************************************
 	// ****************************************************   Packet_Image Implementation   ***************************************************
 	// ****************************************************************************************************************************************
+	bool Packet_Image::operator==(Packet_Image const & Other) const {
+		if (this->TargetFPS != Other.TargetFPS)
+			return false;
+		if ((this->Frame.rows != Other.Frame.rows) || (this->Frame.cols != Other.Frame.cols))
+			return false;
+		if (this->Frame.type() != Other.Frame.type())
+			return false;
+		for (int row = 0; row < this->Frame.rows; row++) {
+			for (int col = 0; col < this->Frame.cols; col++) {
+				cv::Vec3b A = this->Frame.at<cv::Vec3b>(row, col);
+				cv::Vec3b B = Other.Frame.at<cv::Vec3b>(row, col);
+				if ((A(0) != B(0)) || (A(1) != B(1)) || (A(2) != B(2)))
+					return false;
+			}
+		}
+		return true;
+	}
+	
 	void Packet_Image::Serialize(Packet & TargetPacket) const {
-		TargetPacket.m_data.clear();
+		TargetPacket.Clear();
 		TargetPacket.AddHeader(uint32_t(9U + 4U + 4U + (unsigned int)(Frame.rows*Frame.cols*3)), uint8_t(2U));
 		encodeField_float32(TargetPacket.m_data, TargetFPS);
 		encodeField_Image  (TargetPacket.m_data, Frame);
@@ -392,8 +443,13 @@ namespace DroneInterface {
 	// ****************************************************************************************************************************************
 	// ************************************************   Packet_Acknowledgment Implementation   **********************************************
 	// ****************************************************************************************************************************************
+	bool Packet_Acknowledgment::operator==(Packet_Acknowledgment const & Other) const {
+		return (this->Positive  == Other.Positive) &&
+		       (this->SourcePID == Other.SourcePID);
+	}
+	
 	void Packet_Acknowledgment::Serialize(Packet & TargetPacket) const {
-		TargetPacket.m_data.clear();
+		TargetPacket.Clear();
 		TargetPacket.AddHeader(uint32_t(9U + 2U), uint8_t(3U));
 		encodeField_uint8(TargetPacket.m_data, Positive);
 		encodeField_uint8(TargetPacket.m_data, SourcePID);
@@ -416,8 +472,13 @@ namespace DroneInterface {
 	// ****************************************************************************************************************************************
 	// ************************************************   Packet_MessageString Implementation   ***********************************************
 	// ****************************************************************************************************************************************
+	bool Packet_MessageString::operator==(Packet_MessageString const & Other) const {
+		return (this->Type    == Other.Type) &&
+		       (this->Message == Other.Message);
+	}
+	
 	void Packet_MessageString::Serialize(Packet & TargetPacket) const {
-		TargetPacket.m_data.clear();
+		TargetPacket.Clear();
 		TargetPacket.AddHeader(uint32_t(9U + 1U + 4U + Message.size()), uint8_t(4U));
 		encodeField_uint8 (TargetPacket.m_data, Type);
 		encodeField_String(TargetPacket.m_data, Message);
@@ -442,8 +503,12 @@ namespace DroneInterface {
 	// ****************************************************************************************************************************************
 	// **********************************************   Packet_EmergencyCommand Implementation   **********************************************
 	// ****************************************************************************************************************************************
+	bool Packet_EmergencyCommand::operator==(Packet_EmergencyCommand const & Other) const {
+		return (this->Action == Other.Action);
+	}
+	
 	void Packet_EmergencyCommand::Serialize(Packet & TargetPacket) const {
-		TargetPacket.m_data.clear();
+		TargetPacket.Clear();
 		TargetPacket.AddHeader(uint32_t(9U + 1U), uint8_t(255U));
 		encodeField_uint8(TargetPacket.m_data, Action);
 		TargetPacket.AddHash();
@@ -464,8 +529,13 @@ namespace DroneInterface {
 	// ****************************************************************************************************************************************
 	// ************************************************   Packet_CameraControl Implementation   ***********************************************
 	// ****************************************************************************************************************************************
+	bool Packet_CameraControl::operator==(Packet_CameraControl const & Other) const {
+		return (this->Action    == Other.Action) &&
+		       (this->TargetFPS == Other.TargetFPS);
+	}
+	
 	void Packet_CameraControl::Serialize(Packet & TargetPacket) const {
-		TargetPacket.m_data.clear();
+		TargetPacket.Clear();
 		TargetPacket.AddHeader(uint32_t(9U + 5U), uint8_t(254U));
 		encodeField_uint8  (TargetPacket.m_data, Action);
 		encodeField_float32(TargetPacket.m_data, TargetFPS);
@@ -488,8 +558,20 @@ namespace DroneInterface {
 	// ****************************************************************************************************************************************
 	// ********************************************   Packet_ExecuteWaypointMission Implementation   ******************************************
 	// ****************************************************************************************************************************************
+	bool Packet_ExecuteWaypointMission::operator==(Packet_ExecuteWaypointMission const & Other) const {
+		if ((this->LandAtEnd != Other.LandAtEnd) || (this->CurvedFlight != Other.CurvedFlight))
+			return false;
+		if (this->Waypoints.size() != Other.Waypoints.size())
+			return false;
+		for (size_t n = 0U; n < this->Waypoints.size(); n++) {
+			if (! (this->Waypoints[n] == Other.Waypoints[n]))
+				return false;
+		}
+		return true;
+	}
+	
 	void Packet_ExecuteWaypointMission::Serialize(Packet & TargetPacket) const {
-		TargetPacket.m_data.clear();
+		TargetPacket.Clear();
 		TargetPacket.AddHeader(uint32_t(9U + 2U + 40U*((unsigned int) Waypoints.size())), uint8_t(253U));
 		encodeField_uint8(TargetPacket.m_data, LandAtEnd);
 		encodeField_uint8(TargetPacket.m_data, CurvedFlight);
@@ -540,8 +622,17 @@ namespace DroneInterface {
 	// ****************************************************************************************************************************************
 	// *********************************************   Packet_VirtualStickCommand Implementation   ********************************************
 	// ****************************************************************************************************************************************
+	bool Packet_VirtualStickCommand::operator==(Packet_VirtualStickCommand const & Other) const {
+		return (this->Mode    == Other.Mode) &&
+		       (this->Yaw     == Other.Yaw)  &&
+		       (this->V_x     == Other.V_x)  &&
+		       (this->V_y     == Other.V_y)  &&
+		       (this->HAG     == Other.HAG)  &&
+		       (this->timeout == Other.timeout);
+	}
+	
 	void Packet_VirtualStickCommand::Serialize(Packet & TargetPacket) const {
-		TargetPacket.m_data.clear();
+		TargetPacket.Clear();
 		TargetPacket.AddHeader(uint32_t(9U + 21U), uint8_t(252U));
 		encodeField_uint8  (TargetPacket.m_data, Mode);
 		encodeField_float32(TargetPacket.m_data, Yaw);
@@ -566,6 +657,88 @@ namespace DroneInterface {
 		HAG     = decodeField_float32(iter);
 		timeout = decodeField_float32(iter);
 		return true;
+	}
+	
+	
+	// ****************************************************************************************************************************************
+	// ***************************************************   Stream Operator Definitions   ****************************************************
+	// ****************************************************************************************************************************************
+	std::ostream & operator<<(std::ostream & Str, Packet_CoreTelemetry const & v) { 
+		Str << "IsFlying -: " << (unsigned int) v.IsFlying  << "\r\n";
+		Str << "Latitude -: " << v.Latitude  << " degrees\r\n";
+		Str << "Longitude : " << v.Longitude << " degrees\r\n";
+		Str << "Altitude -: " << v.Altitude  << " m\r\n";
+		Str << "HAG ------: " << v.HAG       << " m\r\n";
+		Str << "V_N ------: " << v.V_N       << " m/s\r\n";
+		Str << "V_E ------: " << v.V_E       << " m/s\r\n";
+		Str << "V_D ------: " << v.V_D       << " m/s\r\n";
+		Str << "Yaw ------: " << v.Yaw       << " degrees\r\n";
+		Str << "Pitch ----: " << v.Pitch     << " degrees\r\n";
+		Str << "Roll -----: " << v.Roll      << " degrees\r\n";
+		return Str;
+	}
+	
+	std::ostream & operator<<(std::ostream & Str, Packet_ExtendedTelemetry const & v) { 
+		Str << "GNSSSatCount : " << (unsigned int) v.GNSSSatCount << "\r\n";
+		Str << "GNSSSignal --: " << (unsigned int) v.GNSSSignal   << "\r\n";
+		Str << "MaxHeight ---: " << (unsigned int) v.MaxHeight    << "\r\n";
+		Str << "MaxDist -----: " << (unsigned int) v.MaxDist      << "\r\n";
+		Str << "BatLevel ----: " << (unsigned int) v.BatLevel     << "\r\n";
+		Str << "BatWarning --: " << (unsigned int) v.BatWarning   << "\r\n";
+		Str << "WindLevel ---: " << (unsigned int) v.WindLevel    << "\r\n";
+		Str << "DJICam ------: " << (unsigned int) v.DJICam       << "\r\n";
+		Str << "FlightMode --: " << (unsigned int) v.FlightMode   << "\r\n";
+		Str << "MissionID ---: " << (unsigned int) v.MissionID    << "\r\n";
+		Str << "DroneSerial -: " <<                v.DroneSerial  << "\r\n";
+		return Str;
+	}
+	
+	std::ostream & operator<<(std::ostream & Str, Packet_Image const & v) { 
+		Str << "TargetFPS : " << v.TargetFPS << " frame/s\r\n";
+		Str << "Frame ----: " << v.Frame.rows << " x " << v.Frame.cols << " Image\r\n";
+		return Str;
+	}
+	
+	std::ostream & operator<<(std::ostream & Str, Packet_Acknowledgment const & v) { 
+		Str << "Positive -: " << (unsigned int) v.Positive  << "\r\n";
+		Str << "SourcePID : " << (unsigned int) v.SourcePID << "\r\n";
+		return Str;
+	}
+	
+	std::ostream & operator<<(std::ostream & Str, Packet_MessageString const & v) { 
+		Str << "Type ---: " << (unsigned int) v.Type    << "\r\n";
+		Str << "Message : " <<                v.Message << "\r\n";
+		return Str;
+	}
+	
+	std::ostream & operator<<(std::ostream & Str, Packet_EmergencyCommand const & v) { 
+		Str << "Action : " << (unsigned int) v.Action << "\r\n";
+		return Str;
+	}
+	
+	std::ostream & operator<<(std::ostream & Str, Packet_CameraControl const & v) { 
+		Str << "Action ---: " << (unsigned int) v.Action    << "\r\n";
+		Str << "TargetFPS : " <<                v.TargetFPS << " frame/s\r\n";
+		return Str;
+	}
+	
+	std::ostream & operator<<(std::ostream & Str, Packet_ExecuteWaypointMission const & v) { 
+		Str << "LandAtEnd ---: " << (unsigned int) v.LandAtEnd        << "\r\n";
+		Str << "CurvedFlight : " << (unsigned int) v.CurvedFlight     << "\r\n";
+		Str << "Waypoints ---: " << (unsigned int) v.Waypoints.size() << " items\r\n";
+		for (auto const & waypoint : v.Waypoints)
+			Str << waypoint << "\r\n";
+		return Str;
+	}
+	
+	std::ostream & operator<<(std::ostream & Str, Packet_VirtualStickCommand const & v) { 
+		Str << "Mode ---: " << (unsigned int) v.Mode    << "\r\n";
+		Str << "Yaw ----: " <<                v.Yaw     << " degrees\r\n";
+		Str << "V_x ----: " <<                v.V_x     << " m/s\r\n";
+		Str << "V_y ----: " <<                v.V_y     << " m/s\r\n";
+		Str << "HAG ----: " <<                v.HAG     << " m\r\n";
+		Str << "timeout : " <<                v.timeout << " s\r\n";
+		return Str;
 	}
 }
 

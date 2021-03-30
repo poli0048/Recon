@@ -33,7 +33,7 @@ namespace TestBenches {
 		/* 20 */ "Shadow Propagation: ",
 		/* 21 */ "DJI Drone Interface: Simulated Drone Imagery (Non-Realtime)",
 		/* 22 */ "DJI Drone Interface: Simulated Drone Imagery (Realtime)",
-		/* 23 */ "DJI Drone Interface: ",
+		/* 23 */ "DJI Drone Interface: Serialization/Deserialization",
 		/* 24 */ "DJI Drone Interface: ",
 		/* 25 */ "DJI Drone Interface: "
 	};

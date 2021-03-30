@@ -19,6 +19,7 @@
 #include "Maps/MapUtils.hpp"
 #include "Modules/Guidance/Guidance.hpp"
 #include "Modules/DJI-Drone-Interface/DroneManager.hpp"
+#include "Modules/DJI-Drone-Interface/DroneComms.hpp"
 
 #define PI 3.14159265358979
 
@@ -659,7 +660,282 @@ static bool TestBench22(void) {
 	return true;
 }
 
-static bool TestBench23(void) { return false; }
+//DJI Drone Interface: Serialization/Deserialization
+static bool TestBench23(void) {
+	DroneInterface::Packet myPacket;
+	
+	{
+		std::cerr << "Testing Core Telemetry Packet... ... ... ... . ";
+		DroneInterface::Packet_CoreTelemetry coreTelemetryA;
+		DroneInterface::Packet_CoreTelemetry coreTelemetryB;
+		coreTelemetryA.IsFlying  = 1U;         //Flying
+		coreTelemetryA.Latitude  = 44.237246;  //Degrees
+		coreTelemetryA.Longitude = -95.305901; //Degrees
+		coreTelemetryA.Altitude  = 445.0;      //meters
+		coreTelemetryA.HAG       = 100.0f;     //meters
+		coreTelemetryA.V_N       = 2.00f;      //m/s
+		coreTelemetryA.V_E       = 0.01f;      //m/s
+		coreTelemetryA.V_D       = -0.04f;     //m/s
+		coreTelemetryA.Yaw       = 0.0f;       //Degrees
+		coreTelemetryA.Pitch     = -5.1f;      //Degrees
+		coreTelemetryA.Roll      = 0.01f;      //Degrees
+		coreTelemetryA.Serialize(myPacket);
+		if (! myPacket.IsFinished()) {
+			std::cerr << "Packet Completion Test Failed.\r\n";
+			return false;
+		}
+		coreTelemetryB.Deserialize(myPacket);
+		if (coreTelemetryA == coreTelemetryB)
+			std::cerr << "Equality Test Passed.\r\n";
+		else {
+			std::cerr << "Equality Test Failed.\r\n";
+			std::cerr << "Original Object:\r\n" << coreTelemetryA << "\r\n";
+			std::cerr << "Deserialized Object:\r\n" << coreTelemetryB << "\r\n";
+			return false;
+		}
+	}
+	
+	{
+		std::cerr << "Testing Extended Telemetry Packet... ... ... . ";
+		DroneInterface::Packet_ExtendedTelemetry extendedTelemetryA;
+		DroneInterface::Packet_ExtendedTelemetry extendedTelemetryB;
+		extendedTelemetryA.GNSSSatCount = 13U;
+		extendedTelemetryA.GNSSSignal   = 5U;
+		extendedTelemetryA.MaxHeight    = 0U;
+		extendedTelemetryA.MaxDist      = 1U;
+		extendedTelemetryA.BatLevel     = 73U;
+		extendedTelemetryA.BatWarning   = 0U;
+		extendedTelemetryA.WindLevel    = 1U;
+		extendedTelemetryA.DJICam       = 1U;
+		extendedTelemetryA.FlightMode   = 10U;
+		extendedTelemetryA.MissionID    = 17U;
+		extendedTelemetryA.DroneSerial  = "S856772896"s;
+		extendedTelemetryA.Serialize(myPacket);
+		if (! myPacket.IsFinished()) {
+			std::cerr << "Packet Completion Test Failed.\r\n";
+			return false;
+		}
+		extendedTelemetryB.Deserialize(myPacket);
+		if (extendedTelemetryA == extendedTelemetryB)
+			std::cerr << "Equality Test Passed.\r\n";
+		else {
+			std::cerr << "Equality Test Failed.\r\n";
+			std::cerr << "Original Object:\r\n" << extendedTelemetryA << "\r\n";
+			std::cerr << "Deserialized Object:\r\n" << extendedTelemetryB << "\r\n";
+			return false;
+		}
+	}
+	
+	{
+		std::cerr << "Testing Image Packet... ... ... ... ... ... .. ";
+		DroneInterface::Packet_Image PacketA;
+		DroneInterface::Packet_Image PacketB;
+		PacketA.TargetFPS = 1.2f; //s
+		PacketA.Frame = cv::Mat(720, 1280, CV_8UC3);
+		cv::Vec3b & pix(PacketA.Frame.at<cv::Vec3b>(7, 45));
+		pix(0) = 71U;
+		pix(1) = 13U;
+		pix(2) = 207U;
+		PacketA.Serialize(myPacket);
+		if (! myPacket.IsFinished()) {
+			std::cerr << "Packet Completion Test Failed.\r\n";
+			return false;
+		}
+		PacketB.Deserialize(myPacket);
+		if (PacketA == PacketB)
+			std::cerr << "Equality Test Passed.\r\n";
+		else {
+			std::cerr << "Equality Test Failed.\r\n";
+			std::cerr << "Original Object:\r\n" << PacketA << "\r\n";
+			std::cerr << "Deserialized Object:\r\n" << PacketB << "\r\n";
+			return false;
+		}
+	}
+	
+	{
+		std::cerr << "Testing Acknowledgment Packet... ... ... ... . ";
+		DroneInterface::Packet_Acknowledgment PacketA;
+		DroneInterface::Packet_Acknowledgment PacketB;
+		PacketA.Positive  = 1U;
+		PacketA.SourcePID = 253U;
+		PacketA.Serialize(myPacket);
+		if (! myPacket.IsFinished()) {
+			std::cerr << "Packet Completion Test Failed.\r\n";
+			return false;
+		}
+		PacketB.Deserialize(myPacket);
+		if (PacketA == PacketB)
+			std::cerr << "Equality Test Passed.\r\n";
+		else {
+			std::cerr << "Equality Test Failed.\r\n";
+			std::cerr << "Original Object:\r\n" << PacketA << "\r\n";
+			std::cerr << "Deserialized Object:\r\n" << PacketB << "\r\n";
+			return false;
+		}
+	}
+	
+	{
+		std::cerr << "Testing Message String Packet... ... ... ... . ";
+		DroneInterface::Packet_MessageString PacketA;
+		DroneInterface::Packet_MessageString PacketB;
+		PacketA.Type    = 0U;
+		PacketA.Message = "This is a debug message! Debugging is going great!"s;
+		PacketA.Serialize(myPacket);
+		if (! myPacket.IsFinished()) {
+			std::cerr << "Packet Completion Test Failed.\r\n";
+			return false;
+		}
+		PacketB.Deserialize(myPacket);
+		if (PacketA == PacketB)
+			std::cerr << "Equality Test Passed.\r\n";
+		else {
+			std::cerr << "Equality Test Failed.\r\n";
+			std::cerr << "Original Object:\r\n" << PacketA << "\r\n";
+			std::cerr << "Deserialized Object:\r\n" << PacketB << "\r\n";
+			return false;
+		}
+	}
+	
+	{
+		std::cerr << "Testing Emergency Command Packet... ... ... .. ";
+		DroneInterface::Packet_EmergencyCommand PacketA;
+		DroneInterface::Packet_EmergencyCommand PacketB;
+		PacketA.Action = 2U; //RTL
+		PacketA.Serialize(myPacket);
+		if (! myPacket.IsFinished()) {
+			std::cerr << "Packet Completion Test Failed.\r\n";
+			return false;
+		}
+		PacketB.Deserialize(myPacket);
+		if (PacketA == PacketB)
+			std::cerr << "Equality Test Passed.\r\n";
+		else {
+			std::cerr << "Equality Test Failed.\r\n";
+			std::cerr << "Original Object:\r\n" << PacketA << "\r\n";
+			std::cerr << "Deserialized Object:\r\n" << PacketB << "\r\n";
+			return false;
+		}
+	}
+	
+	{
+		std::cerr << "Testing Camera Control Packet... ... ... ... . ";
+		DroneInterface::Packet_CameraControl PacketA;
+		DroneInterface::Packet_CameraControl PacketB;
+		PacketA.Action    = 1U;
+		PacketA.TargetFPS = 1.5f;
+		PacketA.Serialize(myPacket);
+		if (! myPacket.IsFinished()) {
+			std::cerr << "Packet Completion Test Failed.\r\n";
+			return false;
+		}
+		PacketB.Deserialize(myPacket);
+		if (PacketA == PacketB)
+			std::cerr << "Equality Test Passed.\r\n";
+		else {
+			std::cerr << "Equality Test Failed.\r\n";
+			std::cerr << "Original Object:\r\n" << PacketA << "\r\n";
+			std::cerr << "Deserialized Object:\r\n" << PacketB << "\r\n";
+			return false;
+		}
+	}
+	
+	{
+		std::cerr << "Testing Execute Waypoint Mission Packet... ... ";
+		DroneInterface::Packet_ExecuteWaypointMission PacketA;
+		DroneInterface::Packet_ExecuteWaypointMission PacketB;
+		PacketA.LandAtEnd = 0U;
+		PacketA.CurvedFlight = 0U;
+		PacketA.Waypoints.clear();
+		PacketA.Waypoints.emplace_back();
+		PacketA.Waypoints.back().Latitude     = 0.772121618310453;  //Radians
+		PacketA.Waypoints.back().Longitude    = -1.663470726988503; //Radians
+		PacketA.Waypoints.back().Altitude     = 380.0;              //m
+		PacketA.Waypoints.back().CornerRadius = 5.0f;               //m
+		PacketA.Waypoints.back().Speed        = 8.1f;               //m/s
+		PacketA.Waypoints.back().LoiterTime   = std::nanf("");      //Don't loiter
+		PacketA.Waypoints.back().GimbalPitch  = std::nanf("");      //Don't control gimbal
+		
+		PacketA.Waypoints.emplace_back();
+		PacketA.Waypoints.back().Latitude     = 0.772121618310453;  //Radians
+		PacketA.Waypoints.back().Longitude    = -1.663470726988503; //Radians
+		PacketA.Waypoints.back().Altitude     = 401.3;              //m
+		PacketA.Waypoints.back().CornerRadius = 4.1f;               //m
+		PacketA.Waypoints.back().Speed        = 7.6f;               //m/s
+		PacketA.Waypoints.back().LoiterTime   = std::nanf("");      //Don't loiter
+		PacketA.Waypoints.back().GimbalPitch  = std::nanf("");      //Don't control gimbal
+		
+		PacketA.Serialize(myPacket);
+		if (! myPacket.IsFinished()) {
+			std::cerr << "Packet Completion Test Failed.\r\n";
+			return false;
+		}
+		PacketB.Deserialize(myPacket);
+		//Because serialization and deserialization involve degree <-> radian conversion true equality test will generally fail.
+		bool essentiallyEqual = true;
+		if ((PacketA.LandAtEnd != PacketB.LandAtEnd) || (PacketA.CurvedFlight != PacketB.CurvedFlight))
+			essentiallyEqual = false;
+		else if (PacketA.Waypoints.size() != PacketB.Waypoints.size())
+			essentiallyEqual = false;
+		else {
+			for (size_t n = 0U; n < PacketA.Waypoints.size(); n++) {
+				DroneInterface::Waypoint const & A(PacketA.Waypoints[n]);
+				DroneInterface::Waypoint const & B(PacketB.Waypoints[n]);
+				bool LoiterTimesMatch   = (std::isnan(A.LoiterTime)  && std::isnan(B.LoiterTime))  || (A.LoiterTime  == B.LoiterTime);
+				bool GimbalPitchesMatch = (std::isnan(A.GimbalPitch) && std::isnan(B.GimbalPitch)) || (std::fabs(A.GimbalPitch - B.GimbalPitch) <= 1e-10);
+				if ((std::fabs(A.Latitude  - B.Latitude)  > 1e-10) ||
+				    (std::fabs(A.Longitude - B.Longitude) > 1e-10) ||
+				    (A.Altitude     != B.Altitude)                 ||
+				    (A.CornerRadius != B.CornerRadius)             ||
+				    (A.Speed        != B.Speed)                    ||
+				    (! LoiterTimesMatch)                           ||
+				    (! GimbalPitchesMatch))
+				{
+					essentiallyEqual = false;
+					break;
+				}
+				
+			}
+		}
+		if (essentiallyEqual)
+			std::cerr << "Equality Test Passed.\r\n";
+		else {
+			std::cerr << ".\r\n";
+			std::cerr << "Original Object:\r\n" << PacketA << "\r\n";
+			std::cerr << "Deserialized Object:\r\n" << PacketB << "\r\n";
+			return false;
+		}
+	}
+	
+	{
+		std::cerr << "Testing Virtual Stick Command Packet... ... .. ";
+		DroneInterface::Packet_VirtualStickCommand PacketA;
+		DroneInterface::Packet_VirtualStickCommand PacketB;
+		PacketA.Mode    = 0U;    //Mode A (V_x is V_North, and V_y is V_East)
+		PacketA.Yaw     = 31.0f; //degrees, relative to true north (positive yaw is clockwise rotation)
+		PacketA.V_x     = 1.2f;  //m/s
+		PacketA.V_y     = -0.7f; //m/s
+		PacketA.HAG     = 39.5f; //m
+		PacketA.timeout = 5.0f;  //s
+		PacketA.Serialize(myPacket);
+		if (! myPacket.IsFinished()) {
+			std::cerr << "Packet Completion Test Failed.\r\n";
+			return false;
+		}
+		PacketB.Deserialize(myPacket);
+		if (PacketA == PacketB)
+			std::cerr << "Equality Test Passed.\r\n";
+		else {
+			std::cerr << "Equality Test Failed.\r\n";
+			std::cerr << "Original Object:\r\n" << PacketA << "\r\n";
+			std::cerr << "Deserialized Object:\r\n" << PacketB << "\r\n";
+			return false;
+		}
+	}
+	
+	return true;
+}
+
+
 static bool TestBench24(void) { return false; }
 static bool TestBench25(void) { return false; }
 

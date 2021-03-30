@@ -9,7 +9,6 @@
 #include <cstdint>
 
 //External Includes
-#include "../../../handycpp/Handy.hpp" //Provides std::filesystem and Handy::File
 #include <opencv2/opencv.hpp>
 
 //Project Includes
@@ -23,6 +22,7 @@ namespace DroneInterface {
 			
 			Packet()  = default;
 			~Packet() = default;
+			void Clear(void);
 			
 			//Utilities for stream parsing
 			bool IsFinished(void);
@@ -61,6 +61,7 @@ namespace DroneInterface {
 			
 			Packet_CoreTelemetry()  = default;
 			~Packet_CoreTelemetry() = default;
+			bool operator==(Packet_CoreTelemetry const & Other) const; //If switching to C++20, default this
 			
 			void Serialize(Packet & TargetPacket) const; //Populate Packet from fields
 			bool Deserialize(Packet const & SourcePacket); //Populate fields from Packet
@@ -82,11 +83,12 @@ namespace DroneInterface {
 			
 			Packet_ExtendedTelemetry()  = default;
 			~Packet_ExtendedTelemetry() = default;
+			bool operator==(Packet_ExtendedTelemetry const & Other) const; //If switching to C++20, default this
 			
 			void Serialize(Packet & TargetPacket) const; //Populate Packet from fields
 			bool Deserialize(Packet const & SourcePacket); //Populate fields from Packet
 	};
-
+	
 	class Packet_Image {
 		public:
 			float   TargetFPS;
@@ -94,6 +96,7 @@ namespace DroneInterface {
 			
 			Packet_Image()  = default;
 			~Packet_Image() = default;
+			bool operator==(Packet_Image const & Other) const; //If switching to C++20, default this
 			
 			void Serialize(Packet & TargetPacket) const; //Populate Packet from fields
 			bool Deserialize(Packet const & SourcePacket); //Populate fields from Packet
@@ -106,6 +109,7 @@ namespace DroneInterface {
 			
 			Packet_Acknowledgment()  = default;
 			~Packet_Acknowledgment() = default;
+			bool operator==(Packet_Acknowledgment const & Other) const; //If switching to C++20, default this
 			
 			void Serialize(Packet & TargetPacket) const; //Populate Packet from fields
 			bool Deserialize(Packet const & SourcePacket); //Populate fields from Packet
@@ -118,6 +122,7 @@ namespace DroneInterface {
 			
 			Packet_MessageString()  = default;
 			~Packet_MessageString() = default;
+			bool operator==(Packet_MessageString const & Other) const; //If switching to C++20, default this
 			
 			void Serialize(Packet & TargetPacket) const; //Populate Packet from fields
 			bool Deserialize(Packet const & SourcePacket); //Populate fields from Packet
@@ -129,6 +134,7 @@ namespace DroneInterface {
 			
 			Packet_EmergencyCommand()  = default;
 			~Packet_EmergencyCommand() = default;
+			bool operator==(Packet_EmergencyCommand const & Other) const; //If switching to C++20, default this
 			
 			void Serialize(Packet & TargetPacket) const; //Populate Packet from fields
 			bool Deserialize(Packet const & SourcePacket); //Populate fields from Packet
@@ -141,6 +147,7 @@ namespace DroneInterface {
 			
 			Packet_CameraControl()  = default;
 			~Packet_CameraControl() = default;
+			bool operator==(Packet_CameraControl const & Other) const; //If switching to C++20, default this
 			
 			void Serialize(Packet & TargetPacket) const; //Populate Packet from fields
 			bool Deserialize(Packet const & SourcePacket); //Populate fields from Packet
@@ -157,6 +164,7 @@ namespace DroneInterface {
 			
 			Packet_ExecuteWaypointMission()  = default;
 			~Packet_ExecuteWaypointMission() = default;
+			bool operator==(Packet_ExecuteWaypointMission const & Other) const; //If switching to C++20, default this
 			
 			void Serialize(Packet & TargetPacket) const; //Populate Packet from fields
 			bool Deserialize(Packet const & SourcePacket); //Populate fields from Packet
@@ -173,10 +181,23 @@ namespace DroneInterface {
 			
 			Packet_VirtualStickCommand()  = default;
 			~Packet_VirtualStickCommand() = default;
+			bool operator==(Packet_VirtualStickCommand const & Other) const; //If switching to C++20, default this
 			
 			void Serialize(Packet & TargetPacket) const; //Populate Packet from fields
 			bool Deserialize(Packet const & SourcePacket); //Populate fields from Packet
 	};
+	
+	//Stream Operators - used to print packet contents in human-readable form
+	std::ostream & operator<<(std::ostream & Str, Packet_CoreTelemetry          const & v);
+	std::ostream & operator<<(std::ostream & Str, Packet_ExtendedTelemetry      const & v);
+	std::ostream & operator<<(std::ostream & Str, Packet_Image                  const & v);
+	std::ostream & operator<<(std::ostream & Str, Packet_Acknowledgment         const & v);
+	std::ostream & operator<<(std::ostream & Str, Packet_MessageString          const & v);
+	std::ostream & operator<<(std::ostream & Str, Packet_EmergencyCommand       const & v);
+	std::ostream & operator<<(std::ostream & Str, Packet_CameraControl          const & v);
+	std::ostream & operator<<(std::ostream & Str, Packet_ExecuteWaypointMission const & v);
+	std::ostream & operator<<(std::ostream & Str, Packet_VirtualStickCommand    const & v);
+	
 }
 
 

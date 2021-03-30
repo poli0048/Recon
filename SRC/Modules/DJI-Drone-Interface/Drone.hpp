@@ -43,6 +43,15 @@ namespace DroneInterface {
 		float V_East;    //m/s: East component of vehicle velocity (Acceptable range -15 to 15)
 		float HAG;       //m: Height above ground (vehicle altitude - takeoff altitude)
 		float timeout;   //s: If a new command isn't received within this time, the drone should hover
+		
+		//If switching to C++20, default this
+		bool operator==(VirtualStickCommand_ModeA const & Other) const {
+			return (this->Yaw       == Other.Yaw)       &&
+			       (this->V_North   == Other.V_North)   &&
+			       (this->V_East    == Other.V_East)    &&
+			       (this->HAG       == Other.HAG)       &&
+			       (this->timeout   == Other.timeout);
+		}
 	};
 	
 	//To use a ModeB virtual stick command, the drone should be configured as follows:
@@ -58,6 +67,15 @@ namespace DroneInterface {
 		float V_Right;   //m/s: Vehicle-Right component of vehicle velocity (Acceptable range -15 to 15)
 		float HAG;       //m: Height above ground (vehicle altitude - takeoff altitude)
 		float timeout;   //s: If a new command isn't received within this time, the drone should hover
+		
+		//If switching to C++20, default this
+		bool operator==(VirtualStickCommand_ModeB const & Other) const {
+			return (this->Yaw       == Other.Yaw)       &&
+			       (this->V_Forward == Other.V_Forward) &&
+			       (this->V_Right   == Other.V_Right)   &&
+			       (this->HAG       == Other.HAG)       &&
+			       (this->timeout   == Other.timeout);
+		}
 	};
 	
 	//Waypoint objects are used as components of WaypointMission objects. Note that the speed field should be checked before putting it in a DJIWaypoint. If it is 0,
@@ -79,7 +97,30 @@ namespace DroneInterface {
 		//GimbalPitch: DJIWaypointActionTypeRotateGimbalPitch
 		float LoiterTime;   //Time (s) to hover at this waypoint (0 is equivilent to NaN and should result in the action not being included).
 		float GimbalPitch;  //Pitch of Gimbal, if connected (DJI Definition) in radians at waypoint.
+		
+		//If switching to C++20, default this
+		bool operator==(Waypoint const & Other) const {
+			return (this->Latitude     == Other.Latitude)     &&
+			       (this->Longitude    == Other.Longitude)    &&
+			       (this->Altitude     == Other.Altitude)     &&
+			       (this->CornerRadius == Other.CornerRadius) &&
+			       (this->Speed        == Other.Speed)        &&
+			       (this->LoiterTime   == Other.LoiterTime)   &&
+			       (this->GimbalPitch  == Other.GimbalPitch);
+		}
 	};
+	
+	inline std::ostream & operator<<(std::ostream & Str, Waypoint const & v) { 
+		double PI = 3.14159265358979;
+		Str << "Latitude ----: " << 180.0/PI*v.Latitude     << " degrees\r\n";
+		Str << "Longitude ---: " << 180.0/PI*v.Longitude    << " degrees\r\n";
+		Str << "Altitude ----: " <<          v.Altitude     << " m\r\n";
+		Str << "CornerRadius : " <<          v.CornerRadius << " m\r\n";
+		Str << "Speed -------: " <<          v.Speed        << " m/s\r\n";
+		Str << "LoiterTime --: " <<          v.LoiterTime   << " s\r\n";
+		Str << "GimbalPitch -: " << 180.0/PI*v.GimbalPitch  << " degrees\r\n";
+		return Str;
+	}
 	
 	//This struct holds a waypoint mission for a single drone. The full DJI waypoint mission interface is relatively complex - we only implement the
 	//subset of it's functionality that we expect to be useful for our purposes. Note that for all these missions, the vehicle Heading Mode should be set to
@@ -91,6 +132,19 @@ namespace DroneInterface {
 		std::vector<Waypoint> Waypoints; //Waypoints to fly to, in order from the vehicle starting position (which is not included as a waypoint)
 		bool LandAtLastWaypoint; //If true, the vehicle lands after hitting the final waypoint. If false, the mission ends with the vehicle hovering in P flight mode.
 		bool CurvedTrajectory; //If true, cut corners when hitting waypoints, resulting in curved trajectory. If false, fly point-to-point, stopping at each waypoint.
+		
+		//If switching to C++20, default this
+		bool operator==(WaypointMission const & Other) const {
+			if ((this->LandAtLastWaypoint != Other.LandAtLastWaypoint) || (this->CurvedTrajectory != Other.CurvedTrajectory))
+				return false;
+			if (this->Waypoints.size() != Other.Waypoints.size())
+				return false;
+			for (size_t n = 0U; n < Waypoints.size(); n++) {
+				if (! (this->Waypoints[n] == Other.Waypoints[n]))
+					return false;
+			}
+			return true;
+		}
 	};
 	
 	//Abstract class for drones - This means that an object of this type cannot actually exist... only objects of a derived type. We have two derived types:
