@@ -1,12 +1,13 @@
-#define _USE_MATH_DEFINES
+#pragma once
 
+//System Includes
 #include <stdlib.h>
 #include <stdio.h>
 #include <float.h>
 #include <math.h>
-#include "opencv2/highgui.hpp"
 
-using namespace cv;
+//External Includes
+#include "opencv2/highgui.hpp"
 
 #define CMV_MAX_BUF 1024
 #define MAX_POL_LENGTH 64
@@ -189,3 +190,5 @@ inline void create_perspective_undistortion_LUT(cv::Mat& mapx, cv::Mat& mapy, st
 			mapy.at<double>(i, j) = (double)m[0];
 		}
 }
+
+

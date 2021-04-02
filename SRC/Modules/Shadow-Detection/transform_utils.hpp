@@ -1,7 +1,9 @@
 #pragma once
 
+//System Includes
 #include <random>
 #include <chrono>
+
 //Return ECEF position corresponding to given lat (rad), lon (rad), and alt (m)
 inline cv::Point3d positionLLA2ECEF(double lat, double lon, double alt) {
 	double a = 6378137.0;           //Semi-major axis of reference ellipsoid
@@ -15,7 +17,7 @@ inline cv::Point3d positionLLA2ECEF(double lat, double lon, double alt) {
 }
 
 inline void multCam2World(std::Evector<Eigen::Vector2d>& pixel_coords, std::vector<cv::Point3d>& backprojected, ocam_model& o) {
-	for (int i = 0; i < pixel_coords.size(); i++) {
+	for (int i = 0; i < (int) pixel_coords.size(); i++) {
 		double point3D[3];
 		// y,x => row, col => 1, 0
 		double point2D[2] = { pixel_coords[i](1), pixel_coords[i](0) };
@@ -49,7 +51,7 @@ inline void getPoseInputMatrices(std::Evector<Eigen::Vector3d>& world, std::vect
 	//cv::Mat bp_matrix = cv::Mat(backproj);
 	// backproj has cv::Point3d objects. Need to convert to Eigen::Vector3d
 	std::Evector<Eigen::Vector3d> bp_matrix;
-	for (int i = 0; i < backproj.size(); i++){
+	for (int i = 0; i < (int) backproj.size(); i++){
 		Eigen::Vector3d temp_row;
 		temp_row << backproj[i].x, backproj[i].y, backproj[i].z;
 		bp_matrix.push_back(temp_row);
@@ -74,9 +76,9 @@ inline void multENU2CAM(Mat& enu, Mat& cam, Eigen::Matrix3d R, Eigen::Vector3d t
 }
 */
 
-inline void multENU2CAM(std::Evector<Eigen::Vector3d>& enu, Mat& cam, Eigen::Matrix3d R, Eigen::Vector3d t, ocam_model& o) {
-	cam = Mat(enu.size(), 2, CV_64F);
-	for (int row = 0; row < enu.size(); row++) {
+inline void multENU2CAM(std::Evector<Eigen::Vector3d>& enu, cv::Mat& cam, Eigen::Matrix3d R, Eigen::Vector3d t, ocam_model& o) {
+	cam = cv::Mat(enu.size(), 2, CV_64F);
+	for (int row = 0; row < (int) enu.size(); row++) {
 		Eigen::Vector3d v_cam = R.inverse() * (enu[row] - t);
 		double point3D[3] = { v_cam(0), v_cam(1), v_cam(2) };
 		double point2D[2];
@@ -88,14 +90,14 @@ inline void multENU2CAM(std::Evector<Eigen::Vector3d>& enu, Mat& cam, Eigen::Mat
 	}
 }
 
-inline double reprojectionError(Mat &orig_PX, std::Evector<Eigen::Vector3d>&orig_LEA, Eigen::Matrix3d& R_cam_LEA, Eigen::Vector3d& t_cam_LEA, ocam_model& o, double percent_include) {
-	Mat reprojected, norm;
+inline double reprojectionError(cv::Mat &orig_PX, std::Evector<Eigen::Vector3d>&orig_LEA, Eigen::Matrix3d& R_cam_LEA, Eigen::Vector3d& t_cam_LEA, ocam_model& o, double percent_include) {
+	cv::Mat reprojected, norm;
 	multENU2CAM(orig_LEA, reprojected, R_cam_LEA, t_cam_LEA, o);
-	Mat diff = orig_PX - reprojected;
-	reduce(diff.mul(diff), norm, 1, REDUCE_SUM, CV_64F);
-	cv::sort(norm, norm, SORT_EVERY_COLUMN + SORT_ASCENDING);
+	cv::Mat diff = orig_PX - reprojected;
+	reduce(diff.mul(diff), norm, 1, cv::REDUCE_SUM, CV_64F);
+	cv::sort(norm, norm, cv::SORT_EVERY_COLUMN + cv::SORT_ASCENDING);
 	int end = percent_include * norm.rows;
-	Mat subMatrix = Mat(norm, cv::Range(0, end), cv::Range::all());
+	cv::Mat subMatrix = cv::Mat(norm, cv::Range(0, end), cv::Range::all());
 	return cv::sum(subMatrix)[0];
 	}
 
@@ -119,7 +121,7 @@ inline void findPose(std::Evector<Eigen::Vector2d>& fiducials_PX, std::Evector<E
 		
 		LambdaTwistSolve(input_bearing, input_world, possiblePoses, true);
 		
-		for (int poseIndex = 0; poseIndex < possiblePoses.size(); poseIndex++) {
+		for (int poseIndex = 0; poseIndex < (int) possiblePoses.size(); poseIndex++) {
 			std::tuple<Eigen::Vector3d, Eigen::Matrix3d> pose = possiblePoses[poseIndex];
 			R_cam_LEA = std::get<1>(pose);
 			t_cam_LEA = std::get<0>(pose);
@@ -211,7 +213,7 @@ inline void positionECEF2LLA(cv::Point3d const& Position, double& lat, double& l
 
 inline cv::Mat latLon_2_C_ECEF_ENU(double lat, double lon) {
 	cv::Mat C_ECEF_NED = latLon_2_C_ECEF_NED(lat, lon);
-	cv::Mat C_NED_ENU = (Mat_<double>(3, 3) << 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, -1.0);
+	cv::Mat C_NED_ENU = (cv::Mat_<double>(3, 3) << 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, -1.0);
 	cv::Mat C_ECEF_ENU = C_NED_ENU * C_ECEF_NED;
 	return(C_ECEF_ENU);
 }
@@ -231,7 +233,7 @@ inline cv::Point3d positionECEF2LLA_construct(cv::Point3d const& PositionECEF) {
 	double lon = 0.0;
 	double alt = 0.0;
 	positionECEF2LLA(PositionECEF, lat, lon, alt);
-	return Point3d(lat, lon, alt);
+	return cv::Point3d(lat, lon, alt);
 }
 
 //(col, row)-pixel coords to reference coords
@@ -264,7 +266,7 @@ inline void poseLEA2ENU(cv::Point3d &centroid_ECEF, Eigen::Matrix3d& R_cam_LEA, 
 }
 
 
-inline void get_centered_extent(const cv::Point3d &centroid_ECEF, const double &aperture_distance_px, const Size &FINAL_SIZE, const Eigen::Matrix3d &R_cam_ENU, const Eigen::Vector3d &t_cam_ENU, const Eigen::Vector3d& t_cam_LEA, ocam_model &o, Eigen::Vector2d& center, double &max_extent) {
+inline void get_centered_extent(const cv::Point3d &centroid_ECEF, const double &aperture_distance_px, const cv::Size &FINAL_SIZE, const Eigen::Matrix3d &R_cam_ENU, const Eigen::Vector3d &t_cam_ENU, const Eigen::Vector3d& t_cam_LEA, ocam_model &o, Eigen::Vector2d& center, double &max_extent) {
 	double lat, lon, alt, theta;
 	positionECEF2LLA(centroid_ECEF, lat, lon, alt);
 
@@ -299,17 +301,17 @@ inline void get_centered_extent(const cv::Point3d &centroid_ECEF, const double &
 	Eigen::Vector3d X3_ENU = t_cam_ENU + v3 * t3;
 	Eigen::Vector3d X4_ENU = t_cam_ENU + v4 * t4;
 
-	double eastMin = min({ X1_ENU(0), X2_ENU(0), X3_ENU(0), X4_ENU(0) });
-	double eastMax = max({ X1_ENU(0), X2_ENU(0), X3_ENU(0), X4_ENU(0) });
-	double northMin = min({ X1_ENU(1), X2_ENU(1), X3_ENU(1), X4_ENU(1) });
-	double northMax = max({ X1_ENU(1), X2_ENU(1), X3_ENU(1), X4_ENU(1) });
+	double eastMin = cv::min({ X1_ENU(0), X2_ENU(0), X3_ENU(0), X4_ENU(0) });
+	double eastMax = cv::max({ X1_ENU(0), X2_ENU(0), X3_ENU(0), X4_ENU(0) });
+	double northMin = cv::min({ X1_ENU(1), X2_ENU(1), X3_ENU(1), X4_ENU(1) });
+	double northMax = cv::max({ X1_ENU(1), X2_ENU(1), X3_ENU(1), X4_ENU(1) });
 
-	max_extent = max({ eastMax - eastMin, northMax - northMin });
+	max_extent = cv::max({ eastMax - eastMin, northMax - northMin });
 	center = Eigen::Vector2d(0.5 * (eastMin + eastMax), 0.5 * (northMin + northMax));
 
 }
 
-inline void positionPX2LLA(Mat& frame, Eigen::Vector2d& pixel_coords, const Point3d& ECEF_origin, const Eigen::Vector2d &center, const double &max_extent, const double &num_pixels, Eigen::Vector3d& point_LLA, Eigen::Matrix3d& R, Eigen::Vector3d& t, ocam_model& o) {
+inline void positionPX2LLA(cv::Mat& frame, Eigen::Vector2d& pixel_coords, const cv::Point3d& ECEF_origin, const Eigen::Vector2d &center, const double &max_extent, const double &num_pixels, Eigen::Vector3d& point_LLA, Eigen::Matrix3d& R, Eigen::Vector3d& t, ocam_model& o) {
 	double lat, lon, alt;
 
 	Eigen::Vector2d NorthBounds(center(1) - max_extent / 2, center(1) + max_extent / 2);
@@ -321,7 +323,7 @@ inline void positionPX2LLA(Mat& frame, Eigen::Vector2d& pixel_coords, const Poin
 	Eigen::Vector3d pixel_enu(ref_coords(0), ref_coords(1), 0);
 	Eigen::Vector3d ECEF_vec_origin(ECEF_origin.x, ECEF_origin.y, ECEF_origin.z);
 	Eigen::Vector3d pixel_ECEF = pixel_enu + ECEF_vec_origin;
-	Point3d pixel_point_ECEF(pixel_ECEF(0), pixel_ECEF(1), pixel_ECEF(2));
+	cv::Point3d pixel_point_ECEF(pixel_ECEF(0), pixel_ECEF(1), pixel_ECEF(2));
 	positionECEF2LLA(pixel_point_ECEF, lat, lon, alt);
 
 	point_LLA = Eigen::Vector3d(lat, lon, alt);
@@ -332,17 +334,17 @@ inline void positionPX2LLA(Mat& frame, Eigen::Vector2d& pixel_coords, const Poin
 
 	world2cam(point_pixel, point_bearing, &o);
 
-	circle(frame, Point2d(point_pixel[1], point_pixel[0]), 3, Scalar(255, 0, 0), -1);
+	circle(frame, cv::Point2d(point_pixel[1], point_pixel[0]), 3, cv::Scalar(255, 0, 0), -1);
 }
 
-inline void sampleENUSquare(Mat& inputFrame, ocam_model& o, Eigen::Matrix3d& R, Eigen::Vector3d& t, const Eigen::Vector2d& center, const double& max_extent, const double &num_pixels, bool showFrames, Mat& outputFrame) {
+inline void sampleENUSquare(cv::Mat& inputFrame, ocam_model& o, Eigen::Matrix3d& R, Eigen::Vector3d& t, const Eigen::Vector2d& center, const double& max_extent, const double &num_pixels, bool showFrames, cv::Mat& outputFrame) {
 	Eigen::Vector2d NorthBounds(center(1) - max_extent / 2, center(1) + max_extent / 2);
 	Eigen::Vector2d EastBounds(center(0) - max_extent / 2, center(0) + max_extent / 2);
 	double GSD = max_extent / num_pixels;
 
-	outputFrame = Mat(num_pixels, num_pixels, CV_8UC3);
+	outputFrame = cv::Mat(num_pixels, num_pixels, CV_8UC3);
 
-	Mat frameCopy;
+	cv::Mat frameCopy;
 	if (showFrames) {
 		inputFrame.copyTo(frameCopy);
 	}
@@ -361,11 +363,11 @@ inline void sampleENUSquare(Mat& inputFrame, ocam_model& o, Eigen::Matrix3d& R, 
 			world2cam(point_pixel, point_bearing, &o);
 
 			if (showFrames) {
-				circle(frameCopy, Point2d(point_pixel[1], point_pixel[0]), 3, Scalar(255, 0, 0), -1);
+				circle(frameCopy, cv::Point2d(point_pixel[1], point_pixel[0]), 3, cv::Scalar(255, 0, 0), -1);
 			}
 
-			Point2d sample_point(point_pixel[1], point_pixel[0]);
-			outputFrame.at<Vec3b>(row, col) = getColorSubpixHelper(inputFrame, sample_point);
+			cv::Point2d sample_point(point_pixel[1], point_pixel[0]);
+			outputFrame.at<cv::Vec3b>(row, col) = getColorSubpixHelper(inputFrame, sample_point);
 		}
 	}
 

@@ -1,7 +1,8 @@
-#include "eigen/Eigen/SVD"
-#include "eigen/Eigen/Geometry"
-
 #pragma once
+
+//External Includes
+#include "../../../../eigen/Eigen/SVD"
+#include "../../../../eigen/Eigen/Geometry"
 
 namespace {
 	//Refine a valid solution with a Gauss-Newton Solver. The paper notes it rarely improves after two iterations.
