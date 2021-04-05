@@ -34,6 +34,7 @@ namespace ShadowDetection {
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 			
 			cv::Mat Map;           //fixed-size (512 x 512) shadow map image. Use uint8_t type with 0-127 = unshadowed, and 128-256 = shadowed
+			cv::Mat Mask;	       //Binary Mask
 			Eigen::Vector2d UL_LL; //(Latitude, Longitude) of center of upper-left pixel, in radians
 			Eigen::Vector2d UR_LL; //(Latitude, Longitude) of center of upper-right pixel, in radians
 			Eigen::Vector2d LL_LL; //(Latitude, Longitude) of center of lower-left pixel, in radians
@@ -48,6 +49,7 @@ namespace ShadowDetection {
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 			
 			std::vector<cv::Mat> Maps;         //Same definition as in InstantaneousShadowMap
+			std::vector<cv::Mat> Masks;
 			std::vector<TimePoint> Timestamps; //Item n is the timestamp for Maps[n]
 			Eigen::Vector2d UL_LL; //(Latitude, Longitude) of center of upper-left pixel, in radians
 			Eigen::Vector2d UR_LL; //(Latitude, Longitude) of center of upper-right pixel, in radians
@@ -258,7 +260,6 @@ namespace ShadowDetection {
 		//We will save all FRF files for the mission to a subdirectory of "Shadow Map Files" in the executable directory
 		//The subdirectories will be named "Mission N (Date)"
 		std::scoped_lock lock(m_mutex);
-		
 		//Get the first free mission number 
 		std::filesystem::path TargetDir = Handy::Paths::ThisExecutableDirectory() / "Shadow Map Files";
 		std::error_code ec;

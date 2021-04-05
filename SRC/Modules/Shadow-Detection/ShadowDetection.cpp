@@ -15,7 +15,6 @@ namespace ShadowDetection {
 		// Save entire ShadowMapHistory entry, which is a vector maps
 		// Generate a Layer with all the correct settings
 		FRFImage shadowMap;
-
 		//Set Image dimensions - this must be done now, when there are no layers in the image yet.
 		if (!shadowMap.SetWidth(512U))
 		std::cerr << "Failed to set image width.\r\n";
@@ -25,7 +24,6 @@ namespace ShadowDetection {
 		ShadowMapInfoBlock myShadowMapInfoBlock;
 		myShadowMapInfoBlock.FileTimeEpoch_Week = 0U;
 		myShadowMapInfoBlock.FileTimeEpoch_TOW = std::nan("");
-		
 		// Iterate through the Maps
 		for (int i = 0; i < (int) Maps.size(); i++){
 			//Add a new layer and set it up
@@ -37,12 +35,12 @@ namespace ShadowDetection {
 			newLayer->HasValidityMask = true; //Add validity info for each pixel in this layer
 			newLayer->SetAlphaAndBetaForGivenRange(0.0, 1.0); //Let the FRF lib set coefficients so values are in range [0,1]
 			newLayer->AllocateStorage(); //This needs to be called before the layer can be accessed
-
-			set_NewValue((uint) shadowMap.Rows(), (uint) shadowMap.Rows(), newLayer, Maps[i]);
+			
+			set_NewValue((uint) shadowMap.Rows(), (uint) shadowMap.Rows(), Masks[i], newLayer, Maps[i]);
+			//set_NewValue((uint) shadowMap.Rows(), (uint) shadowMap.Rows(), newLayer, Maps[i]);
 
 			myShadowMapInfoBlock.LayerTimeTags.push_back(i);
 		}
-
 		FRFVisualizationColormap* viz = shadowMap.AddVisualizationColormap();
 		viz->LayerIndex = 0U; //Base the visualization on the first layer of the shadow map
 		viz->SetPoints.push_back(std::make_tuple(0.0, 1.0, 1.0, 1.0)); //Map value 0 (unshadowed) to white (RGB all set to 1)
@@ -53,7 +51,7 @@ namespace ShadowDetection {
 		GeoRegistrationTag.RegisterFromCornerLocations(UL_LL, UR_LL, LL_LL, LR_LL);
 		shadowMap.SetGeoRegistration(GeoRegistrationTag);
 		//TODO: When we have the ability, set the GPST field of GeoRegistrationTag
-
+		std::cout << "Geo Reg Finished, Saving FRF" << std::endl;
 		if (!myShadowMapInfoBlock.AttachToFRFFile(shadowMap))
 			std::cerr << "Error adding shadow map info block... do we have the right number of time tags? There should be 1 per layer.\r\n";
 		
@@ -91,17 +89,16 @@ namespace ShadowDetection {
 		img_rot_sampled.copyTo(img_masked, mask);
 		
 		cv::cvtColor(binary_sampled, binary_sampled, cv::COLOR_RGB2GRAY);
-		binary_masked = binary_sampled;
-		imshow("Frame Original", frame_orig);
 		imshow("Frame Stabilized", img_rot_sampled);
-		create_masked_binary((uint) binary_sampled.cols, (uint) binary_sampled.rows, mask, binary_masked, binary_sampled);
-
+		cv::waitKey(1);
 		//Update m_ShadowMap
-		m_ShadowMap.Map = binary_masked; //Shadow map based on most recently processed frame
+		m_ShadowMap.Map = binary_sampled; //Shadow map based on most recently processed frame
+		m_ShadowMap.Mask = mask;
 		m_ShadowMap.Timestamp = Timestamp;
 			
 		//Update m_History (Essentially a vector of ShadowMap Histories)
-		m_History.back().Maps.push_back(binary_masked); //Record of all computed shadow maps - add new element when ref frame changes (since registration changes)
+		m_History.back().Maps.push_back(binary_sampled); //Record of all computed shadow maps - add new element when ref frame changes (since registration changes)
+		m_History.back().Masks.push_back(mask);
 		m_History.back().Timestamps.push_back(Timestamp);
 		
 		//Call any registered callbacks
@@ -197,12 +194,9 @@ namespace ShadowDetection {
 		findPose(Fiducials_PX, Fiducials_LEA, o, R_cam_LEA, t_cam_LEA); //ECHAI: Still editing findPose
 
 		poseLEA2ENU(centroid_ECEF, R_cam_LEA, t_cam_LEA, R_cam_ENU, t_cam_ENU);
-		std::cout << "The matrix t_cam_ENU  " << t_cam_ENU << std::endl;
-		std::cout << "The matrix t_cam_LEA  " << t_cam_LEA << std::endl;
-		
+
     		get_centered_extent(centroid_ECEF, APERTURE_DISTANCE_PX, FINAL_SIZE, R_cam_ENU, t_cam_ENU, t_cam_LEA, o, center, max_extent);
-		std::cout << "Max Extent  " << max_extent << std::endl;
-		std::cout << "The matrix center  " << center << std::endl;
+
 	}
 }
 

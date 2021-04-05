@@ -94,22 +94,17 @@ inline void getApertureMask(const cv::Mat& img, cv::Mat& mask) {
 	floodFill(mask, cv::Point(OUTPUT_RESOLUTION_PX - 1, OUTPUT_RESOLUTION_PX - 1), cv::Scalar(0));
 }
 
-inline void create_masked_binary(const int mapRows, const int mapCols, const cv::Mat mask, cv::Mat binary_masked, cv::Mat binary_sampled){
 
+
+inline void set_NewValue(const int mapRows, const int mapCols, const cv::Mat mask, FRFLayer* newLayer, cv::Mat binary_sampled){
     for (uint32_t row = 0U; row < (uint32_t) mapRows; row++) {
         for (uint32_t col = 0U; col < (uint32_t) mapCols; col++) {
             if ((int) mask.at<uchar>(row, col) == 0) {
-                binary_masked.at<uchar>(row,col) = NAN; //TODO: This is a problem - there is no NAN for uchar types
-                        //newLayer->SetValue(row, col, (int)binary_sampled.at<uchar>(row, col));
-            } 
-        }
-    }
-}
+                newLayer->SetValue(row, col, NAN);
+            } else {
+                newLayer->SetValue(row, col, (int) binary_sampled.at<uchar>(row, col));
+            }
 
-inline void set_NewValue(const int mapRows, const int mapCols, FRFLayer* newLayer, cv::Mat binary_masked){
-    for (uint32_t row = 0U; row < (uint32_t) mapRows; row++) {
-        for (uint32_t col = 0U; col < (uint32_t) mapCols; col++) {
-		newLayer->SetValue(row, col, (int) binary_masked.at<uchar>(row, col));
         }
     }
 }
