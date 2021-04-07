@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<opencv_storage>
+	<gcp type_id="opencv-matrix">
+		<rows>5</rows>
+		<cols>3</cols>
+		<dt>d</dt>
+		<data>
+			44.129139 -92.293407 329
+			44.128534 -92.293403 329
+			44.128539 -92.293969 329
+			44.129140 -92.293963 329
+			44.129321 -92.297202 329
+		</data>
+	</gcp>
+</opencv_storage>
