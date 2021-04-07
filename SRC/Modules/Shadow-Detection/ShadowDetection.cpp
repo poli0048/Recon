@@ -36,7 +36,7 @@ namespace ShadowDetection {
 			newLayer->SetAlphaAndBetaForGivenRange(0.0, 1.0); //Let the FRF lib set coefficients so values are in range [0,1]
 			newLayer->AllocateStorage(); //This needs to be called before the layer can be accessed
 			
-			set_NewValue((uint) shadowMap.Rows(), (uint) shadowMap.Rows(), Masks[i], newLayer, Maps[i]);
+			set_NewValue((uint) shadowMap.Rows(), (uint) shadowMap.Rows(), newLayer, Maps[i]);
 			//set_NewValue((uint) shadowMap.Rows(), (uint) shadowMap.Rows(), newLayer, Maps[i]);
 
 			myShadowMapInfoBlock.LayerTimeTags.push_back(i);
@@ -89,16 +89,15 @@ namespace ShadowDetection {
 		img_rot_sampled.copyTo(img_masked, mask);
 		
 		cv::cvtColor(binary_sampled, binary_sampled, cv::COLOR_RGB2GRAY);
+		create_masked_binary((uint) binary_sampled.cols, (uint) binary_sampled.rows, mask, binary_sampled);
 		imshow("Frame Stabilized", img_rot_sampled);
 		cv::waitKey(1);
 		//Update m_ShadowMap
 		m_ShadowMap.Map = binary_sampled; //Shadow map based on most recently processed frame
-		m_ShadowMap.Mask = mask;
 		m_ShadowMap.Timestamp = Timestamp;
 			
 		//Update m_History (Essentially a vector of ShadowMap Histories)
 		m_History.back().Maps.push_back(binary_sampled); //Record of all computed shadow maps - add new element when ref frame changes (since registration changes)
-		m_History.back().Masks.push_back(mask);
 		m_History.back().Timestamps.push_back(Timestamp);
 		
 		//Call any registered callbacks

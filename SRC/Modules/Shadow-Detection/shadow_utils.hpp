@@ -93,18 +93,36 @@ inline void getApertureMask(const cv::Mat& img, cv::Mat& mask) {
 	floodFill(mask, cv::Point(OUTPUT_RESOLUTION_PX - 1, 0), cv::Scalar(0));
 	floodFill(mask, cv::Point(OUTPUT_RESOLUTION_PX - 1, OUTPUT_RESOLUTION_PX - 1), cv::Scalar(0));
 }
+// Any value set to 255 is set to 254
+// Reserve 255 as the sentinel value for NAN
+// Value is supposed to be CV_8UC3 but only the first value is used
+inline void create_masked_binary(const int mapRows, const int mapCols, const cv::Mat mask, cv::Mat binary_sampled){
 
+    for (uint32_t row = 0U; row < mapRows; row++) {
+        for (uint32_t col = 0U; col < mapCols; col++) {
+	    // Set any pixel with value of 254 to 255
+	    if (binary_sampled.at<uchar>(row,col) == 255){
+		//std::cout << "Settting value at " << row << "," << col << " to 254" << std::endl;
+		binary_sampled.at<uchar>(row,col) = 254;
+	    }
+	    // Set the sentinel pixel
+            if ((int) mask.at<uchar>(row, col) == 0) {
+		//std::cout << "Settting value at " << row << "," << col << " to sentinel for NAN" << std::endl;
+                binary_sampled.at<uchar>(row,col) = 255;
+            } 
+        }
+    }
+}
 
-
-inline void set_NewValue(const int mapRows, const int mapCols, const cv::Mat mask, FRFLayer* newLayer, cv::Mat binary_sampled){
+inline void set_NewValue(const int mapRows, const int mapCols, FRFLayer* newLayer, cv::Mat binary_sampled){
     for (uint32_t row = 0U; row < (uint32_t) mapRows; row++) {
         for (uint32_t col = 0U; col < (uint32_t) mapCols; col++) {
-            if ((int) mask.at<uchar>(row, col) == 0) {
-                newLayer->SetValue(row, col, NAN);
-            } else {
-                newLayer->SetValue(row, col, (int) binary_sampled.at<uchar>(row, col));
-            }
-
+		if (binary_sampled.at<uchar>(row,col) == 255){
+			newLayer->SetValue(row, col, NAN);
+		}
+		else{
+        		newLayer->SetValue(row, col, (int) binary_sampled.at<uchar>(row, col));
+		}
         }
     }
 }
