@@ -1,0 +1,26 @@
+en_extent 175
+num_pixels 512
+median_blur 23
+
+DJI_0001-3 used Frame 1 of DJI_0003 as reference image
+DJI_0004-5 used Frame 1 of DJI_0004  as reference image
+
+NEW: 
+DJI_0001 used Frame 1 of DJI_0001 as reference image
+DJI_0002-3 used Frame 1 of DJI_0003 as reference image
+DJI_0004-5 used Frame 1 of DJI_0004  as reference image
+
+Same fiducials for all.
+
+Frame 1:
+For all video files in this folder
+
+GCP ID	WGS84 Corrdinates
+A:		45.345165, -93.860711
+B:		45.347070, -93.860312
+C:		45.346750, -93.858025
+D:		45.346190, -93.856642
+E:		45.345695, -93.857618
+F:		45.344873, -93.858002
+G:		45.343757, -93.858030
+
