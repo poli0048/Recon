@@ -44,6 +44,7 @@ class ProgOptions {
 		//The options are public fields so we can hand pointers to them directy to ImGui to expose the options.
 		float UIScaleFactor;    //Scale factor for all UI elements
 		float MapDPIPercentage; //Val = X: Map tiles selected so 1 screen pixel = X/100 tile pixels. Generally set between 50 and 100.
+		float DroneIconScale;   //Value of 1 means 1 pixel to 1 pixel. Value of 2 means 2 screen pixels per image pixel, etc.
 		float zoomSpeed;        //Normalized so that 1.0 is reasonable.
 		Themes::Theme UITheme;  //Light, Dark, etc.
 		
@@ -56,6 +57,7 @@ class ProgOptions {
 		template<class Archive> void serialize(Archive & archive) {
 			archive(CEREAL_NVP(UIScaleFactor),
 			        CEREAL_NVP(MapDPIPercentage),
+			        CEREAL_NVP(DroneIconScale),
 			        CEREAL_NVP(zoomSpeed),
 			        CEREAL_NVP(UITheme));
 		}
@@ -64,6 +66,7 @@ class ProgOptions {
 inline void ProgOptions::LoadDefaults(void) {
 	UIScaleFactor    = 1.0f;
 	MapDPIPercentage = 100.0f;
+	DroneIconScale   = 0.5f;
 	zoomSpeed        = 1.0f;
 	UITheme          = Themes::Theme::Dark;
 }
@@ -71,6 +74,7 @@ inline void ProgOptions::LoadDefaults(void) {
 inline void ProgOptions::SanitizeOptions(void) {
 	UIScaleFactor    = std::min(std::max(UIScaleFactor,    0.250f),   4.0f);
 	MapDPIPercentage = std::min(std::max(MapDPIPercentage, 50.00f), 100.0f);
+	DroneIconScale   = std::min(std::max(DroneIconScale,   0.250f),   2.0f);
 	zoomSpeed        = std::min(std::max(zoomSpeed,        0.125f),   8.0f);
 }
 

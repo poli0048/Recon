@@ -318,6 +318,7 @@ int main(int argc, const char * argv[]) {
 	ImGuiApp & app = ImGuiApp::Instance();
 	app.Init(Arguments::GraphicsAPI, Arguments::FrameSync, false);
 	app.SetScaling(ProgOptions::Instance()->UIScaleFactor); //Set initial UI scale factor
+	app.SetFontScaling(1.25f);                              //Make all fonts bigger
 	ImGui::GetIO().IniFilename = nullptr;                   //Disable INI file
 	ImGui::GetIO().ConfigViewportsNoAutoMerge = true;
 	ImGui::GetIO().ConfigViewportsNoDecoration = false;

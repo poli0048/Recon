@@ -37,8 +37,9 @@ namespace MyGui {
 		Math::Vector2 curPos = ImGui::GetCursorScreenPos();
 		std::string spaces((size_t)std::ceil(XMargin / ImGui::CalcTextSize(" ").x), ' ');
 		spaces += std::string(label);
+		ImDrawList * winDrawList = ImGui::GetWindowDrawList();
 		bool ret = ImGui::BeginMenu(spaces.c_str(), enabled);
-		ImGui::GetWindowDrawList()->AddText(curPos, ImGui::ColorConvertFloat4ToU32(ImGui::GetStyleColorVec4(ImGuiCol_Text)), txticon);
+		winDrawList->AddText(curPos, ImGui::ColorConvertFloat4ToU32(ImGui::GetStyleColorVec4(ImGuiCol_Text)), txticon);
 		return ret;
 	}
 	

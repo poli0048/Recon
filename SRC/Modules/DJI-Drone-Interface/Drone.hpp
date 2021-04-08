@@ -174,6 +174,7 @@ namespace DroneInterface {
 			//N should be detirmined when StartDJICamImageFeed() is called in order to achieve the given frame rate as closely as possible.
 			//There is a frame counter that starts at 0 and increments each time a new frame is received by the server.
 			virtual bool IsDJICamConnected(void) = 0; //Should be available on construction
+			virtual bool IsCamImageFeedOn(void) = 0; //True if receiving imagery from drone, false otherwise (valid on construction... initially returns false)
 			virtual void StartDJICamImageFeed(double TargetFPS) = 0; //Start sending frames of live video (as close as possible to the given framerate (frame / s))
 			virtual void StopDJICamImageFeed(void) = 0; //Stop sending frames of live video
 			virtual bool GetMostRecentFrame(cv::Mat & Frame, unsigned int & FrameNumber, TimePoint & Timestamp) = 0;
@@ -216,6 +217,7 @@ namespace DroneInterface {
 			bool GetGNSSStatus(unsigned int & SatCount, int & SignalLevel, TimePoint & Timestamp)    override;
 			
 			bool IsDJICamConnected(void)                                                                            override;
+			bool IsCamImageFeedOn(void)                                                                             override;
 			void StartDJICamImageFeed(double TargetFPS)                                                             override;
 			void StopDJICamImageFeed(void)                                                                          override;
 			bool GetMostRecentFrame(cv::Mat & Frame, unsigned int & FrameNumber, TimePoint & Timestamp)             override;
@@ -269,6 +271,7 @@ namespace DroneInterface {
 			bool GetGNSSStatus(unsigned int & SatCount, int & SignalLevel, TimePoint & Timestamp)    override;
 			
 			bool IsDJICamConnected(void)                                                                            override;
+			bool IsCamImageFeedOn(void)                                                                             override;
 			void StartDJICamImageFeed(double TargetFPS)                                                             override;
 			void StopDJICamImageFeed(void)                                                                          override;
 			bool GetMostRecentFrame(cv::Mat & Frame, unsigned int & FrameNumber, TimePoint & Timestamp)             override;
@@ -289,7 +292,6 @@ namespace DroneInterface {
 			//SimulatedDrone-specific methods
 			void SetRealTime(bool Realtime); //True: Imagery will be provided at close-to-real-time rate. False: Imagery is provided as fast as possible
 			void SetSourceVideoFile(std::filesystem::path const & VideoPath); //Should be set before calling StartDJICamImageFeed()
-			bool IsSimVideoFinished(void); //Returns true if end of video file reached and sim is done
 			bool GetReferenceFrame(double SecondsIntoVideo, cv::Mat & Frame); //Get a single frame - will fail if the video feed is running
 		
 		private:

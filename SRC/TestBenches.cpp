@@ -488,7 +488,7 @@ static bool TestBench11(void) {
 	myDrone->StartDJICamImageFeed(1.0);
 	
 	//wait until video feed is done
-	while (! mySimDrone->IsSimVideoFinished())
+	while (myDrone->IsCamImageFeedOn())
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	
 	//Stop the shadow detection engine and instruct it to save it's shadow map history
@@ -572,7 +572,7 @@ static bool TestBench12(void) {
 	myDrone->StartDJICamImageFeed(1.0);
 	
 	//wait until video feed is done
-	while (! mySimDrone->IsSimVideoFinished())
+	while (myDrone->IsCamImageFeedOn())
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	
 	//Stop the shadow detection engine and instruct it to save it's shadow map history
@@ -620,7 +620,7 @@ static bool TestBench21(void) {
 	myDrone->StartDJICamImageFeed(1.0);
 	
 	//wait until video feed is done
-	while (! mySimDrone->IsSimVideoFinished())
+	while (myDrone->IsCamImageFeedOn())
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	
 	return true;
@@ -654,7 +654,7 @@ static bool TestBench22(void) {
 	myDrone->StartDJICamImageFeed(1.0);
 	
 	//wait until video feed is done
-	while (! mySimDrone->IsSimVideoFinished())
+	while (myDrone->IsCamImageFeedOn())
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	
 	return true;

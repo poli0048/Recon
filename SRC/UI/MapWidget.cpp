@@ -14,6 +14,7 @@
 #include "../Maps/DataTileProvider.hpp"
 #include "../ProgOptions.hpp"
 #include "../Maps/MapUtils.hpp"
+#include "VehiclesWidget.hpp"
 
 #define PI 3.14159265358979
 
@@ -454,6 +455,10 @@ void MapWidget::Draw(void) {
 		}
 		m_SurveyRegionsTool.Draw_Overlay(mousePosScreenSpace, mousePosNM, draw_list, mouseInBounds);
 	}
+	
+	//Draw pass for vehicle widget
+	if (MaxTileZoomLevel >= 12)
+		VehiclesWidget::Instance().DrawMapOverlay(mousePosNM, draw_list, mouseInBounds);
 	
 	ImGui::EndChild();
 	mouseInBounds = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);

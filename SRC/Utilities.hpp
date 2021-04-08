@@ -5,9 +5,20 @@
 
 //System Includes
 #include <string>
+#include <chrono>
 
 //External Includes
 #include "../../handycpp/Handy.hpp"
+
+inline double SecondsSinceT0Epoch(std::chrono::time_point<std::chrono::steady_clock> const & Timepoint) {
+	auto duration = Timepoint.time_since_epoch();
+	return double(duration.count()) * double(std::chrono::steady_clock::period::num) / double(std::chrono::steady_clock::period::den);
+}
+
+inline double SecondsElapsed(std::chrono::time_point<std::chrono::steady_clock> const & Start, std::chrono::time_point<std::chrono::steady_clock> const & End) {
+	auto duration = End - Start;
+	return double(duration.count()) * double(std::chrono::steady_clock::period::num) / double(std::chrono::steady_clock::period::den);
+}
 
 //Make sure a filename is sane (no crazy characters or too short/long). This looks at the name only - it does not check the filesystem in any way
 inline bool isFilenameReasonable(std::string Filename) {

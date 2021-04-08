@@ -83,6 +83,15 @@ inline void SettingsWindow::Draw() {
 		if (ImGui::Button(" Default ##UI Theme"))
 			ProgOptions::Instance()->UITheme = Themes::Theme::Dark;
 		
+		ImGui::TextUnformatted("Drone Icon Size:");
+		ImGui::SameLine(col2Start);
+		ImGui::PushItemWidth(sliderWidth);
+		ImGui::SliderFloat("##Drone Icon Size", &(ProgOptions::Instance()->DroneIconScale), 0.25f, 2.0f, "%.2f", 1.0f);
+		ImGui::PopItemWidth();
+		ImGui::SameLine(col3Start);
+		if (ImGui::Button(" Default ##Drone Icon Size"))
+			ProgOptions::Instance()->DroneIconScale = 0.5f;
+		
 		ImGui::Dummy(ImVec2(1, ImGui::GetFontSize()));
 		ImGui::TextUnformatted("Map Behavior:");
 		ImGui::Dummy(ImVec2(1, 10));

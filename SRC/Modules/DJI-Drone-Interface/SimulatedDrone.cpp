@@ -10,6 +10,10 @@
 //Project Includes
 #include "Drone.hpp"
 
+#define PI 3.14159265358979
+
+//DroneInterface::Drone::TimePoint InitTimepoint = std::chrono::steady_clock::now(); //Used for testing message age warnings
+
 namespace DroneInterface {
 	SimulatedDrone::SimulatedDrone() : m_thread(&SimulatedDrone::DroneMain, this), m_abort(false) { }
 	
@@ -33,6 +37,7 @@ namespace DroneInterface {
 		Longitude = -1.663401472323783;
 		Altitude  = 466.0;
 		Timestamp = std::chrono::steady_clock::now();
+		//Timestamp = InitTimepoint;
 		return true;
 	}
 	
@@ -50,10 +55,11 @@ namespace DroneInterface {
 	//Yaw, Pitch, Roll (radians) using DJI definitions
 	bool SimulatedDrone::GetOrientation(double & Yaw, double & Pitch, double & Roll, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
-		Yaw   = 0.0; //Should be vehicle nose pointing north
+		Yaw   = 20.0*PI/180.0; //close to nose facing north-northeast
 		Pitch = 0.0; //Should be level-hover
 		Roll  = 0.0; //Should be level-hover
 		Timestamp = std::chrono::steady_clock::now();
+		//Timestamp = InitTimepoint;
 		return true;
 	}
 	
@@ -69,6 +75,7 @@ namespace DroneInterface {
 	bool SimulatedDrone::GetVehicleBatteryLevel(double & BattLevel, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
 		BattLevel = 0.76;
+		//BattLevel = 0.19;
 		Timestamp = std::chrono::steady_clock::now();
 		return true;
 	}
@@ -86,6 +93,9 @@ namespace DroneInterface {
 	bool SimulatedDrone::GetActiveWarnings(std::vector<std::string> & ActiveWarnings, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
 		ActiveWarnings.clear();
+		ActiveWarnings.push_back("Warning 1"s);
+		ActiveWarnings.push_back("Warning 2"s);
+		ActiveWarnings.push_back("Warning 3"s);
 		Timestamp = std::chrono::steady_clock::now();
 		return true;
 	}
@@ -103,6 +113,12 @@ namespace DroneInterface {
 	bool SimulatedDrone::IsDJICamConnected(void) {
 		std::scoped_lock lock(m_mutex);
 		return true;
+	}
+	
+	//True if receiving imagery from drone, false otherwise (valid on construction... initially returns false)
+	bool SimulatedDrone::IsCamImageFeedOn(void) {
+		std::scoped_lock lock(m_mutex);
+		return m_imageFeedActive;
 	}
 	
 	//Start sending frames of live video (as close as possible to the given framerate (frame / s))
@@ -212,7 +228,7 @@ namespace DroneInterface {
 	//Stop any running missions an leave virtualStick mode (if in it) and hover in place (P mode)
 	void SimulatedDrone::Hover(void) {
 		std::scoped_lock lock(m_mutex);
-		//We only mimic hovering flight right now, so we don't need to do anything here
+		std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute Hover() command.\r\n";
 	}
 	
 	//Initiate landing sequence immediately at current vehicle location
@@ -237,12 +253,6 @@ namespace DroneInterface {
 	void SimulatedDrone::SetSourceVideoFile(std::filesystem::path const & VideoPath) {
 		std::scoped_lock lock(m_mutex);
 		m_videoPath = VideoPath;
-	}
-	
-	//Returns true if end of video file reached and sim is done
-	bool SimulatedDrone::IsSimVideoFinished(void) {
-		std::scoped_lock lock(m_mutex);
-		return (m_videoFeedStarted && (! m_imageFeedActive));
 	}
 	
 	//Get a single frame - will fail if the video feed is running
@@ -365,16 +375,16 @@ namespace DroneInterface {
 		if ((m_Frame.rows != 2160) && (m_Frame.cols != 3840))
 			return false;
 		//Ben's method
-		/*cv::Mat BufA, BufB;
+		cv::Mat BufA, BufB;
 		pyrDown(m_Frame, BufA);
 		pyrDown(BufA,    BufB);
 		resize(BufB, m_Frame, cv::Size(1280, 720));
-		return true;*/
+		return true;
 		
 		//Bryan's method - this is a bit faster than above, and retains the full sharpness of the imagery. Using PyrDown twice
 		//overshoots the target resolution so requires an up-scaling afterwards. PyrDown also tends to filter more aggresively than
 		//is necessary. Combined, these result in softer, oversmoothed imagery. Just doing 3x3 block averages avoids this.
-		if (m_Frame.type() != CV_8UC3)
+		/*if (m_Frame.type() != CV_8UC3)
 			return false;
 		cv::Mat Buf(720, 1280, CV_8UC3);
 		for (int out_row = 0; out_row < Buf.rows; out_row++) {
@@ -408,7 +418,7 @@ namespace DroneInterface {
 			}
 		}
 		m_Frame = Buf;
-		return true;
+		return true;*/
 	} 
 	
 	

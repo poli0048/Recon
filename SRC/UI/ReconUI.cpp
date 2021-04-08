@@ -33,7 +33,7 @@ void ReconUI::Draw() {
 		ImGui::ShowDemoWindow(&show_demo_window);
 	else
 		themeSitter.reset(new Themes::ThemeSitter(ProgOptions::Instance()->UITheme));
-	ImExt::Font fnt(Fonts::Large); //Set Global font
+	ImExt::Font fnt(Fonts::Normal); //Set Global font
 	
 	//Call Update methods for widgets that require periodic updates even when not being drawn
 	MapWidget::Instance().Update();

@@ -50,6 +50,9 @@ namespace DroneInterface {
 	//Returns true if recognized DJI camera is present - Should be available on construction
 	bool RealDrone::IsDJICamConnected(void) { return false; }
 	
+	//True if receiving imagery from drone, false otherwise (valid on construction... initially returns false)
+	bool RealDrone::IsCamImageFeedOn(void) { return false; }
+	
 	//Start sending frames of live video (as close as possible to the given framerate (frame / s))
 	void RealDrone::StartDJICamImageFeed(double TargetFPS) { }
 	
