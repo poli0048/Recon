@@ -24,6 +24,23 @@
 #include "../ProgOptions.hpp"
 
 class VehiclesWidget {
+	struct vehicleState {
+		std::string                      m_serial;
+		float                            m_targetFPS = 1.0f;
+		bool                             m_showFeed = false;
+		int                              m_callbackHandle = -1; //-1 if not registered
+		bool                             m_TexValid = false;
+		ImTextureID                      m_Tex;
+		float                            m_TexWidth;
+		float                            m_TexHeight;
+		DroneInterface::Drone::TimePoint m_TexTimestamp;
+		std::mutex                       m_mutex;
+		
+		vehicleState() = default;
+		vehicleState(std::string const & Serial) : m_serial(Serial) { }
+		~vehicleState() = default;
+	};
+	
 	public:
 		static VehiclesWidget & Instance() { static VehiclesWidget Widget; return Widget; }
 		
@@ -48,8 +65,7 @@ class VehiclesWidget {
 		ImTextureID m_IconTexture_Drone;
 		ImTextureID m_IconTexture_DroneWithArrow;
 		std::vector<std::string> m_currentDroneSerials; //Updated in Draw()
-		
-		std::unordered_map<std::string, float> m_targetCamFPS; //Serial -> targetFPS
+		std::unordered_map<std::string, vehicleState> m_vehicleStates;
 		
 		float ContentHeight; //Height of widget content from last draw pass
 		float RecommendedHeight; //Recommended height for widget
@@ -72,7 +88,100 @@ class VehiclesWidget {
 				ImGui::PopFont();
 			}
 		}
+		
+		inline void DrawVideoWindows(void);
 };
+
+inline void VehiclesWidget::DrawVideoWindows(void) {
+	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
+		std::string serial = m_currentDroneSerials[n];
+		DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(serial);
+		if (drone == nullptr)
+			continue;
+		
+		//Get reference to vehicle state object
+		vehicleState & myState(m_vehicleStates.at(serial));
+		
+		ImExt::Window::Options WinOpts;
+		WinOpts.Flags = WindowFlags::NoTitleBar | WindowFlags::NoResize | WindowFlags::NoMove | WindowFlags::NoCollapse | WindowFlags::NoSavedSettings |
+		                WindowFlags::MenuBar | WindowFlags::NoDocking;
+		WinOpts.POpen = &(myState.m_showFeed);
+		WinOpts.Size(ImVec2(1280.0f, 720.0f + 3.0f*ImGui::GetFontSize()), Condition::Once);
+		if (ImExt::Window window("Live Video##"s + serial, WinOpts); window.ShouldDrawContents()) {
+			//Check to make sure we have a callback registered
+			if (myState.m_callbackHandle == -1) {
+				//Register a callback to update the imagery we are displaying
+				myState.m_callbackHandle = drone->RegisterCallback([&myState](cv::Mat const & Frame, DroneInterface::Drone::TimePoint const & Timestamp) {
+					//Delayed destruction of old texture (if there is one)
+					myState.m_mutex.lock();
+					if (myState.m_TexValid) {
+						ImGuiApp::Instance().DeleteImageAsyncWithDelay(myState.m_Tex, 2.0);
+						myState.m_TexValid = false;
+					}
+					myState.m_mutex.unlock();
+					
+					//TODO: Specify channel ordering for images coming from the drone interface module.
+					if (! Frame.isContinuous()) {
+						std::cerr << "Warning: Can't display non-continuus image matrix.\r\n";
+						return;
+					}
+					if (Frame.type() == CV_8UC4) {
+						cv::Mat Frame_RGBA(Frame.size(), CV_8UC4);
+						cv::cvtColor(Frame, Frame_RGBA, CV_BGRA2RGBA, 4);
+						ImTextureID Tex = ImGuiApp::Instance().CreateImageRGBA8888(Frame_RGBA.ptr(), Frame_RGBA.cols, Frame_RGBA.rows);
+						std::scoped_lock lock(myState.m_mutex);
+						myState.m_Tex = Tex;
+						myState.m_TexWidth = (float) Frame_RGBA.cols;
+						myState.m_TexHeight = (float) Frame_RGBA.rows;
+						myState.m_TexValid = true;
+						myState.m_TexTimestamp = Timestamp;
+					}
+					else if (Frame.type() == CV_8UC3) {
+						cv::Mat Frame_RGBA(Frame.size(), CV_8UC4);
+						cv::cvtColor(Frame, Frame_RGBA, CV_BGR2RGBA, 4);
+						ImTextureID Tex = ImGuiApp::Instance().CreateImageRGBA8888(Frame_RGBA.ptr(), Frame_RGBA.cols, Frame_RGBA.rows);
+						std::scoped_lock lock(myState.m_mutex);
+						myState.m_Tex = Tex;
+						myState.m_TexWidth = (float) Frame_RGBA.cols;
+						myState.m_TexHeight = (float) Frame_RGBA.rows;
+						myState.m_TexValid = true;
+						myState.m_TexTimestamp = Timestamp;
+					}
+					else {
+						std::cerr << "Warning: Can't display image... unsupported type.\r\n";
+						return;
+					}
+				});
+				std::cerr << "Drone Imagery Callback Registered.\r\n";
+			}
+			
+			ImGui::Text("Video feed for drone %s.", serial.c_str());
+			std::scoped_lock lock(myState.m_mutex);
+			if (myState.m_TexValid) {
+				ImGui::SameLine();
+				double age = SecondsElapsed(myState.m_TexTimestamp, std::chrono::steady_clock::now());
+				ImGui::Text(" Image Age: %.1f seconds.", age);
+				
+				ImVec2 regionAvail = ImGui::GetContentRegionAvail();
+				float scale1 = regionAvail.x / myState.m_TexWidth;
+				float scale2 = regionAvail.y / myState.m_TexHeight;
+				float scale = std::min(scale1, scale2);
+				ImVec2 TexSize(scale*myState.m_TexWidth, scale*myState.m_TexHeight);
+				
+				ImGui::Image(myState.m_Tex, TexSize, ImVec2(0, 0), ImVec2(1,1), ImVec4(1,1,1,1), ImVec4(0,0,0,0));
+			}
+		}
+		else {
+			//Make sure we don't have a callback registered
+			std::scoped_lock lock(myState.m_mutex);
+			if (myState.m_callbackHandle != -1) {
+				drone->UnRegisterCallback(myState.m_callbackHandle);
+				myState.m_callbackHandle = -1;
+				std::cerr << "Drone Imagery Callback Un-Registered.\r\n";
+			}
+		}
+	}
+}
 
 inline void VehiclesWidget::DrawMapOverlay(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds) {
 	float droneIconWidth_pixels = ProgOptions::Instance()->DroneIconScale*96.0f;
@@ -125,9 +234,11 @@ inline void VehiclesWidget::DrawMapOverlay(Eigen::Vector2d const & CursorPos_NM,
 }
 
 inline void VehiclesWidget::DrawContextMenu(bool Open, DroneInterface::Drone & drone) {
-	//static std::unordered_map<std::string, float> s_targetCamFPS;
 	float labelMargin = 1.5f*ImGui::GetFontSize();
 	std::string popupStrIdentifier = drone.GetDroneSerial() + "-ContextMenu"s;
+	
+	//Get reference to vehicle state object
+	vehicleState & myState(m_vehicleStates.at(drone.GetDroneSerial()));
 	
 	if (Open)
 		ImGui::OpenPopup(popupStrIdentifier.c_str());
@@ -157,20 +268,34 @@ inline void VehiclesWidget::DrawContextMenu(bool Open, DroneInterface::Drone & d
 		
 		ImGui::Separator();
 		if (drone.IsDJICamConnected()) {
-			if (drone.IsCamImageFeedOn()) {
-				//TODO: Add option to view camera feed
-				if (MyGui::MenuItem(u8"\uf03d", labelMargin, "Stop Camera Feed", NULL, false, true))
-					drone.StopDJICamImageFeed();
-			}
-			else {
-				if (MyGui::BeginMenu(u8"\uf03d", labelMargin, "Start Camera Feed")) {
-					if (m_targetCamFPS.count(drone.GetDroneSerial()) == 0)
-						m_targetCamFPS[drone.GetDroneSerial()] = 1.0f;
-					ImGui::DragFloat("Target FPS", &(m_targetCamFPS.at(drone.GetDroneSerial())), 0.02f, 0.1f, 15.0f, "%.1f");
-					if (ImGui::MenuItem("Start Camera Feed", NULL, false, true))
-						drone.StartDJICamImageFeed(m_targetCamFPS.at(drone.GetDroneSerial()));	
-					ImGui::EndMenu();
+			std::scoped_lock lock(myState.m_mutex);
+			if (MyGui::BeginMenu(u8"\uf03d", labelMargin, "Video Feed")) {
+				if (drone.IsCamImageFeedOn()) {
+					if (MyGui::MenuItem(u8"\uf03d", labelMargin, "Stop Feed", NULL, false, true))
+						drone.StopDJICamImageFeed();
 				}
+				else {
+					ImGui::DragFloat("Target FPS", &(myState.m_targetFPS), 0.02f, 0.1f, 15.0f, "%.1f");
+					if (ImGui::MenuItem("Start Feed", NULL, false, true)) {
+						//If the drone is actually a simulated drone we need to set the source video file
+						DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(& drone);
+						if (mySimDrone != nullptr) {
+							mySimDrone->SetRealTime(true);
+							mySimDrone->SetSourceVideoFile(Handy::Paths::ThisExecutableDirectory() / "SimSourceVideo.mov"s);
+						}
+						drone.StartDJICamImageFeed(myState.m_targetFPS);
+					}
+				}
+				if (! myState.m_showFeed) {
+					if (ImGui::MenuItem("Open Feed Window", NULL, false, true))
+						myState.m_showFeed = true;
+				}
+				else {
+					if (ImGui::MenuItem("Close Feed Window", NULL, false, true))
+						myState.m_showFeed = false;
+				}
+				
+				ImGui::EndMenu();
 			}
 			ImGui::Separator();
 		}
@@ -502,6 +627,12 @@ inline void VehiclesWidget::Draw() {
 	//Temporary - Add simulated drone to the drone serials vector (this one isn't advertised by the DroneManager module)
 	m_currentDroneSerials.push_back("Simulation"s);
 	
+	//For each connected drone, make sure we have a valid DroneState
+	for (std::string serial : m_currentDroneSerials) {
+		if (m_vehicleStates.count(serial) == 0U)
+			m_vehicleStates[serial].m_serial = serial;
+	}
+	
 	//Iterate through each connected drone
 	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
 		DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
@@ -517,6 +648,9 @@ inline void VehiclesWidget::Draw() {
 	RecommendedHeight = 0.85f*RecommendedHeight + 0.15f*ContentHeight;
 	if (std::abs(RecommendedHeight - ContentHeight) < 1.0f)
 		RecommendedHeight = ContentHeight;
+	
+	//Finally, draw any live video feed windows (if open)
+	DrawVideoWindows();
 }
 
 

@@ -280,6 +280,8 @@ namespace DroneInterface {
 	}
 	
 	//Function for internal thread managing drone object
+	//TODO: It really isn't ideal that we hold on to our mutex while we skip ahead to the next frame and decode it. This can hold up the draw loop since
+	//getting simple things like telemetry wait on this mutex. We really should only lock the mutex when we have the frame ready and need to copy it.
 	void SimulatedDrone::DroneMain(void) {
 		while (! m_abort) {
 			m_mutex.lock();

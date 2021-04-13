@@ -470,7 +470,7 @@ static bool TestBench11(void) {
 	ShadowDetection::ShadowDetectionEngine::Instance().SetFiducials(Fiducials);
 	
 	//Register callback with the shadow detection engine for monitoring its output (if desired)
-	bool showLiveOutput = false;
+	bool showLiveOutput = true;
 	if (showLiveOutput) {
 		ShadowDetection::ShadowDetectionEngine::Instance().RegisterCallback([](ShadowDetection::InstantaneousShadowMap const & ShadowMap) {
 			auto duration = ShadowMap.Timestamp.time_since_epoch();
