@@ -299,32 +299,33 @@ namespace DroneInterface {
 			//can have a guarantee that each frame received by the drone interface module will be provided downstream.
 			std::unordered_map<int, std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)>> m_ImageryCallbacks;
 			
-			std::thread       m_thread;
+			std::thread       m_MainThread;
 			std::atomic<bool> m_abort;
 			std::mutex        m_mutex; //Lock in each public method for thread safety
+			
+			//When the video feed is running, a thread is launched to do nothing but read and decode the necessary frames.
+			std::thread       m_VideoProcessingThread;
+			std::atomic<bool> m_VideoProcessingThreadAbort;
+			std::mutex        m_NextFrameMutex;
+			cv::Mat           m_NextFrame;                     //Protected by m_NextFrameMutex
+			bool              m_NextFrameReady = false;        //Protected by m_NextFrameMutex
+			bool              m_VideoFileReadFinished = false; //Protected by m_NextFrameMutex
 			
 			//Additional State Data
 			bool m_realtime = false;
 			std::filesystem::path m_videoPath;
 			double m_targetFPS = -1.0;
-			cv::VideoCapture m_videoCap;
-			int m_videoCap_NextFrameIndex = 0;
-			int m_videoCap_NumFrames = -1;
-			int m_videoCap_FPS = -1;
 			bool m_imageFeedActive = false;
-			cv::Mat m_Frame;            //Most recent frame
-			unsigned int m_FrameNumber = 0; //Frame number of most recent frame (increments on each *used* frame)
-			TimePoint m_FrameTimestamp; //Timestamp of most recent frame
+			cv::Mat m_Frame;                     //Most recent frame
+			unsigned int m_FrameNumber = 0U;     //Frame number of most recent frame (increments on each *used* frame)
+			TimePoint m_FrameTimestamp;          //Timestamp of most recent frame
 			TimePoint m_VideoFeedStartTimestamp; //Timestamp of start of video feed
-			bool m_videoFeedStarted = false;
 			
 			void DroneMain(void);
 			
 			//Utilities to get seconds into a video from a video file frame number, and to get the next usable video frame (skipping unused frames)
-			double FrameNumToTimeIntoVid(int FrameNum) { return double(FrameNum) / double(m_videoCap_FPS); }
-			bool GetNextVideoFrame(void); //Advance to and decode the next video from that needs to be used
-			bool ResizeTo720p(void);      //Make sure the frame is 720p... resize if needed.
-			bool Resize_4K_to_720p(void); //Drop a 4K m_frame down to 720p
+			static bool ResizeTo720p(cv::Mat & Frame);      //Make sure the frame is 720p... resize if needed.
+			static bool Resize_4K_to_720p(cv::Mat & Frame); //Drop a 4K m_frame down to 720p
 	};
 	
 }

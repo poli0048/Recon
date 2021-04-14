@@ -27,14 +27,16 @@ class VehiclesWidget {
 	struct vehicleState {
 		std::string                      m_serial;
 		float                            m_targetFPS = 1.0f;
+		float                            m_FeedZoom = 1.0f; //1 = No crop, 2 = Crop to centeral 50% width and height
 		bool                             m_showFeed = false;
 		int                              m_callbackHandle = -1; //-1 if not registered
+		
+		std::mutex                       m_Texmutex;
 		bool                             m_TexValid = false;
 		ImTextureID                      m_Tex;
 		float                            m_TexWidth;
 		float                            m_TexHeight;
 		DroneInterface::Drone::TimePoint m_TexTimestamp;
-		std::mutex                       m_mutex;
 		
 		vehicleState() = default;
 		vehicleState(std::string const & Serial) : m_serial(Serial) { }
@@ -104,21 +106,21 @@ inline void VehiclesWidget::DrawVideoWindows(void) {
 		
 		ImExt::Window::Options WinOpts;
 		WinOpts.Flags = WindowFlags::NoTitleBar | WindowFlags::NoResize | WindowFlags::NoMove | WindowFlags::NoCollapse | WindowFlags::NoSavedSettings |
-		                WindowFlags::MenuBar | WindowFlags::NoDocking;
+		                WindowFlags::NoDocking;
 		WinOpts.POpen = &(myState.m_showFeed);
-		WinOpts.Size(ImVec2(1280.0f, 720.0f + 3.0f*ImGui::GetFontSize()), Condition::Once);
+		WinOpts.Size(ImVec2(640.0f, 360.0f + 1.5f*ImGui::GetFontSize()), Condition::Once);
 		if (ImExt::Window window("Live Video##"s + serial, WinOpts); window.ShouldDrawContents()) {
 			//Check to make sure we have a callback registered
 			if (myState.m_callbackHandle == -1) {
 				//Register a callback to update the imagery we are displaying
 				myState.m_callbackHandle = drone->RegisterCallback([&myState](cv::Mat const & Frame, DroneInterface::Drone::TimePoint const & Timestamp) {
 					//Delayed destruction of old texture (if there is one)
-					myState.m_mutex.lock();
+					myState.m_Texmutex.lock();
 					if (myState.m_TexValid) {
 						ImGuiApp::Instance().DeleteImageAsyncWithDelay(myState.m_Tex, 2.0);
 						myState.m_TexValid = false;
 					}
-					myState.m_mutex.unlock();
+					myState.m_Texmutex.unlock();
 					
 					//TODO: Specify channel ordering for images coming from the drone interface module.
 					if (! Frame.isContinuous()) {
@@ -129,7 +131,7 @@ inline void VehiclesWidget::DrawVideoWindows(void) {
 						cv::Mat Frame_RGBA(Frame.size(), CV_8UC4);
 						cv::cvtColor(Frame, Frame_RGBA, CV_BGRA2RGBA, 4);
 						ImTextureID Tex = ImGuiApp::Instance().CreateImageRGBA8888(Frame_RGBA.ptr(), Frame_RGBA.cols, Frame_RGBA.rows);
-						std::scoped_lock lock(myState.m_mutex);
+						std::scoped_lock lock(myState.m_Texmutex);
 						myState.m_Tex = Tex;
 						myState.m_TexWidth = (float) Frame_RGBA.cols;
 						myState.m_TexHeight = (float) Frame_RGBA.rows;
@@ -140,7 +142,7 @@ inline void VehiclesWidget::DrawVideoWindows(void) {
 						cv::Mat Frame_RGBA(Frame.size(), CV_8UC4);
 						cv::cvtColor(Frame, Frame_RGBA, CV_BGR2RGBA, 4);
 						ImTextureID Tex = ImGuiApp::Instance().CreateImageRGBA8888(Frame_RGBA.ptr(), Frame_RGBA.cols, Frame_RGBA.rows);
-						std::scoped_lock lock(myState.m_mutex);
+						std::scoped_lock lock(myState.m_Texmutex);
 						myState.m_Tex = Tex;
 						myState.m_TexWidth = (float) Frame_RGBA.cols;
 						myState.m_TexHeight = (float) Frame_RGBA.rows;
@@ -156,24 +158,29 @@ inline void VehiclesWidget::DrawVideoWindows(void) {
 			}
 			
 			ImGui::Text("Video feed for drone %s.", serial.c_str());
-			std::scoped_lock lock(myState.m_mutex);
+			std::scoped_lock lock(myState.m_Texmutex);
 			if (myState.m_TexValid) {
 				ImGui::SameLine();
 				double age = SecondsElapsed(myState.m_TexTimestamp, std::chrono::steady_clock::now());
 				ImGui::Text(" Image Age: %.1f seconds.", age);
 				
+				float sliderWidth = ImGui::GetFontSize();
+				ImVec2 UV0(0.5f - 0.5f/myState.m_FeedZoom, 0.5f - 0.5f/myState.m_FeedZoom);
+				ImVec2 UV1(0.5f + 0.5f/myState.m_FeedZoom, 0.5f + 0.5f/myState.m_FeedZoom);
+				
 				ImVec2 regionAvail = ImGui::GetContentRegionAvail();
-				float scale1 = regionAvail.x / myState.m_TexWidth;
+				float scale1 = (regionAvail.x - sliderWidth - 1.5f*ImGui::GetStyle().ItemSpacing.x) / myState.m_TexWidth;
 				float scale2 = regionAvail.y / myState.m_TexHeight;
 				float scale = std::min(scale1, scale2);
 				ImVec2 TexSize(scale*myState.m_TexWidth, scale*myState.m_TexHeight);
+				ImGui::Image(myState.m_Tex, TexSize, UV0, UV1, ImVec4(1,1,1,1), ImVec4(0,0,0,0));
 				
-				ImGui::Image(myState.m_Tex, TexSize, ImVec2(0, 0), ImVec2(1,1), ImVec4(1,1,1,1), ImVec4(0,0,0,0));
+				ImGui::SameLine();
+				ImGui::VSliderFloat("##Zoom", ImVec2(sliderWidth, TexSize.y), &(myState.m_FeedZoom), 1.0f, 2.0f, "", ImGuiSliderFlags_NoRoundToFormat);
 			}
 		}
 		else {
 			//Make sure we don't have a callback registered
-			std::scoped_lock lock(myState.m_mutex);
 			if (myState.m_callbackHandle != -1) {
 				drone->UnRegisterCallback(myState.m_callbackHandle);
 				myState.m_callbackHandle = -1;
@@ -268,7 +275,6 @@ inline void VehiclesWidget::DrawContextMenu(bool Open, DroneInterface::Drone & d
 		
 		ImGui::Separator();
 		if (drone.IsDJICamConnected()) {
-			std::scoped_lock lock(myState.m_mutex);
 			if (MyGui::BeginMenu(u8"\uf03d", labelMargin, "Video Feed")) {
 				if (drone.IsCamImageFeedOn()) {
 					if (MyGui::MenuItem(u8"\uf03d", labelMargin, "Stop Feed", NULL, false, true))
