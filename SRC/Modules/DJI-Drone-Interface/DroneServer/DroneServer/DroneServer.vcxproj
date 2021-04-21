@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{2c21d4a1-7fb7-48a6-969b-8ded49bf26b4}</ProjectGuid>
+    <RootNamespace>DroneServer</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>C:\Users\choib_md9jl0s\Projects\eigen\;C:\opencv_debug\include;C:\Users\choib_md9jl0s\Projects\tacopie\includes;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\choib_md9jl0s\Projects\tacopie\lib\Debug;C:\opencv_debug\x64\vc16\lib;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+    <IncludePath>C:\Users\choib_md9jl0s\Projects\eigen\;C:\opencv_release\include;C:\Users\choib_md9jl0s\Projects\tacopie\includes;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\opencv_release\x64\vc16\lib;C:\Users\choib_md9jl0s\Projects\tacopie\lib\Release;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>C:\Users\choib_md9jl0s\Projects\eigen\;C:\opencv_debug\include;C:\Users\choib_md9jl0s\Projects\tacopie\includes;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\choib_md9jl0s\Projects\tacopie\lib\Debug;C:\opencv_debug\x64\vc16\lib;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <IncludePath>C:\Users\choib_md9jl0s\Projects\eigen\;C:\opencv_release\include;C:\Users\choib_md9jl0s\Projects\tacopie\includes;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\opencv_release\x64\vc16\lib;C:\Users\choib_md9jl0s\Projects\tacopie\lib\Release;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>tacopie.lib;opencv_aruco440d.lib;opencv_bgsegm440d.lib;opencv_bioinspired440d.lib;opencv_calib3d440d.lib;opencv_ccalib440d.lib;opencv_core440d.lib;opencv_datasets440d.lib;opencv_dnn440d.lib;opencv_dnn_objdetect440d.lib;opencv_dnn_superres440d.lib;opencv_dpm440d.lib;opencv_face440d.lib;opencv_features2d440d.lib;opencv_flann440d.lib;opencv_fuzzy440d.lib;opencv_gapi440d.lib;opencv_hfs440d.lib;opencv_highgui440d.lib;opencv_imgcodecs440d.lib;opencv_imgproc440d.lib;opencv_img_hash440d.lib;opencv_intensity_transform440d.lib;opencv_line_descriptor440d.lib;opencv_mcc440d.lib;opencv_ml440d.lib;opencv_objdetect440d.lib;opencv_optflow440d.lib;opencv_phase_unwrapping440d.lib;opencv_photo440d.lib;opencv_plot440d.lib;opencv_quality440d.lib;opencv_rapid440d.lib;opencv_reg440d.lib;opencv_rgbd440d.lib;opencv_saliency440d.lib;opencv_shape440d.lib;opencv_stereo440d.lib;opencv_stitching440d.lib;opencv_structured_light440d.lib;opencv_superres440d.lib;opencv_surface_matching440d.lib;opencv_text440d.lib;opencv_tracking440d.lib;opencv_video440d.lib;opencv_videoio440d.lib;opencv_videostab440d.lib;opencv_xfeatures2d440d.lib;opencv_ximgproc440d.lib;opencv_xobjdetect440d.lib;opencv_xphoto440d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>tacopie.lib;opencv_aruco440.lib;opencv_bgsegm440.lib;opencv_bioinspired440.lib;opencv_calib3d440.lib;opencv_ccalib440.lib;opencv_core440.lib;opencv_datasets440.lib;opencv_dnn440.lib;opencv_dnn_objdetect440.lib;opencv_dnn_superres440.lib;opencv_dpm440.lib;opencv_face440.lib;opencv_features2d440.lib;opencv_flann440.lib;opencv_fuzzy440.lib;opencv_gapi440.lib;opencv_hfs440.lib;opencv_highgui440.lib;opencv_imgcodecs440.lib;opencv_imgproc440.lib;opencv_img_hash440.lib;opencv_intensity_transform440.lib;opencv_line_descriptor440.lib;opencv_mcc440.lib;opencv_ml440.lib;opencv_objdetect440.lib;opencv_optflow440.lib;opencv_phase_unwrapping440.lib;opencv_photo440.lib;opencv_plot440.lib;opencv_quality440.lib;opencv_rapid440.lib;opencv_reg440.lib;opencv_rgbd440.lib;opencv_saliency440.lib;opencv_shape440.lib;opencv_stereo440.lib;opencv_stitching440.lib;opencv_structured_light440.lib;opencv_superres440.lib;opencv_surface_matching440.lib;opencv_text440.lib;opencv_tracking440.lib;opencv_video440.lib;opencv_videoio440.lib;opencv_videostab440.lib;opencv_xfeatures2d440.lib;opencv_ximgproc440.lib;opencv_xobjdetect440.lib;opencv_xphoto440.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>tacopie.lib;opencv_aruco440d.lib;opencv_bgsegm440d.lib;opencv_bioinspired440d.lib;opencv_calib3d440d.lib;opencv_ccalib440d.lib;opencv_core440d.lib;opencv_datasets440d.lib;opencv_dnn440d.lib;opencv_dnn_objdetect440d.lib;opencv_dnn_superres440d.lib;opencv_dpm440d.lib;opencv_face440d.lib;opencv_features2d440d.lib;opencv_flann440d.lib;opencv_fuzzy440d.lib;opencv_gapi440d.lib;opencv_hfs440d.lib;opencv_highgui440d.lib;opencv_imgcodecs440d.lib;opencv_imgproc440d.lib;opencv_img_hash440d.lib;opencv_intensity_transform440d.lib;opencv_line_descriptor440d.lib;opencv_mcc440d.lib;opencv_ml440d.lib;opencv_objdetect440d.lib;opencv_optflow440d.lib;opencv_phase_unwrapping440d.lib;opencv_photo440d.lib;opencv_plot440d.lib;opencv_quality440d.lib;opencv_rapid440d.lib;opencv_reg440d.lib;opencv_rgbd440d.lib;opencv_saliency440d.lib;opencv_shape440d.lib;opencv_stereo440d.lib;opencv_stitching440d.lib;opencv_structured_light440d.lib;opencv_superres440d.lib;opencv_surface_matching440d.lib;opencv_text440d.lib;opencv_tracking440d.lib;opencv_video440d.lib;opencv_videoio440d.lib;opencv_videostab440d.lib;opencv_xfeatures2d440d.lib;opencv_ximgproc440d.lib;opencv_xobjdetect440d.lib;opencv_xphoto440d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>tacopie.lib;opencv_aruco440.lib;opencv_bgsegm440.lib;opencv_bioinspired440.lib;opencv_calib3d440.lib;opencv_ccalib440.lib;opencv_core440.lib;opencv_datasets440.lib;opencv_dnn440.lib;opencv_dnn_objdetect440.lib;opencv_dnn_superres440.lib;opencv_dpm440.lib;opencv_face440.lib;opencv_features2d440.lib;opencv_flann440.lib;opencv_fuzzy440.lib;opencv_gapi440.lib;opencv_hfs440.lib;opencv_highgui440.lib;opencv_imgcodecs440.lib;opencv_imgproc440.lib;opencv_img_hash440.lib;opencv_intensity_transform440.lib;opencv_line_descriptor440.lib;opencv_mcc440.lib;opencv_ml440.lib;opencv_objdetect440.lib;opencv_optflow440.lib;opencv_phase_unwrapping440.lib;opencv_photo440.lib;opencv_plot440.lib;opencv_quality440.lib;opencv_rapid440.lib;opencv_reg440.lib;opencv_rgbd440.lib;opencv_saliency440.lib;opencv_shape440.lib;opencv_stereo440.lib;opencv_stitching440.lib;opencv_structured_light440.lib;opencv_superres440.lib;opencv_surface_matching440.lib;opencv_text440.lib;opencv_tracking440.lib;opencv_video440.lib;opencv_videoio440.lib;opencv_videostab440.lib;opencv_xfeatures2d440.lib;opencv_ximgproc440.lib;opencv_xobjdetect440.lib;opencv_xphoto440.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="Drone.hpp" />
+    <ClInclude Include="DroneComms.hpp" />
+    <ClInclude Include="DroneDataStructures.h" />
+    <ClInclude Include="DroneManager.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DroneComms.cpp" />
+    <ClCompile Include="Main.cpp" />
+    <ClCompile Include="RealDrone.cpp" />
+    <ClCompile Include="SimulatedDrone.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

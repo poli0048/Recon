@@ -1,0 +1,20 @@
+PODS:
+  - DJI-SDK-iOS (4.14)
+  - DJIWidget (1.6.4)
+
+DEPENDENCIES:
+  - DJI-SDK-iOS (~> 4.14)
+  - DJIWidget (~> 1.6)
+
+SPEC REPOS:
+  trunk:
+    - DJI-SDK-iOS
+    - DJIWidget
+
+SPEC CHECKSUMS:
+  DJI-SDK-iOS: db08fad65cfb9fecddb34b38851af105bd4133db
+  DJIWidget: ce26deb9fb78494d2189065f431b13a663181b5f
+
+PODFILE CHECKSUM: 95e972fd37405e6bb6290c4b3af878737157ef24
+
+COCOAPODS: 1.10.1
