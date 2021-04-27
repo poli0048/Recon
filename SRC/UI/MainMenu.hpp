@@ -16,6 +16,7 @@
 #include "ModalDialogs.hpp"
 #include "../Journal.h"
 #include "MyGui.hpp"
+#include "SimFiducialsWidget.hpp"
 
 class MainMenu {
 	public:
@@ -48,6 +49,9 @@ inline void MainMenu::Draw() {
 			std::string consoleText = ConsoleWidget::Instance().IsClosedOrClosing() ? "Open Console" : "Close Console";
 			if (ImGui::MenuItem(consoleText.c_str()))
 				ConsoleWidget::Instance().AppearHideToggle();
+			
+			if (ImGui::MenuItem("Show Simulation GCP Market Tool"))
+				SimFiducialsWidget::Instance().m_visible = true;
 			
 			if (ImGui::MenuItem("Show/Hide Demo Window"))
 				ReconUI::Instance().show_demo_window = ! ReconUI::Instance().show_demo_window;

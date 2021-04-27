@@ -107,3 +107,73 @@ inline bool StringNumberAwareCompare_LessThan(std::string const & a, std::string
 	else
 		return false;
 }
+
+//remove leading and trailing characters in s matching characters in the given set
+inline void StringStrip (std::string & s, std::string CharacterSet) {
+	size_t startpos = s.find_first_not_of(CharacterSet);
+	if (startpos == std::string::npos) s = std::string();
+	else s = s.substr(startpos);
+	
+	size_t endpos = s.find_last_not_of(CharacterSet);
+	if (endpos == std::string::npos) s = std::string();
+	else s = s.substr(0, endpos+1);
+}
+
+//remove leading and trailing whitespace from string
+inline void StringStrip(std::string & s)  { StringStrip (s, std::string(" \t")); }
+
+//Break up a string into pieces by searching for delimiters. All delimiters will be removed from the string. Multiple delimiters in a row are treated as one.
+inline std::vector<std::string> StringSplit(std::string const & s, std::string DelimiCharacterSet) {
+	std::vector<std::string> parts;
+	
+	size_t pos = s.find_first_not_of(DelimiCharacterSet);
+	while (pos != std::string::npos) {
+		size_t nextpos = s.find_first_of(DelimiCharacterSet, pos);
+		if (nextpos == std::string::npos)
+			parts.push_back(s.substr(pos));
+		else
+			parts.push_back(s.substr(pos, nextpos - pos));
+		
+		StringStrip(parts.back(), DelimiCharacterSet);
+		pos = s.find_first_not_of(DelimiCharacterSet, nextpos);
+	}
+	
+	return parts;
+}
+
+//Try to convert a string to a double. Return true upon success and false on failure. Leaves value unchanged on failure.
+inline bool str2double(std::string str, double & Value) {
+	try {
+		double convertedValue = stod(str);
+		Value = convertedValue;
+		return true;
+	}
+	catch (...) {
+		return false;
+	}
+}
+
+//Try to convert a string to an int. Return true upon success and false on failure. Leaves value unchanged on failure.
+inline bool str2int(std::string str, int & Value) {
+	try {
+		int convertedValue = stoi(str);
+		Value = convertedValue;
+		return true;
+	}
+	catch (...) {
+		return false;
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+

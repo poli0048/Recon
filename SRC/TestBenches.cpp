@@ -24,26 +24,26 @@
 #define PI 3.14159265358979
 
 // Local function declarations (static linkage)
-static bool TestBench0(void);   static bool TestBench1(void);
-static bool TestBench2(void);   static bool TestBench3(void);
-static bool TestBench4(void);   static bool TestBench5(void);
-static bool TestBench6(void);   static bool TestBench7(void);
-static bool TestBench8(void);   static bool TestBench9(void);
-static bool TestBench10(void);  static bool TestBench11(void);
-static bool TestBench12(void);  static bool TestBench13(void);
-static bool TestBench14(void);  static bool TestBench15(void);
-static bool TestBench16(void);  static bool TestBench17(void);
-static bool TestBench18(void);  static bool TestBench19(void);
-static bool TestBench20(void);  static bool TestBench21(void);
-static bool TestBench22(void);  static bool TestBench23(void);
-static bool TestBench24(void);  static bool TestBench25(void);
+static bool TestBench0(std::string const & Arg);   static bool TestBench1(std::string const & Arg);
+static bool TestBench2(std::string const & Arg);   static bool TestBench3(std::string const & Arg);
+static bool TestBench4(std::string const & Arg);   static bool TestBench5(std::string const & Arg);
+static bool TestBench6(std::string const & Arg);   static bool TestBench7(std::string const & Arg);
+static bool TestBench8(std::string const & Arg);   static bool TestBench9(std::string const & Arg);
+static bool TestBench10(std::string const & Arg);  static bool TestBench11(std::string const & Arg);
+static bool TestBench12(std::string const & Arg);  static bool TestBench13(std::string const & Arg);
+static bool TestBench14(std::string const & Arg);  static bool TestBench15(std::string const & Arg);
+static bool TestBench16(std::string const & Arg);  static bool TestBench17(std::string const & Arg);
+static bool TestBench18(std::string const & Arg);  static bool TestBench19(std::string const & Arg);
+static bool TestBench20(std::string const & Arg);  static bool TestBench21(std::string const & Arg);
+static bool TestBench22(std::string const & Arg);  static bool TestBench23(std::string const & Arg);
+static bool TestBench24(std::string const & Arg);  static bool TestBench25(std::string const & Arg);
 
 // ************************************************************************************************************************************************
 // *********************************************************   Public Function Definitions   ******************************************************
 // ************************************************************************************************************************************************
 
 namespace TestBenches {
-	void RunTestBench(int TestNum) {
+	void RunTestBench(int TestNum, std::string const & TestBenchArg) {
 		if ((TestNum < 0) || (TestNum >= (int) AvailableTestBenches.size())) {
 			std::cerr << "Invalid testbench index. Aborting.\r\n";
 			return;
@@ -52,32 +52,32 @@ namespace TestBenches {
 		std::cerr << "TestBench description: " << AvailableTestBenches[TestNum] << "\r\n";
 		bool result = false;
 		switch (TestNum) {
-			case 0:  result = TestBench0();  break;
-			case 1:  result = TestBench1();  break;
-			case 2:  result = TestBench2();  break;
-			case 3:  result = TestBench3();  break;
-			case 4:  result = TestBench4();  break;
-			case 5:  result = TestBench5();  break;
-			case 6:  result = TestBench6();  break;
-			case 7:  result = TestBench7();  break;
-			case 8:  result = TestBench8();  break;
-			case 9:  result = TestBench9();  break;
-			case 10: result = TestBench10(); break;
-			case 11: result = TestBench11(); break;
-			case 12: result = TestBench12(); break;
-			case 13: result = TestBench13(); break;
-			case 14: result = TestBench14(); break;
-			case 15: result = TestBench15(); break;
-			case 16: result = TestBench16(); break;
-			case 17: result = TestBench17(); break;
-			case 18: result = TestBench18(); break;
-			case 19: result = TestBench19(); break;
-			case 20: result = TestBench20(); break;
-			case 21: result = TestBench21(); break;
-			case 22: result = TestBench22(); break;
-			case 23: result = TestBench23(); break;
-			case 24: result = TestBench24(); break;
-			case 25: result = TestBench25(); break;
+			case 0:  result = TestBench0(TestBenchArg);  break;
+			case 1:  result = TestBench1(TestBenchArg);  break;
+			case 2:  result = TestBench2(TestBenchArg);  break;
+			case 3:  result = TestBench3(TestBenchArg);  break;
+			case 4:  result = TestBench4(TestBenchArg);  break;
+			case 5:  result = TestBench5(TestBenchArg);  break;
+			case 6:  result = TestBench6(TestBenchArg);  break;
+			case 7:  result = TestBench7(TestBenchArg);  break;
+			case 8:  result = TestBench8(TestBenchArg);  break;
+			case 9:  result = TestBench9(TestBenchArg);  break;
+			case 10: result = TestBench10(TestBenchArg); break;
+			case 11: result = TestBench11(TestBenchArg); break;
+			case 12: result = TestBench12(TestBenchArg); break;
+			case 13: result = TestBench13(TestBenchArg); break;
+			case 14: result = TestBench14(TestBenchArg); break;
+			case 15: result = TestBench15(TestBenchArg); break;
+			case 16: result = TestBench16(TestBenchArg); break;
+			case 17: result = TestBench17(TestBenchArg); break;
+			case 18: result = TestBench18(TestBenchArg); break;
+			case 19: result = TestBench19(TestBenchArg); break;
+			case 20: result = TestBench20(TestBenchArg); break;
+			case 21: result = TestBench21(TestBenchArg); break;
+			case 22: result = TestBench22(TestBenchArg); break;
+			case 23: result = TestBench23(TestBenchArg); break;
+			case 24: result = TestBench24(TestBenchArg); break;
+			case 25: result = TestBench25(TestBenchArg); break;
 			default: break;
 		}
 		if (result)
@@ -91,7 +91,7 @@ namespace TestBenches {
 // ********************************************************   Internal Function Definitions   *****************************************************
 // ************************************************************************************************************************************************
 
-static bool TestBench0(void) {
+static bool TestBench0(std::string const & Arg) {
 	std::Evector<LineSegment> InputSegments;
 	InputSegments.emplace_back(Eigen::Vector2d(0.0, 0.0), Eigen::Vector2d(1.0, 0.0));
 	InputSegments.emplace_back(Eigen::Vector2d(0.0, 0.0), Eigen::Vector2d(0.0, 1.0));
@@ -135,7 +135,7 @@ static bool TestBench0(void) {
 	return true;
 }
 
-static bool TestBench1(void) {
+static bool TestBench1(std::string const & Arg) {
 	SimplePolygon poly;
 	std::Evector<Eigen::Vector2d> vertices;
 	
@@ -203,7 +203,7 @@ static bool TestBench1(void) {
 	return true;
 }
 
-static bool TestBench2(void) {
+static bool TestBench2(std::string const & Arg) {
 	SimplePolygon polyA, polyB;
 	std::Evector<Eigen::Vector2d> vertices;
 	
@@ -267,7 +267,7 @@ static bool TestBench2(void) {
 	return true;
 }
 
-static bool TestBench3(void) {
+static bool TestBench3(std::string const & Arg) {
 	Polygon poly;
 	std::Evector<Eigen::Vector2d> vertices;
 	vertices.emplace_back(0.0, 0.0);
@@ -302,7 +302,7 @@ static bool TestBench3(void) {
 	
 }
 
-static bool TestBench4(void) {
+static bool TestBench4(std::string const & Arg) {
 	std::Evector<Eigen::Vector2d> vertices;
 	
 	{
@@ -349,7 +349,7 @@ static bool TestBench4(void) {
 	
 }
 
-static bool TestBench5(void) {
+static bool TestBench5(std::string const & Arg) {
 	std::Evector<Eigen::Vector2d> vertices;
 	
 	{
@@ -388,7 +388,7 @@ static bool TestBench5(void) {
 	return true;
 }
 
-static bool TestBench6(void) {
+static bool TestBench6(std::string const & Arg) {
 	//First test bench for guidance module - setup test case and call EstimateMissionTime() for mission time flying between two points
 	DroneInterface::Waypoint A;
 	DroneInterface::Waypoint B;
@@ -410,13 +410,103 @@ static bool TestBench6(void) {
 	return false; //Ideally check result somehow and return true on success and false on failure (otherwise manually verify result somehow)
 }
 
-static bool TestBench7(void)  { return false; }
-static bool TestBench8(void)  { return false; }
-static bool TestBench9(void)  { return false; }
-static bool TestBench10(void) { return false; }
+static bool TestBench7(std::string const & Arg)  { return false; }
+static bool TestBench8(std::string const & Arg)  { return false; }
+static bool TestBench9(std::string const & Arg)  { return false; }
+static bool TestBench10(std::string const & Arg) { return false; }
+
+static std::filesystem::path SimDatasetStringArgToDatasetPath(std::string const & Arg) {
+	int datasetNum = 0;
+	if ((Arg.empty()) || (! str2int(Arg, datasetNum)) || (datasetNum < 0))
+		std::cerr << "No Argument or invalid argument (" << Arg << ") provided to testbench... using first sim dataset (lexicographically).\r\n";
+	std::vector<std::filesystem::path> subDirs = Handy::SubDirectories(Handy::Paths::ThisExecutableDirectory().parent_path() / "Simulation-Data-Sets"s);
+	std::sort(subDirs.begin(), subDirs.end(), [](std::string const & A, std::string const & B) -> bool { return StringNumberAwareCompare_LessThan(A, B); });
+	if (datasetNum >= int(subDirs.size())) {
+		std::cerr << "Aborting test bench - dataset not found.\r\n";
+		return std::filesystem::path();
+	}
+	return subDirs[datasetNum];
+}
+
+static cv::Mat GetRefFrame(std::filesystem::path const & DatasetPath) {
+	std::filesystem::path refFramePath = DatasetPath / "RefFrame.jpeg"s;
+	if (! std::filesystem::exists(refFramePath))
+		return cv::Mat();
+	
+	cv::Mat frame = cv::imread(refFramePath.string(), cv::IMREAD_COLOR);
+	if (DroneInterface::SimulatedDrone::Resize_4K_to_720p(frame))
+		return frame;
+	else
+		return cv::Mat();
+}
+
+//Return the path of the first .MOV file in the given folder (lexicographically)
+static std::filesystem::path GetSimVideoFilePath(std::filesystem::path const & DatasetPath) {
+	std::vector<std::filesystem::path> files = GetNormalFilesInDirectory(DatasetPath);
+	std::sort(files.begin(), files.end(), [](std::string const & A, std::string const & B) -> bool { return StringNumberAwareCompare_LessThan(A, B); });
+	for (auto const & file : files) {
+		std::string ext = file.extension().string();
+		if ((ext == ".mov"s) || (ext == ".MOV") || (ext == ".Mov"))
+			return file;
+	}
+	return std::filesystem::path();
+}
+
+//Load GCPs from the file GCP.txt in the given folder - we also adjust them from file native res (4K) to 720p
+//Returned fiducials are in form needed by Shadow Detection Engine.
+static std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> LoadFiducialsFromFile(std::filesystem::path const & DatasetPath) {
+	std::filesystem::path GCPsFilePath = DatasetPath / "GCPs.txt"s;
+	std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> GCPs;
+	if (! std::filesystem::exists(GCPsFilePath))
+		return GCPs;
+	
+	std::ifstream file;
+	file.open(GCPsFilePath.string().c_str());
+	if (! file.good())
+		return GCPs;
+	
+	std::string line;
+	char character;
+	size_t index;
+	while (!file.eof()) {
+		std::getline(file, line);
+		index = line.find_first_not_of(" \t"s);
+		if (index != std::string::npos) {
+			//Line is non-empty. Check if it is a comment line
+			character = line.at(index);
+			if (character != '#') {
+				//Line is non-empty and not a comment line
+				line = line.substr(index);
+				std::vector<std::string> parts = StringSplit(line, ","s);
+				if (parts.size() != 6U)
+					std::cerr << "Warning in LoadFiducials(): Dropping invalid line.\r\n";
+				else {
+					StringStrip(parts[5], " \t\r\n"); //Make sure newline or space chars don't mess us up at end of line
+					double col, row, latDeg, lonDeg, altM;
+					if (str2double(parts[1], col) && str2double(parts[2], row) && 
+					    str2double(parts[3], latDeg) && str2double(parts[4], lonDeg) && str2double(parts[5], altM)) {
+						Eigen::Vector2d PixCoords(col/3.0, row/3.0); //Convert 4K to 720p
+						Eigen::Vector3d LLA(latDeg*PI/180.0, lonDeg*PI/180.0, altM); //Convert degrees to radians
+						GCPs.push_back(std::make_tuple(PixCoords, LLA));
+					}
+					else
+						std::cerr << "Warning: Dropping invalid GCP from file. Line: " << line << "\r\n";
+				}
+			}
+		}
+	}
+	return GCPs;
+}
 
 //Shadow Detection: Non-realtime simulation
-static bool TestBench11(void) {
+static bool TestBench11(std::string const & Arg) {
+	//Parse argument and load dataset
+	std::filesystem::path datasetPath = SimDatasetStringArgToDatasetPath(Arg);
+	std::cerr << "Simulation dataset path: " << datasetPath.string() << "\r\n";
+	cv::Mat refFrame = GetRefFrame(datasetPath);
+	std::filesystem::path sourceVideoPath = GetSimVideoFilePath(datasetPath);
+	std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> GCPs = LoadFiducialsFromFile(datasetPath);
+	
 	//Set up drone sim
 	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation"s);
 	if (myDrone == nullptr) {
@@ -429,45 +519,11 @@ static bool TestBench11(void) {
 		return false;
 	}
 	mySimDrone->SetRealTime(false);
-	mySimDrone->SetSourceVideoFile(Handy::Paths::ThisExecutableDirectory() / "SimSourceVideo.mov"s);
-	
-	//Get reference frame - this is provided by the drone sim, but must come after setting the video file path
-	cv::Mat refFrame;
-	if (! mySimDrone->GetReferenceFrame(1.0, refFrame)) {
-		std::cerr << "Error: Failed to get reference frame from SimulatedDrone.\r\n";
-		return false;
-	}
-	
-	//Get fiducials from file - we use Ben's file formats
-	cv::FileStorage GCP_LLA_FileStoreObj((Handy::Paths::ThisExecutableDirectory() / "Sim_GCPs_LLA.xml"s).string(), cv::FileStorage::READ);
-	cv::FileStorage GCP_PixCoords_FileStoreObj((Handy::Paths::ThisExecutableDirectory() / "Sim_GCPs_PixCoords.xml"s).string(), cv::FileStorage::READ);
-	if ((! GCP_LLA_FileStoreObj.isOpened()) || (! GCP_PixCoords_FileStoreObj.isOpened())) {
-		std::cerr << "Error: Unable to read Ground Control Points (GCPs) from disk.\r\n";
-		std::cerr << "Latitude, Longitude, and Altitude are read from file: Sim_GCPs_LLA.xml\r\n";
-		std::cerr << "Pixel coordinates are read from file ---------------: Sim_GCPs_PixCoords.xml\r\n";
-		return false;
-	}
-	cv::Mat fiducials_LLA; //Stored row-by-row (Lat (deg), Lon (deg), Alt (m))
-	std::vector<cv::Point2d> fiducials_PX; //OpenCV defs for X, Y... units are pixels
-	GCP_LLA_FileStoreObj["gcp"] >> fiducials_LLA;
-	GCP_PixCoords_FileStoreObj["pixel_coords"] >> fiducials_PX;
-	
-	//Convert fiducials to format expected by the shadow detection engine
-	std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> Fiducials;
-	if (fiducials_LLA.rows != int(fiducials_PX.size())) {
-		std::cerr << "GCP size mismatch (we should have as many Lat/Lon/Alts as we have pixel coords)\r\n";
-		return false;
-	}
-	Fiducials.reserve(fiducials_PX.size());
-	for (int row = 0; row < fiducials_LLA.rows; row++) {
-		Eigen::Vector2d PixCoords(fiducials_PX[row].x, fiducials_PX[row].y);
-		Eigen::Vector3d LLA(fiducials_LLA.at<double>(row, 0)*PI/180.0, fiducials_LLA.at<double>(row, 1)*PI/180.0, fiducials_LLA.at<double>(row, 2));
-		Fiducials.push_back(std::make_tuple(PixCoords, LLA));
-	}
+	mySimDrone->SetSourceVideoFile(sourceVideoPath);
 	
 	//Set reference frame and fiducials in shadow detection module
 	ShadowDetection::ShadowDetectionEngine::Instance().SetReferenceFrame(refFrame);
-	ShadowDetection::ShadowDetectionEngine::Instance().SetFiducials(Fiducials);
+	ShadowDetection::ShadowDetectionEngine::Instance().SetFiducials(GCPs);
 	
 	//Register callback with the shadow detection engine for monitoring its output (if desired)
 	bool showLiveOutput = true;
@@ -500,7 +556,14 @@ static bool TestBench11(void) {
 }
 
 //Shadow Detection: Realtime simulation
-static bool TestBench12(void) {
+static bool TestBench12(std::string const & Arg) {
+	//Parse argument and load dataset
+	std::filesystem::path datasetPath = SimDatasetStringArgToDatasetPath(Arg);
+	std::cerr << "Simulation dataset path: " << datasetPath.string() << "\r\n";
+	cv::Mat refFrame = GetRefFrame(datasetPath);
+	std::filesystem::path sourceVideoPath = GetSimVideoFilePath(datasetPath);
+	std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> GCPs = LoadFiducialsFromFile(datasetPath);
+	
 	//Set up drone sim
 	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation"s);
 	if (myDrone == nullptr) {
@@ -513,48 +576,14 @@ static bool TestBench12(void) {
 		return false;
 	}
 	mySimDrone->SetRealTime(true);
-	mySimDrone->SetSourceVideoFile(Handy::Paths::ThisExecutableDirectory() / "SimSourceVideo.mov"s);
-	
-	//Get reference frame - this is provided by the drone sim, but must come after setting the video file path
-	cv::Mat refFrame;
-	if (! mySimDrone->GetReferenceFrame(1.0, refFrame)) {
-		std::cerr << "Error: Failed to get reference frame from SimulatedDrone.\r\n";
-		return false;
-	}
-	
-	//Get fiducials from file - we use Ben's file formats
-	cv::FileStorage GCP_LLA_FileStoreObj((Handy::Paths::ThisExecutableDirectory() / "Sim_GCPs_LLA.xml"s).string(), cv::FileStorage::READ);
-	cv::FileStorage GCP_PixCoords_FileStoreObj((Handy::Paths::ThisExecutableDirectory() / "Sim_GCPs_PixCoords.xml"s).string(), cv::FileStorage::READ);
-	if ((! GCP_LLA_FileStoreObj.isOpened()) || (! GCP_PixCoords_FileStoreObj.isOpened())) {
-		std::cerr << "Error: Unable to read Ground Control Points (GCPs) from disk.\r\n";
-		std::cerr << "Latitude, Longitude, and Altitude are read from file: Sim_GCPs_LLA.xml\r\n";
-		std::cerr << "Pixel coordinates are read from file ---------------: Sim_GCPs_PixCoords.xml\r\n";
-		return false;
-	}
-	cv::Mat fiducials_LLA; //Stored row-by-row (Lat (deg), Lon (deg), Alt (m))
-	std::vector<cv::Point2d> fiducials_PX; //OpenCV defs for X, Y... units are pixels
-	GCP_LLA_FileStoreObj["gcp"] >> fiducials_LLA;
-	GCP_PixCoords_FileStoreObj["pixel_coords"] >> fiducials_PX;
-	
-	//Convert fiducials to format expected by the shadow detection engine
-	std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> Fiducials;
-	if (fiducials_LLA.rows != int(fiducials_PX.size())) {
-		std::cerr << "GCP size mismatch (we should have as many Lat/Lon/Alts as we have pixel coords)\r\n";
-		return false;
-	}
-	Fiducials.reserve(fiducials_PX.size());
-	for (int row = 0; row < fiducials_LLA.rows; row++) {
-		Eigen::Vector2d PixCoords(fiducials_PX[row].x, fiducials_PX[row].y);
-		Eigen::Vector3d LLA(fiducials_LLA.at<double>(row, 0)*PI/180.0, fiducials_LLA.at<double>(row, 1)*PI/180.0, fiducials_LLA.at<double>(row, 2));
-		Fiducials.push_back(std::make_tuple(PixCoords, LLA));
-	}
+	mySimDrone->SetSourceVideoFile(sourceVideoPath);
 	
 	//Set reference frame and fiducials in shadow detection module
 	ShadowDetection::ShadowDetectionEngine::Instance().SetReferenceFrame(refFrame);
-	ShadowDetection::ShadowDetectionEngine::Instance().SetFiducials(Fiducials);
+	ShadowDetection::ShadowDetectionEngine::Instance().SetFiducials(GCPs);
 	
 	//Register callback with the shadow detection engine for monitoring its output (if desired)
-	bool showLiveOutput = false;
+	bool showLiveOutput = true;
 	if (showLiveOutput) {
 		ShadowDetection::ShadowDetectionEngine::Instance().RegisterCallback([](ShadowDetection::InstantaneousShadowMap const & ShadowMap) {
 			auto duration = ShadowMap.Timestamp.time_since_epoch();
@@ -583,17 +612,22 @@ static bool TestBench12(void) {
 	return true;
 }
 
-static bool TestBench13(void) { return false; }
-static bool TestBench14(void) { return false; }
-static bool TestBench15(void) { return false; }
-static bool TestBench16(void) { return false; }
-static bool TestBench17(void) { return false; }
-static bool TestBench18(void) { return false; }
-static bool TestBench19(void) { return false; }
-static bool TestBench20(void) { return false; }
+static bool TestBench13(std::string const & Arg) { return false; }
+static bool TestBench14(std::string const & Arg) { return false; }
+static bool TestBench15(std::string const & Arg) { return false; }
+static bool TestBench16(std::string const & Arg) { return false; }
+static bool TestBench17(std::string const & Arg) { return false; }
+static bool TestBench18(std::string const & Arg) { return false; }
+static bool TestBench19(std::string const & Arg) { return false; }
+static bool TestBench20(std::string const & Arg) { return false; }
 
 //DJI Drone Interface: Simulated Drone Imagery. This test bench sets up the simulated drone for non-realtime operation and just displays video
-static bool TestBench21(void) {
+static bool TestBench21(std::string const & Arg) {
+	//Parse argument and load dataset
+	std::filesystem::path datasetPath = SimDatasetStringArgToDatasetPath(Arg);
+	std::cerr << "Simulation dataset path: " << datasetPath.string() << "\r\n";
+	std::filesystem::path sourceVideoPath = GetSimVideoFilePath(datasetPath);
+	
 	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation"s);
 	if (myDrone == nullptr) {
 		std::cerr << "Error: Unable to get simulated drone from drone manager.\r\n";
@@ -605,7 +639,7 @@ static bool TestBench21(void) {
 		return false;
 	}
 	mySimDrone->SetRealTime(false);
-	mySimDrone->SetSourceVideoFile(Handy::Paths::ThisExecutableDirectory() / "SimSourceVideo.mov"s);
+	mySimDrone->SetSourceVideoFile(sourceVideoPath);
 	
 	//Register a callback with the drone for imagery
 	myDrone->RegisterCallback([](cv::Mat const & Frame, DroneInterface::Drone::TimePoint const & Timestamp) {
@@ -627,7 +661,12 @@ static bool TestBench21(void) {
 }
 
 //DJI Drone Interface: Simulated Drone Imagery. This test bench sets up the simulated drone for realtime operation and just displays video
-static bool TestBench22(void) {
+static bool TestBench22(std::string const & Arg) {
+	//Parse argument and load dataset
+	std::filesystem::path datasetPath = SimDatasetStringArgToDatasetPath(Arg);
+	std::cerr << "Simulation dataset path: " << datasetPath.string() << "\r\n";
+	std::filesystem::path sourceVideoPath = GetSimVideoFilePath(datasetPath);
+	
 	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation"s);
 	if (myDrone == nullptr) {
 		std::cerr << "Error: Unable to get simulated drone from drone manager.\r\n";
@@ -639,7 +678,7 @@ static bool TestBench22(void) {
 		return false;
 	}
 	mySimDrone->SetRealTime(true);
-	mySimDrone->SetSourceVideoFile(Handy::Paths::ThisExecutableDirectory() / "SimSourceVideo.mov"s);
+	mySimDrone->SetSourceVideoFile(sourceVideoPath);
 	
 	//Register a callback with the drone for imagery
 	myDrone->RegisterCallback([](cv::Mat const & Frame, DroneInterface::Drone::TimePoint const & Timestamp) {
@@ -661,7 +700,7 @@ static bool TestBench22(void) {
 }
 
 //DJI Drone Interface: Serialization/Deserialization
-static bool TestBench23(void) {
+static bool TestBench23(std::string const & Arg) {
 	DroneInterface::Packet myPacket;
 	
 	{
@@ -936,8 +975,8 @@ static bool TestBench23(void) {
 }
 
 
-static bool TestBench24(void) { return false; }
-static bool TestBench25(void) { return false; }
+static bool TestBench24(std::string const & Arg) { return false; }
+static bool TestBench25(std::string const & Arg) { return false; }
 
 
 

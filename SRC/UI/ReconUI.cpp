@@ -17,6 +17,7 @@
 #include "../ProgOptions.hpp"
 #include "ModalDialogs.hpp"
 #include "TextureUploadFlowRestrictor.hpp"
+#include "SimFiducialsWidget.hpp"
 
 ReconUI::ReconUI() { }
 void ReconUI::Preframe() { }
@@ -99,6 +100,7 @@ void ReconUI::Draw() {
 	//Draw secondary singleton windows
 	AboutWindow::Instance().Draw();
 	SettingsWindow::Instance().Draw();
+	SimFiducialsWidget::Instance().Draw();
 	
 	//Draw secondary non-singleton windows
 	DrawChildren();

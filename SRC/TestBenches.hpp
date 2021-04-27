@@ -38,5 +38,5 @@ namespace TestBenches {
 		/* 25 */ "DJI Drone Interface: "
 	};
 	
-	void RunTestBench(int TestNum);
+	void RunTestBench(int TestNum, std::string const & TestBenchArg);
 }

@@ -293,7 +293,9 @@ namespace DroneInterface {
 			void SetRealTime(bool Realtime); //True: Imagery will be provided at close-to-real-time rate. False: Imagery is provided as fast as possible
 			void SetSourceVideoFile(std::filesystem::path const & VideoPath); //Should be set before calling StartDJICamImageFeed()
 			bool GetReferenceFrame(double SecondsIntoVideo, cv::Mat & Frame); //Get a single frame - will fail if the video feed is running
-		
+			
+			static bool ResizeTo720p(cv::Mat & Frame); //Make sure the frame is 720p... resize if needed.
+			static bool Resize_4K_to_720p(cv::Mat & Frame); //Drop a 4K m_frame down to 720p
 		private:
 			//Some modules that use imagery can't handle missing frames gracefully. Thus, we use provide a callback mechanism to ensure that such a module
 			//can have a guarantee that each frame received by the drone interface module will be provided downstream.
@@ -322,10 +324,6 @@ namespace DroneInterface {
 			TimePoint m_VideoFeedStartTimestamp; //Timestamp of start of video feed
 			
 			void DroneMain(void);
-			
-			//Utilities to get seconds into a video from a video file frame number, and to get the next usable video frame (skipping unused frames)
-			static bool ResizeTo720p(cv::Mat & Frame);      //Make sure the frame is 720p... resize if needed.
-			static bool Resize_4K_to_720p(cv::Mat & Frame); //Drop a 4K m_frame down to 720p
 	};
 	
 }

@@ -140,8 +140,7 @@ inline void findPose(std::Evector<Eigen::Vector2d>& fiducials_PX, std::Evector<E
 	t_cam_LEA = std::get<0>(best_pose);
 
 	//cout << "\nBest error: " << best_error << endl;
-
-	std::cout << "Pose estimated." << std::endl;
+	//std::cout << "Pose estimated." << std::endl;
 }
 
 inline cv::Mat latLon_2_C_ECEF_NED(double lat, double lon) {

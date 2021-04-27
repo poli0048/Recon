@@ -41,6 +41,7 @@ namespace Arguments {
 	RenderingAPI  GraphicsAPI  = RenderingAPI::INVALID;   //Rendering API (DirectX, OpenGL, etc.)
 	FrameSyncType FrameSync    = FrameSyncType::INVALID;  //VSync on/off or enabled dynamically
 	int           TestBenchNum = -1;                      //-1: Run Recon, -2: List Tests, >=0: Run TestBench and exit
+	std::string   TestBenchArg = ""s;                     //Argument to testbench
 };
 
 static RenderingAPI RenderingAPIFromString(std::string const & s) {
@@ -159,12 +160,14 @@ void parseArgs(int argc, const char * argv[], std::string const & VersionString,
 		Handy::Args::ValueArg<std::string> frameSyncOption("s", "framesync",      fsDesc.str(), false, DefaultFrameSyncString.c_str(), "Frame Syncing Type", cmd);
 		Handy::Args::ValueArg<int>         TestBenchOption("t", "test", "Run testbench instead of running Recon"s, false, -1, "int", cmd);
 		Handy::Args::SwitchArg             ListTestsSwitch("l", "list", "List available testbenches and exit."s, cmd, false);
+		Handy::Args::UnlabeledValueArg<std::string> TestBenchArg("Testbench-Arg", "Argument to test bench (optional)", false, "", "String", cmd);
 		cmd.parse(argc, argv);
 		
 		Arguments::Verbose      = verboseSwitch.getValue();
 		Arguments::GraphicsAPI  = RenderingAPIFromString(APIOption.getValue());
 		Arguments::FrameSync    = FrameSyncTypeFromString(frameSyncOption.getValue());
 		Arguments::TestBenchNum = TestBenchOption.getValue();
+		Arguments::TestBenchArg = TestBenchArg.getValue();
 		if (ListTestsSwitch.getValue())
 			Arguments::TestBenchNum = -2;
 	}
@@ -280,7 +283,7 @@ int main(int argc, const char * argv[]) {
 		return 0;
 	}
 	else if (Arguments::TestBenchNum >= 0) {
-		TestBenches::RunTestBench(Arguments::TestBenchNum);
+		TestBenches::RunTestBench(Arguments::TestBenchNum, Arguments::TestBenchArg);
 		return 0;
 	}
 	
