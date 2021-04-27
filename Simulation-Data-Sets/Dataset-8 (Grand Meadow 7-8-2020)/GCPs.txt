@@ -1,0 +1,9 @@
+#This file holds the GPS locations of ground control points and their corresponding locations (column and row) in the reference image.
+#The center of the upper-left pixel is taken to have column 0 and row 0. Rows increase as you move down and columns increase as you move right.
+#The structure of this file should not be changed since it will be parsed programatically.
+#
+#Identifier, Column in ref image (pixels), Row in ref image (pixels), Latitude (Decimal Degrees), Longitude (Decimal Degrees), WGS-84 Altitude (m)
+A, 1710.65, 939.886, 43.622596, -92.561403, 422
+B, 1619.16, 630.029, 43.622206, -92.560563, 422
+C, 1168.38, 1142.49, 43.624037, -92.559558, 422
+D, 2727.1, 1131.1, 43.621269, -92.564950, 422
