@@ -189,11 +189,13 @@ namespace DroneInterface {
 			virtual bool GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp) = 0; //Get flight mode as a human-readable string
 			virtual void ExecuteWaypointMission(WaypointMission & Mission) = 0; //Stop current mission, if running. Then load, verify, and start new waypoint mission.
 			virtual bool IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) = 0;
+			virtual bool IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) = 0;
 			virtual bool GetCurrentWaypointMissionID(uint16_t & MissionID, TimePoint & Timestamp) = 0;
 			virtual void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command) = 0; //Put in virtualStick Mode and send command (stop mission if running)
 			virtual void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command) = 0; //Put in virtualStick Mode and send command (stop mission if running)
 			
-			virtual void Hover(void) = 0; //Stop any running missions an leave virtualStick mode (if in it) and hover in place (P mode)
+			//If a Hover command is issued when the drone is not flying (on ground), it should take off and hover at a safe height above ground.
+			virtual void Hover(void) = 0; //Stop any running missions and leave virtualStick mode (if in it) and hover in place (P mode)
 			virtual void LandNow(void) = 0; //Initiate landing sequence immediately at current vehicle location
 			virtual void GoHomeAndLand(void) = 0; //Initiate a Return-To-Home sequence that lands the vehicle at it's take-off location
 	};
@@ -227,6 +229,7 @@ namespace DroneInterface {
 			bool GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp)         override;
 			void ExecuteWaypointMission(WaypointMission & Mission)                         override;
 			bool IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) override;
+			bool IsCurrentlyFlying(bool & Result, TimePoint & Timestamp)                   override;
 			bool GetCurrentWaypointMissionID(uint16_t & MissionID, TimePoint & Timestamp)  override;
 			void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command)       override;
 			void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command)       override;
@@ -281,6 +284,7 @@ namespace DroneInterface {
 			bool GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp)         override;
 			void ExecuteWaypointMission(WaypointMission & Mission)                         override;
 			bool IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) override;
+			bool IsCurrentlyFlying(bool & Result, TimePoint & Timestamp)                   override;
 			bool GetCurrentWaypointMissionID(uint16_t & MissionID, TimePoint & Timestamp)  override;
 			void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command)       override;
 			void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command)       override;

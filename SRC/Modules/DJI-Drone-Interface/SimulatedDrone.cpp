@@ -59,7 +59,7 @@ namespace DroneInterface {
 	//Yaw, Pitch, Roll (radians) using DJI definitions
 	bool SimulatedDrone::GetOrientation(double & Yaw, double & Pitch, double & Roll, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
-		Yaw   = 20.0*PI/180.0; //close to nose facing north-northeast
+		Yaw   = 30.0*PI/180.0; //close to nose facing north-northeast
 		Pitch = 0.0; //Should be level-hover
 		Roll  = 0.0; //Should be level-hover
 		Timestamp = std::chrono::steady_clock::now();
@@ -280,6 +280,14 @@ namespace DroneInterface {
 	bool SimulatedDrone::IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
 		Result = false;
+		Timestamp = std::chrono::steady_clock::now();
+		return true;
+	}
+	
+	//Populate Result with whether or not the drone is currently flying (in any mode)
+	bool SimulatedDrone::IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) {
+		std::scoped_lock lock(m_mutex);
+		Result = true;
 		Timestamp = std::chrono::steady_clock::now();
 		return true;
 	}

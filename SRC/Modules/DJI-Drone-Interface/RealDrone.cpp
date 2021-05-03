@@ -86,6 +86,9 @@ namespace DroneInterface {
 	//Populate Result with whether or not a waypoint mission is currently being executed
 	bool RealDrone::IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) { return false; }
 	
+	//Populate Result with whether or not the drone is currently flying (in any mode)
+	bool RealDrone::IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) { return false; }
+	
 	//Retrieve the ID of the currently running waypoint mission (if running).
 	bool RealDrone::GetCurrentWaypointMissionID(uint16_t & MissionID, TimePoint & Timestamp) { return false; }
 	
