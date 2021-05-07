@@ -186,11 +186,11 @@ namespace DroneInterface {
 			//There is a method provided to get an ID for the currently running waypoint mission (if one is running). An unfortunate quirk of the DJI
 			//SDK design though is that it doesn't look like you can choose your own IDs when creating a mission, so to use this to see if a new mission
 			//is running you need to get the mission ID, start your new mission, and then check the ID again after some time to see if the ID has changed.
+			virtual bool IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) = 0;
 			virtual bool GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp) = 0; //Get flight mode as a human-readable string
 			virtual void ExecuteWaypointMission(WaypointMission & Mission) = 0; //Stop current mission, if running. Then load, verify, and start new waypoint mission.
 			virtual bool IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) = 0;
-			virtual bool IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) = 0;
-			virtual bool GetCurrentWaypointMissionID(uint16_t & MissionID, TimePoint & Timestamp) = 0;
+			virtual bool GetCurrentWaypointMission(WaypointMission & Mission) = 0; //Populate arg with current mission (returns false if not flying waypoint mission)
 			virtual void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command) = 0; //Put in virtualStick Mode and send command (stop mission if running)
 			virtual void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command) = 0; //Put in virtualStick Mode and send command (stop mission if running)
 			
@@ -226,11 +226,11 @@ namespace DroneInterface {
 			int  RegisterCallback(std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)> Callback) override;
 			void UnRegisterCallback(int Handle)                                                                     override;
 			
+			bool IsCurrentlyFlying(bool & Result, TimePoint & Timestamp)                   override;
 			bool GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp)         override;
 			void ExecuteWaypointMission(WaypointMission & Mission)                         override;
 			bool IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) override;
-			bool IsCurrentlyFlying(bool & Result, TimePoint & Timestamp)                   override;
-			bool GetCurrentWaypointMissionID(uint16_t & MissionID, TimePoint & Timestamp)  override;
+			bool GetCurrentWaypointMission(WaypointMission & Mission)                      override;
 			void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command)       override;
 			void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command)       override;
 			
@@ -281,11 +281,11 @@ namespace DroneInterface {
 			int  RegisterCallback(std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)> Callback) override;
 			void UnRegisterCallback(int Handle)                                                                     override;
 			
+			bool IsCurrentlyFlying(bool & Result, TimePoint & Timestamp)                   override;
 			bool GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp)         override;
 			void ExecuteWaypointMission(WaypointMission & Mission)                         override;
 			bool IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) override;
-			bool IsCurrentlyFlying(bool & Result, TimePoint & Timestamp)                   override;
-			bool GetCurrentWaypointMissionID(uint16_t & MissionID, TimePoint & Timestamp)  override;
+			bool GetCurrentWaypointMission(WaypointMission & Mission)                      override;
 			void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command)       override;
 			void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command)       override;
 			
@@ -326,6 +326,8 @@ namespace DroneInterface {
 			unsigned int m_FrameNumber = 0U;     //Frame number of most recent frame (increments on each *used* frame)
 			TimePoint m_FrameTimestamp;          //Timestamp of most recent frame
 			TimePoint m_VideoFeedStartTimestamp; //Timestamp of start of video feed
+			int m_flightMode = 0;                //0 = P, 1 = Waypoint, 2 = VirtualStick, -1 = Other
+			WaypointMission m_LastMission;       //A copy of the last waypoint mission uploaded to the drone
 			
 			void DroneMain(void);
 	};

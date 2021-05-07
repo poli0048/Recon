@@ -77,6 +77,9 @@ namespace DroneInterface {
 		m_ImageryCallbacks.erase(Handle);
 	}
 	
+	//Populate Result with whether or not the drone is currently flying (in any mode)
+	bool RealDrone::IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) { return false; }
+	
 	//Get flight mode as a human-readable string
 	bool RealDrone::GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp) { return false; }
 	
@@ -86,11 +89,8 @@ namespace DroneInterface {
 	//Populate Result with whether or not a waypoint mission is currently being executed
 	bool RealDrone::IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) { return false; }
 	
-	//Populate Result with whether or not the drone is currently flying (in any mode)
-	bool RealDrone::IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) { return false; }
-	
-	//Retrieve the ID of the currently running waypoint mission (if running).
-	bool RealDrone::GetCurrentWaypointMissionID(uint16_t & MissionID, TimePoint & Timestamp) { return false; }
+	//Populate arg with current mission (returns false if not flying waypoint mission)
+	bool RealDrone::GetCurrentWaypointMission(WaypointMission & Mission) { return false; }
 	
 	//Put in virtualStick Mode and send command (stop mission if running)
 	void RealDrone::IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command) { }

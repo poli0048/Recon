@@ -15,7 +15,68 @@
 //DroneInterface::Drone::TimePoint InitTimepoint = std::chrono::steady_clock::now(); //Used for testing message age warnings
 
 namespace DroneInterface {
-	SimulatedDrone::SimulatedDrone() : m_MainThread(&SimulatedDrone::DroneMain, this), m_abort(false) { }
+	SimulatedDrone::SimulatedDrone() : m_MainThread(&SimulatedDrone::DroneMain, this), m_abort(false) {
+		//Set up a waypoint mission that we can pretend to be flying
+		m_LastMission.Waypoints.clear();
+		m_LastMission.Waypoints.emplace_back();
+		m_LastMission.Waypoints.back().Latitude     =  44.237308 * PI/180.0; // radians
+		m_LastMission.Waypoints.back().Longitude    = -95.307433 * PI/180.0; // radians
+		m_LastMission.Waypoints.back().Altitude     =  466.0; // m
+		m_LastMission.Waypoints.back().CornerRadius =  0.0f;  // m (Not used since we aren't using curved trajectories)
+		m_LastMission.Waypoints.back().Speed        =  9.5f;  // m/s
+		m_LastMission.Waypoints.back().LoiterTime   = std::nanf("");
+		m_LastMission.Waypoints.back().GimbalPitch  = std::nanf("");
+		
+		m_LastMission.Waypoints.emplace_back();
+		m_LastMission.Waypoints.back().Latitude     =  44.237308 * PI/180.0; // radians
+		m_LastMission.Waypoints.back().Longitude    = -95.309309 * PI/180.0; // radians
+		m_LastMission.Waypoints.back().Altitude     =  466.0; // m
+		m_LastMission.Waypoints.back().CornerRadius = 0.0f;   // m (Not used since we aren't using curved trajectories)
+		m_LastMission.Waypoints.back().Speed        = 9.5f;   // m/s
+		m_LastMission.Waypoints.back().LoiterTime   = std::nanf("");
+		m_LastMission.Waypoints.back().GimbalPitch  = std::nanf("");
+		
+		m_LastMission.Waypoints.emplace_back();
+		m_LastMission.Waypoints.back().Latitude     =  44.237819 * PI/180.0; // radians
+		m_LastMission.Waypoints.back().Longitude    = -95.309309 * PI/180.0; // radians
+		m_LastMission.Waypoints.back().Altitude     =  466.0; // m
+		m_LastMission.Waypoints.back().CornerRadius = 0.0f;   // m (Not used since we aren't using curved trajectories)
+		m_LastMission.Waypoints.back().Speed        = 9.5f;   // m/s
+		m_LastMission.Waypoints.back().LoiterTime   = std::nanf("");
+		m_LastMission.Waypoints.back().GimbalPitch  = std::nanf("");
+		
+		m_LastMission.Waypoints.emplace_back();
+		m_LastMission.Waypoints.back().Latitude     =  44.237819 * PI/180.0; // radians
+		m_LastMission.Waypoints.back().Longitude    = -95.307433 * PI/180.0; // radians
+		m_LastMission.Waypoints.back().Altitude     =  466.0; // m
+		m_LastMission.Waypoints.back().CornerRadius = 0.0f;   // m (Not used since we aren't using curved trajectories)
+		m_LastMission.Waypoints.back().Speed        = 9.5f;   // m/s
+		m_LastMission.Waypoints.back().LoiterTime   = std::nanf("");
+		m_LastMission.Waypoints.back().GimbalPitch  = std::nanf("");
+		
+		m_LastMission.Waypoints.emplace_back();
+		m_LastMission.Waypoints.back().Latitude     =  44.238344 * PI/180.0; // radians
+		m_LastMission.Waypoints.back().Longitude    = -95.307433 * PI/180.0; // radians
+		m_LastMission.Waypoints.back().Altitude     =  466.0; // m
+		m_LastMission.Waypoints.back().CornerRadius = 0.0f;   // m (Not used since we aren't using curved trajectories)
+		m_LastMission.Waypoints.back().Speed        = 9.5f;   // m/s
+		m_LastMission.Waypoints.back().LoiterTime   = std::nanf("");
+		m_LastMission.Waypoints.back().GimbalPitch  = std::nanf("");
+		
+		m_LastMission.Waypoints.emplace_back();
+		m_LastMission.Waypoints.back().Latitude     =  44.238344 * PI/180.0; // radians
+		m_LastMission.Waypoints.back().Longitude    = -95.309309 * PI/180.0; // radians
+		m_LastMission.Waypoints.back().Altitude     =  466.0; // m
+		m_LastMission.Waypoints.back().CornerRadius = 0.0f; // m (Not used since we aren't using curved trajectories)
+		m_LastMission.Waypoints.back().Speed        = 9.5f; // m/s
+		m_LastMission.Waypoints.back().LoiterTime   = std::nanf("");
+		m_LastMission.Waypoints.back().GimbalPitch  = std::nanf("");
+		
+		m_LastMission.LandAtLastWaypoint = false;
+		m_LastMission.CurvedTrajectory = false;
+		
+		m_flightMode = 1;
+	}
 	
 	SimulatedDrone::~SimulatedDrone() {
 		m_abort = true;
@@ -262,28 +323,6 @@ namespace DroneInterface {
 		m_ImageryCallbacks.erase(Handle);
 	}
 	
-	//Get flight mode as a human-readable string
-	bool SimulatedDrone::GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
-		FlightModeStr = "Hover (P mode)"s;
-		Timestamp = std::chrono::steady_clock::now();
-		return true;
-	}
-	
-	//Stop current mission, if running. Then load, verify, and start new waypoint mission.
-	void SimulatedDrone::ExecuteWaypointMission(WaypointMission & Mission) {
-		std::scoped_lock lock(m_mutex);
-		std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute waypoint missions.\r\n";
-	}
-	
-	//Populate Result with whether or not a waypoint mission is currently being executed
-	bool SimulatedDrone::IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
-		Result = false;
-		Timestamp = std::chrono::steady_clock::now();
-		return true;
-	}
-	
 	//Populate Result with whether or not the drone is currently flying (in any mode)
 	bool SimulatedDrone::IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
@@ -292,39 +331,78 @@ namespace DroneInterface {
 		return true;
 	}
 	
-	//Retrieve the ID of the currently running waypoint mission (if running).
-	bool SimulatedDrone::GetCurrentWaypointMissionID(uint16_t & MissionID, TimePoint & Timestamp) {
+	//Get flight mode as a human-readable string
+	bool SimulatedDrone::GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
-		return false;
+		switch (m_flightMode) {
+			case 0:  FlightModeStr = "Hover (P mode)"s;   break;
+			case 1:  FlightModeStr = "Waypoint Mission"s; break;
+			case 2:  FlightModeStr = "Virtual Stick"s;    break;
+			default: FlightModeStr = "Unknown"s;          break;
+		}
+		Timestamp = std::chrono::steady_clock::now();
+		return true;
+	}
+	
+	//Stop current mission, if running. Then load, verify, and start new waypoint mission.
+	void SimulatedDrone::ExecuteWaypointMission(WaypointMission & Mission) {
+		std::scoped_lock lock(m_mutex);
+		m_LastMission = Mission;
+		m_flightMode = 1;
+		std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute waypoint missions.\r\n";
+	}
+	
+	//Populate Result with whether or not a waypoint mission is currently being executed
+	bool SimulatedDrone::IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) {
+		std::scoped_lock lock(m_mutex);
+		Result = (m_flightMode == 1);
+		Timestamp = std::chrono::steady_clock::now();
+		return true;
+	}
+	
+	//Populate arg with current mission (returns false if not flying waypoint mission)
+	bool SimulatedDrone::GetCurrentWaypointMission(WaypointMission & Mission) {
+		std::scoped_lock lock(m_mutex);
+		if (m_flightMode == 1) {
+			Mission = m_LastMission;
+			return true;
+		}
+		else
+			return false;
 	}
 	
 	//Put in virtualStick Mode and send command (stop mission if running)
 	void SimulatedDrone::IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command) {
 		std::scoped_lock lock(m_mutex);
+		m_flightMode = 2;
 		std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute VirtualStick command.\r\n";
 	}
 	
 	//Put in virtualStick Mode and send command (stop mission if running)
 	void SimulatedDrone::IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command) {
 		std::scoped_lock lock(m_mutex);
+		m_flightMode = 2;
 		std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute VirtualStick command.\r\n";
 	}
 	
 	//Stop any running missions an leave virtualStick mode (if in it) and hover in place (P mode)
 	void SimulatedDrone::Hover(void) {
 		std::scoped_lock lock(m_mutex);
+		m_flightMode = 0;
 		std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute Hover() command.\r\n";
 	}
 	
 	//Initiate landing sequence immediately at current vehicle location
 	void SimulatedDrone::LandNow(void) {
 		std::scoped_lock lock(m_mutex);
+		m_flightMode = -1;
 		std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute LandNow() command.\r\n";
 	}
 	
 	//Initiate a Return-To-Home sequence that lands the vehicle at it's take-off location
 	void SimulatedDrone::GoHomeAndLand(void) {
 		std::scoped_lock lock(m_mutex);
+		m_flightMode = -1;
 		std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute GoHomeAndLand() command.\r\n";
 	}
 	
@@ -466,8 +544,6 @@ namespace DroneInterface {
 		Frame = Buf;
 		return true;*/
 	} 
-	
-	
 }
 
 
