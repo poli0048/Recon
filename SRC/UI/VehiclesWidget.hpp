@@ -1250,7 +1250,7 @@ inline void VehiclesWidget::DrawDroneInteractable(DroneInterface::Drone & drone,
 	//Save the size of what we have emitted and reset cursor position
 	float contentHeight = ImGui::GetItemRectSize().y + 2.0f*style.ItemInnerSpacing.y;
 	ImGui::SetCursorScreenPos(pos);
-	Eigen::Vector2d itemRectSize(ImGui::GetContentRegionAvail().x, contentHeight);
+	Eigen::Vector2d itemRectSize(std::max(ImGui::GetContentRegionAvail().x, 1.0f), std::max(contentHeight, 1.0f)); //Make sure no 0's or InvisibleButton will raise.
 	
 	//Display node background next
 	draw_list->ChannelsSetCurrent(0);
@@ -1293,7 +1293,7 @@ inline void VehiclesWidget::Draw() {
 			continue;
 		
 		DrawDroneInteractable(*drone, m_vehicleStates.at(m_currentDroneSerials[n]), n);
-		DrawContextMenu(ImGui::IsItemClicked(1), *drone);
+		DrawContextMenu(ImGui::IsItemClicked(0) || ImGui::IsItemClicked(1), *drone);
 	}
 	
 	//After drawing, update content height and recommended widget height

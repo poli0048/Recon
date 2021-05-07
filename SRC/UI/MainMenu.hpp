@@ -49,7 +49,7 @@ inline void MainMenu::Draw() {
 			if (ImGui::MenuItem(consoleText.c_str()))
 				ConsoleWidget::Instance().AppearHideToggle();
 			
-			if (ImGui::MenuItem("Show Simulation GCP Market Tool"))
+			if (ImGui::MenuItem("Show Simulation GCP Marker Tool"))
 				SimFiducialsWidget::Instance().m_visible = true;
 			
 			if (ImGui::MenuItem("Show/Hide Demo Window"))
