@@ -31,7 +31,7 @@ void AboutWindow::Draw() {
 		
 		ImGui::BeginChild("About Scrollable Region", ImVec2(0,0), true, ImGuiWindowFlags_AlwaysUseWindowPadding);
 	
-		const char HeadingLabel[] = "Recon: A Flexible, Multi-Drone Ground Control Station";
+		const char HeadingLabel[] = "Recon: A Flexible, Multi-Vehicle Ground Control Station for small UAS";
 		float HeadingWidth = ImGui::CalcTextSize(HeadingLabel).x;
 		float gapWidth = std::max(0.5f*(ImGui::GetContentRegionAvail().x - HeadingWidth), 0.0f);
 		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + gapWidth);

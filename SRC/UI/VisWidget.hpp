@@ -155,9 +155,12 @@ inline void VisWidget::SanitizeState(void) {
 
 inline void VisWidget::Draw() {
 	MyGui::HeaderLabel("Layer Visibility and Parameters");
+	float checkBoxXPos       = ImGui::GetWindowContentRegionMax().x - 3.0f*ImGui::GetFontSize();
 	float settingsButtonXPos = ImGui::GetWindowContentRegionMax().x - 1.4f*ImGui::GetFontSize();
 	
-	ImGui::Checkbox("Min Safe Altitude (m)", &LayerVisible_MSA);
+	ImGui::TextUnformatted("Min Safe Altitude (m)");
+	ImGui::SameLine(checkBoxXPos);
+	ImGui::Checkbox("##Min Safe Altitude (m)", &LayerVisible_MSA);
 	ImGui::SameLine(settingsButtonXPos);
 	if (ImGui::Button("\uf013##Min Safe Altitude Settings"))
 		ImGui::OpenPopup("Min Safe Altitude Settings");
@@ -198,7 +201,9 @@ inline void VisWidget::Draw() {
 	}
 	
 	
-	ImGui::Checkbox("Avoidance Zones", &LayerVisible_AvoidanceZones);
+	ImGui::TextUnformatted("Avoidance Zones");
+	ImGui::SameLine(checkBoxXPos);
+	ImGui::Checkbox("##Avoidance Zones", &LayerVisible_AvoidanceZones);
 	ImGui::SameLine(settingsButtonXPos);
 	if (ImGui::Button("\uf013##Avoidance Zones Settings"))
 		ImGui::OpenPopup("Avoidance Zones Settings");
@@ -218,7 +223,9 @@ inline void VisWidget::Draw() {
 	}
 	
 	
-	ImGui::Checkbox("Safe Landing Zones", &LayerVisible_SafeLandingZones);
+	ImGui::TextUnformatted("Safe Landing Zones");
+	ImGui::SameLine(checkBoxXPos);
+	ImGui::Checkbox("##Safe Landing Zones", &LayerVisible_SafeLandingZones);
 	ImGui::SameLine(settingsButtonXPos);
 	if (ImGui::Button("\uf013##Safe Landing Zones Settings"))
 		ImGui::OpenPopup("Safe Landing Zones Settings");
@@ -238,7 +245,9 @@ inline void VisWidget::Draw() {
 	}
 	
 	
-	ImGui::Checkbox("Survey Region", &LayerVisible_SurveyRegion);
+	ImGui::TextUnformatted("Survey Region");
+	ImGui::SameLine(checkBoxXPos);
+	ImGui::Checkbox("##Survey Region", &LayerVisible_SurveyRegion);
 	ImGui::SameLine(settingsButtonXPos);
 	if (ImGui::Button("\uf013##Survey Region Settings"))
 		ImGui::OpenPopup("Survey Region Settings");

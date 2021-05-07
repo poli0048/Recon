@@ -127,7 +127,6 @@ class VehiclesWidget {
 		                                  Eigen::Matrix2d const & R, float IconWidth_pixels);
 		
 		inline void StartManualControl(DroneInterface::Drone & Drone, vehicleState & State);
-		inline void StopManualControl(DroneInterface::Drone & Drone, vehicleState & State);
 		inline void DroneCommand_Hover(DroneInterface::Drone & Drone, vehicleState & State);
 		inline void DroneCommand_LandNow(DroneInterface::Drone & Drone, vehicleState & State);
 		inline void DroneCommand_GoHomeAndLand(DroneInterface::Drone & Drone, vehicleState & State);
@@ -136,6 +135,7 @@ class VehiclesWidget {
 		inline void ControlThreadMain(void);
 		
 		inline void DrawMission_ManualControl(vehicleState * State, Eigen::Vector2d const & dronePos_ScreenSpace, ImDrawList * DrawList);
+		inline void DrawMission_Waypoints(size_t DroneNum, DroneInterface::Drone * Drone, Eigen::Vector2d const & dronePos_ScreenSpace, ImDrawList * DrawList);
 		
 		//Limited coordinate conversion utilities
 		static inline Eigen::Vector3d positionLLA2ECEF(double lat, double lon, double alt);
@@ -380,6 +380,81 @@ inline void VehiclesWidget::DrawMission_ManualControl(vehicleState * State, Eige
 	}
 }
 
+//Note that we don't have a good way to query what portion of a mission has been complete or what the active next waypoint is yet, so
+//we don't draw a line connecting the drone to any waypoints since it would usually be wrong.
+inline void VehiclesWidget::DrawMission_Waypoints(size_t DroneNum, DroneInterface::Drone * Drone, Eigen::Vector2d const & dronePos_ScreenSpace, ImDrawList * DrawList) {
+	float droneIconWidth_pixels = ProgOptions::Instance()->DroneIconScale*96.0f;
+	
+	DroneInterface::WaypointMission mission;
+	if (Drone->GetCurrentWaypointMission(mission)) {
+		std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector2d>> segments_SS;
+		//Draw lines between consecutive waypoints
+		for (size_t n = 1; n < mission.Waypoints.size(); n++) {
+			/*Eigen::Vector2d p0;
+			if (n == 0)
+				p0 = dronePos_ScreenSpace;
+			else {
+				Eigen::Vector2d lastWaypoint_NM = LatLonToNM(Eigen::Vector2d(mission.Waypoints[n - 1U].Latitude, mission.Waypoints[n - 1U].Longitude));
+				p0 = MapWidget::Instance().NormalizedMercatorToScreenCoords(lastWaypoint_NM);
+			}*/
+			Eigen::Vector2d lastWaypoint_NM = LatLonToNM(Eigen::Vector2d(mission.Waypoints[n - 1U].Latitude, mission.Waypoints[n - 1U].Longitude));
+			Eigen::Vector2d p0 = MapWidget::Instance().NormalizedMercatorToScreenCoords(lastWaypoint_NM);
+			
+			Eigen::Vector2d waypoint_NM = LatLonToNM(Eigen::Vector2d(mission.Waypoints[n].Latitude, mission.Waypoints[n].Longitude));
+			Eigen::Vector2d p1 = MapWidget::Instance().NormalizedMercatorToScreenCoords(waypoint_NM);
+			segments_SS.push_back(std::make_tuple(p0, p1));
+			DrawList->AddLine(p0, p1, IM_COL32(180,180,180,128), ImGui::GetFontSize()/5.0f);
+		}
+		
+		//Draw arrow indicators in the middle of each segment
+		for (auto const & segment : segments_SS) {
+			Eigen::Vector2d p_center = 0.5*std::get<0>(segment) + 0.5*std::get<1>(segment);
+			Eigen::Vector2d v = std::get<1>(segment) - std::get<0>(segment);
+			if (v.norm() >= 1.45*ImGui::GetFontSize()) {
+				v.normalize();
+				Eigen::Matrix2d R;
+				R << 0, -1,
+					1,  0;
+				Eigen::Vector2d w = R*v;
+				Eigen::Vector2d p1 = p_center + ImGui::GetFontSize()/3.0f*v;
+				Eigen::Vector2d p2 = p_center - ImGui::GetFontSize()/3.0f*v + ImGui::GetFontSize()/3.0f*w;
+				Eigen::Vector2d p3 = p_center - ImGui::GetFontSize()/3.0f*v - ImGui::GetFontSize()/3.0f*w;
+				DrawList->AddTriangleFilled(p1, p2, p3, IM_COL32(240,240,240,255));
+			}
+		}
+		
+		//Draw circles over each waypoint
+		if (! segments_SS.empty())
+			DrawList->AddCircleFilled(std::get<0>(segments_SS[0]), ImGui::GetFontSize()/3.0f, IM_COL32(240,240,240,255), 11);
+		for (auto const & segment : segments_SS)
+			DrawList->AddCircleFilled(std::get<1>(segment), ImGui::GetFontSize()/3.0f, IM_COL32(240,240,240,255), 11);
+		
+		//Draw an indicator identifying which drone the drawn mission is for
+		if (! segments_SS.empty()) {
+			std::string droneLabel = std::to_string((unsigned int) DroneNum + 1U);
+			float fullLabelWidth = ImGui::CalcTextSize(droneLabel.c_str()).x + 1.3f*ImGui::GetFontSize();
+			
+			Eigen::Vector2d p0 = std::get<0>(segments_SS[0]);
+			Eigen::Vector2d v  = std::get<1>(segments_SS[0]) - std::get<0>(segments_SS[0]);
+			v.normalize();
+			
+			Eigen::Vector2d p_a = p0 - (0.5*fullLabelWidth + 0.5*ImGui::GetFontSize())*v; //Center of label
+			Eigen::Vector2d c1 = p_a - Eigen::Vector2d(fullLabelWidth/2.0, ImGui::GetFontSize()/2.0);
+			Eigen::Vector2d c2 = c1  + Eigen::Vector2d(ImGui::GetFontSize(), ImGui::GetFontSize());
+			Eigen::Vector2d c3 = c2  + Eigen::Vector2d(0.3*ImGui::GetFontSize(), -1.0*ImGui::GetFontSize());
+			Eigen::Vector2d c4 = p_a + Eigen::Vector2d(fullLabelWidth/2.0, ImGui::GetFontSize()/2.0);
+			
+			//Only draw the indicator if it won't overlap with the drone itself
+			double distThresh = 0.7 * droneIconWidth_pixels;
+			if (((c1 - dronePos_ScreenSpace).norm() > distThresh) && ((c2 - dronePos_ScreenSpace).norm() > distThresh) &&
+			    ((c3 - dronePos_ScreenSpace).norm() > distThresh) && ((c4 - dronePos_ScreenSpace).norm() > distThresh)) {
+				DrawList->AddImage(m_IconTexture_Drone, c1, c2);
+				DrawList->AddText(c3, IM_COL32_WHITE, droneLabel.c_str());
+			}
+		}
+	}
+}
+
 inline bool VehiclesWidget::DrawMapOverlay(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList,
                                            bool CursorInBounds) {
 	float droneIconWidth_pixels = ProgOptions::Instance()->DroneIconScale*96.0f;
@@ -518,9 +593,8 @@ inline bool VehiclesWidget::DrawMapOverlay(Eigen::Vector2d const & CursorPos_Scr
 			//Draw an indication of the current objective or mission for the drone (target location or current waypoint mission)
 			if (droneStates[n]->m_userControlEnabled && (! std::isnan(droneStates[n]->m_targetLatLon(0))) && (! std::isnan(droneStates[n]->m_targetLatLon(1))))
 				DrawMission_ManualControl(droneStates[n], dronePos_SS, DrawList);
-			else {
-				//TODO: Check for current waypoint mission and if the drone has one draw it
-			}
+			else
+				DrawMission_Waypoints(n, drones[n], dronePos_SS, DrawList); //Draw waypoint mission (if flying one)
 			
 			Eigen::Vector2d p1_SS = dronePos_SS + Eigen::Vector2d(-1.0*droneIconWidth_pixels/2.0f, -1.0*droneIconWidth_pixels/2.0f);
 			Eigen::Vector2d p2_SS = dronePos_SS + Eigen::Vector2d(     droneIconWidth_pixels/2.0f, -1.0*droneIconWidth_pixels/2.0f);
@@ -603,7 +677,7 @@ inline bool VehiclesWidget::DrawMapOverlay(Eigen::Vector2d const & CursorPos_Scr
 				ImGui::Spacing(); ImGui::Spacing();
 				
 				if (ImGui::Button("Stop Manual Control & Hover", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
-					state->m_userControlEnabled = false;
+					DroneCommand_Hover(*drone, *state);
 					m_indexOfDroneWithContextMenuOpen = -1;
 					ImGui::CloseCurrentPopup();
 				}
@@ -704,7 +778,7 @@ inline bool VehiclesWidget::DrawMapOverlay(Eigen::Vector2d const & CursorPos_Scr
 					if (MyGui::BeginMenu(u8"\uf11b", labelMargin, "Manual Control")) {
 						if (state->m_userControlEnabled) {
 							if (ImGui::MenuItem("Stop Manual Control and Hover In Place", NULL, false, true))
-								StopManualControl(*drone, *state);
+								DroneCommand_Hover(*drone, *state);
 						}
 						else {
 							if (ImGui::MenuItem("Start Manual Control", NULL, false, true))
@@ -769,12 +843,6 @@ inline void VehiclesWidget::StartManualControl(DroneInterface::Drone & Drone, ve
 	else
 		std::cerr << "Warning: Starting manual control without full & current telemetry. Defaulting yaw to 0 degrees.\r\n";
 	State.m_userControlEnabled = true;
-}
-
-inline void VehiclesWidget::StopManualControl(DroneInterface::Drone & Drone, vehicleState & State) {
-	std::cerr << "Stopping manual control for drone: " << Drone.GetDroneSerial() << ".\r\n";
-	State.m_userControlEnabled = false;
-	Drone.Hover();
 }
 
 inline void VehiclesWidget::DroneCommand_Hover(DroneInterface::Drone & Drone, vehicleState & State) {
@@ -844,7 +912,7 @@ inline void VehiclesWidget::DrawContextMenu(bool Open, DroneInterface::Drone & d
 			if (MyGui::BeginMenu(u8"\uf11b", labelMargin, "Manual Control")) {
 				if (myState.m_userControlEnabled) {
 					if (ImGui::MenuItem("Stop Manual Control and Hover In Place", NULL, false, true))
-						StopManualControl(drone, myState);
+						DroneCommand_Hover(drone, myState);
 				}
 				else {
 					if (ImGui::MenuItem("Start Manual Control", NULL, false, true))
@@ -1096,14 +1164,6 @@ inline void VehiclesWidget::DrawContextMenu(bool Open, DroneInterface::Drone & d
 				ImGui::TextUnformatted("Flight Mode: ");
 				ImGui::SameLine(col2Start);
 				ImGui::TextUnformatted("Unknown");
-			}
-			
-			uint16_t WaypointMissionID;
-			if (drone.GetCurrentWaypointMissionID(WaypointMissionID, Timestamp)) {
-				ImGui::TextUnformatted("Waypoint Mission ID: ");
-				ImGui::SameLine(col2Start);
-				ImGui::Text("%u", (unsigned int) WaypointMissionID);
-				PrintAgeWarning(Timestamp, col3Start);
 			}
 			
 			ImGui::EndMenu();
