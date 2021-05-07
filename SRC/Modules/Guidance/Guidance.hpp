@@ -52,6 +52,8 @@ namespace Guidance {
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW /*May not be needed - check for fixed-size Eigen data types in fields*/
 			using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 			
+			static GuidanceEngine & Instance() { static GuidanceEngine Obj; return Obj; }
+			
 			//Constructors and Destructors
 			GuidanceEngine() : m_engineThread(&GuidanceEngine::ModuleMain, this), m_running(false), m_abort(false), m_missionPrepDone(false) { }
 			~GuidanceEngine() {
@@ -62,7 +64,7 @@ namespace Guidance {
 			
 			inline bool StartSurvey(std::vector<std::string> const & LowFlierSerials); //Start a survey mission (currently active region) using the given drones
 			inline bool AddLowFlier(std::string const & Serial); //Add a drone to the collection of low fliers and start commanding it
-			inline bool RemoveLowFlier(std::string const & Serial); //Switch a drone to hover (P mode) and stop commanding it
+			inline bool RemoveLowFlier(std::string const & Serial); //Stop commanding the drone with the given serial
 			
 			//Abort mission methods - after any of these are called the guidance module will stop issuing commands to drones.
 			//We have 3 abort methods, each corresponding to a different state to put the drones in when aborting the mission.
@@ -203,14 +205,13 @@ namespace Guidance {
 		}
 	}
 	
-	//Switch a drone to hover (P mode) and stop commanding it
+	//Stop commanding the drone with the given serial
 	inline bool GuidanceEngine::RemoveLowFlier(std::string const & Serial) {
 		std::scoped_lock lock(m_mutex);
 		if (! m_running)
 			return false;
 		for (size_t n = 0U; n < m_dronesUnderCommand.size(); n++) {
 			if (m_dronesUnderCommand[n]->GetDroneSerial() == Serial) {
-				m_dronesUnderCommand[n]->Hover();
 				m_currentDroneMissions.erase(Serial);
 				m_dronesUnderCommand.erase(m_dronesUnderCommand.begin() + n);
 				return true;

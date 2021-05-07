@@ -10,8 +10,7 @@
 #include <chrono>
 
 //External Includes
-#include "../../../handycpp/Handy.hpp"
-#include "../../../imgui/app/ImGuiApp.hpp"
+#include "../HandyImGuiInclude.hpp"
 
 //Cereal Includes
 #include "cereal/types/vector.hpp"
@@ -156,86 +155,128 @@ inline void VisWidget::SanitizeState(void) {
 
 inline void VisWidget::Draw() {
 	MyGui::HeaderLabel("Layer Visibility and Parameters");
+	float settingsButtonXPos = ImGui::GetWindowContentRegionMax().x - 1.4f*ImGui::GetFontSize();
 	
 	ImGui::Checkbox("Min Safe Altitude (m)", &LayerVisible_MSA);
-	if (LayerVisible_MSA) {
-		ImGui::Text("Opacity");
-		ImGui::SetNextItemWidth(-1.0f);
-		ImGui::SliderFloat("##Opacity_MSA", &Opacity_MSA, 0.0f, 100.0f, "%.0f");
-		
-		ImGui::Text("Colormap Min Value: ");
-		ImGui::SetNextItemWidth(-1.0f);
-		ImGui::DragFloat("##Colormap Min Value", &MSA_CmapMinVal, 0.1f, -1000.0f, 10000.0f, "%.1f");
-		
-		ImGui::Text("Colormap Max Value: ");
-		ImGui::SetNextItemWidth(-1.0f);
-		ImGui::DragFloat("##Colormap Max Value", &MSA_CmapMaxVal, 0.1f, -1000.0f, 10000.0f, "%.1f");
-		
-		/*if (ImGui::Button(" Colormap Auto ")) {
-			//TODO: This is actually a bit more involved than it seems. We can't go over every pixel in every tile over large areas.
-			//We could just limit this to working at certain zoom levels, but regardless this is a perk, not an essential feature.
-		}
-		ImGui::SameLine();
-		ImGui::TextDisabled(u8"\uf059");
-		if (ImGui::IsItemHovered()) {
-			ImExt::Style tooltipStyle(StyleVar::WindowPadding, Math::Vector2(4.0f));
-			ImGui::BeginTooltip();
-			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-			ImGui::TextUnformatted("Adjust the colormap range automatically based on the current view. The colormap min value will be "
-			                       "set to the lowest min safe altitude currently in view, and the colormap max value will be set to the "
-			                       "highest min safe altitude currently in view.");
-			ImGui::PopTextWrapPos();
-			ImGui::EndTooltip();
-		}*/
-		
-		{
-			ImGui::Text("No Fly Zones: ");
-			ImExt::Style popupStyle(StyleVar::WindowPadding, Math::Vector2(4.0f, 4.0f));
+	ImGui::SameLine(settingsButtonXPos);
+	if (ImGui::Button("\uf013##Min Safe Altitude Settings"))
+		ImGui::OpenPopup("Min Safe Altitude Settings");
+	{
+		ImExt::Style styleSitter(StyleVar::WindowPadding, Math::Vector2(4.0f));
+		if (ImGui::BeginPopup("Min Safe Altitude Settings", ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize)) {
+			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Colormap Max Value  ").x;
+			std::string label = "Opacity  "s;
+			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
+			ImGui::Text(label.c_str());
+			ImGui::SameLine(col2Start);
+			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
+			ImGui::SliderFloat("##Opacity_MSA", &Opacity_MSA, 0.0f, 100.0f, "%.0f");
+			
+			label = "Colormap Min Value  "s;
+			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
+			ImGui::Text(label.c_str());
+			ImGui::SameLine(col2Start);
+			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
+			ImGui::DragFloat("##Colormap Min Value", &MSA_CmapMinVal, 0.1f, -1000.0f, 10000.0f, "%.1f");
+			
+			label = "Colormap Max Value  "s;
+			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
+			ImGui::Text(label.c_str());
+			ImGui::SameLine(col2Start);
+			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
+			ImGui::DragFloat("##Colormap Max Value", &MSA_CmapMaxVal, 0.1f, -1000.0f, 10000.0f, "%.1f");
+			
+			label = "No Fly Zones  "s;
+			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
+			ImGui::Text(label.c_str());
+			ImGui::SameLine(col2Start);
+			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
 			ImGui::Combo("## NoFlyDrawMode", &MSA_NoFlyDrawMode, "Transparent\0Stripes\0");
+			
+			ImGui::EndPopup();
 		}
-		
-		ImGui::Dummy(ImVec2(1.0f, ImGui::GetFontSize()));
 	}
+	
 	
 	ImGui::Checkbox("Avoidance Zones", &LayerVisible_AvoidanceZones);
-	if (LayerVisible_AvoidanceZones) {
-		ImGui::Text("Opacity");
-		ImGui::SetNextItemWidth(-1.0f);
-		ImGui::SliderFloat("##Opacity_AvoidanceZones", &Opacity_AvoidanceZones, 0.0f, 100.0f, "%.0f");
-		
-		ImGui::Dummy(ImVec2(1.0f, ImGui::GetFontSize()));
+	ImGui::SameLine(settingsButtonXPos);
+	if (ImGui::Button("\uf013##Avoidance Zones Settings"))
+		ImGui::OpenPopup("Avoidance Zones Settings");
+	{
+		ImExt::Style styleSitter(StyleVar::WindowPadding, Math::Vector2(4.0f));
+		if (ImGui::BeginPopup("Avoidance Zones Settings", ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize)) {
+			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Opacity  ").x;
+			std::string label = "Opacity  "s;
+			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
+			ImGui::Text(label.c_str());
+			ImGui::SameLine(col2Start);
+			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
+			ImGui::SliderFloat("##Opacity_AvoidanceZones", &Opacity_AvoidanceZones, 0.0f, 100.0f, "%.0f");
+			
+			ImGui::EndPopup();
+		}
 	}
+	
 	
 	ImGui::Checkbox("Safe Landing Zones", &LayerVisible_SafeLandingZones);
-	if (LayerVisible_SafeLandingZones) {
-		ImGui::Text("Opacity");
-		ImGui::SetNextItemWidth(-1.0f);
-		ImGui::SliderFloat("##Opacity_SafeLandingZones", &Opacity_SafeLandingZones, 0.0f, 100.0f, "%.0f");
-		
-		ImGui::Dummy(ImVec2(1.0f, ImGui::GetFontSize()));
+	ImGui::SameLine(settingsButtonXPos);
+	if (ImGui::Button("\uf013##Safe Landing Zones Settings"))
+		ImGui::OpenPopup("Safe Landing Zones Settings");
+	{
+		ImExt::Style styleSitter(StyleVar::WindowPadding, Math::Vector2(4.0f));
+		if (ImGui::BeginPopup("Safe Landing Zones Settings", ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize)) {
+			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Opacity  ").x;
+			std::string label = "Opacity  "s;
+			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
+			ImGui::Text(label.c_str());
+			ImGui::SameLine(col2Start);
+			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
+			ImGui::SliderFloat("##Opacity_SafeLandingZones", &Opacity_SafeLandingZones, 0.0f, 100.0f, "%.0f");
+			
+			ImGui::EndPopup();
+		}
 	}
 	
+	
 	ImGui::Checkbox("Survey Region", &LayerVisible_SurveyRegion);
-	if (LayerVisible_SurveyRegion) {
-		ImGui::Text("Opacity");
-		ImGui::SetNextItemWidth(-1.0f);
-		ImGui::SliderFloat("##Opacity_SurveyRegion", &Opacity_SurveyRegion, 0.0f, 100.0f, "%.0f");
-		//ImGui::SetNextItemWidth(-1.0f);
-		ImGui::Text("Color: ");
-		ImGui::SameLine();
-		ImGui::ColorEdit3("##SurveyRegionColor", &(SurveyRegionColor[0]), ImGuiColorEditFlags_NoInputs);
-		
-		ImGui::Text("Vertex Radius (when editing): ");
-		ImGui::SetNextItemWidth(-1.0f);
-		if (ImGui::DragFloat("##SurveyRegionVertexRadius", &SurveyRegionVertexRadius, 0.01f, 1.0f, 20.0f, "%.1f"))
-			SurveyRegionVertexRadius = std::max(std::min(SurveyRegionVertexRadius, 20.0f), 1.0f);
-		
-		ImGui::Text("Edge Thickness (when editing): ");
-		ImGui::SetNextItemWidth(-1.0f);
-		if (ImGui::DragFloat("##SurveyRegionEdgeThickness", &SurveyRegionEdgeThickness, 0.01f, 1.0f, 10.0f, "%.1f"))
-			SurveyRegionEdgeThickness = std::max(std::min(SurveyRegionEdgeThickness, 10.0f), 1.0f);
-		
-		ImGui::Dummy(ImVec2(1.0f, ImGui::GetFontSize()));
+	ImGui::SameLine(settingsButtonXPos);
+	if (ImGui::Button("\uf013##Survey Region Settings"))
+		ImGui::OpenPopup("Survey Region Settings");
+	{
+		ImExt::Style styleSitter(StyleVar::WindowPadding, Math::Vector2(4.0f));
+		if (ImGui::BeginPopup("Survey Region Settings", ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize)) {
+			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Edge Thickness (when editing)  ").x;
+			std::string label = "Opacity  "s;
+			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
+			ImGui::Text(label.c_str());
+			ImGui::SameLine(col2Start);
+			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
+			ImGui::SliderFloat("##Opacity_SurveyRegion", &Opacity_SurveyRegion, 0.0f, 100.0f, "%.0f");
+			
+			label = "Color "s;
+			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
+			ImGui::Text(label.c_str());
+			ImGui::SameLine(col2Start);
+			ImGui::ColorEdit3("##SurveyRegionColor", &(SurveyRegionColor[0]), ImGuiColorEditFlags_NoInputs);
+			
+			label = "Vertex Radius (when editing) "s;
+			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
+			ImGui::Text(label.c_str());
+			ImGui::SameLine(col2Start);
+			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
+			if (ImGui::DragFloat("##SurveyRegionVertexRadius", &SurveyRegionVertexRadius, 0.01f, 1.0f, 20.0f, "%.1f"))
+				SurveyRegionVertexRadius = std::max(std::min(SurveyRegionVertexRadius, 20.0f), 1.0f);
+			
+			label = "Edge Thickness (when editing) "s;
+			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
+			ImGui::Text(label.c_str());
+			ImGui::SameLine(col2Start);
+			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
+			if (ImGui::DragFloat("##SurveyRegionEdgeThickness", &SurveyRegionEdgeThickness, 0.01f, 1.0f, 10.0f, "%.1f"))
+				SurveyRegionEdgeThickness = std::max(std::min(SurveyRegionEdgeThickness, 10.0f), 1.0f);
+			
+			ImGui::EndPopup();
+		}
 	}
 }
 

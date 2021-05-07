@@ -8,8 +8,7 @@
 #include <vector>
 
 //External Includes
-#include "../../../handycpp/Handy.hpp"
-#include "../../../imgui/app/ImGuiApp.hpp"
+#include "../HandyImGuiInclude.hpp"
 
 //Project Includes
 #include "ConsoleWidget.hpp"

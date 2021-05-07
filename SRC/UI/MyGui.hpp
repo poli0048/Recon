@@ -8,7 +8,7 @@
 #include "../../../eigen/Eigen/Core"
 
 //External Includes
-#include "../../../imgui/imgui.h"
+#include "../HandyImGuiInclude.hpp"
 
 //Project Includes
 #include "../Colormaps.hpp"
@@ -51,6 +51,22 @@ namespace MyGui {
 		bool ret = ImGui::MenuItem(spaces.c_str(), shortcut, selected, enabled);
 		ImGui::GetWindowDrawList()->AddText(curPos, ImGui::ColorConvertFloat4ToU32(ImGui::GetStyleColorVec4(ImGuiCol_Text)), txticon);
 		return ret;
+	}
+	
+	//Add text to Draw list with support for centering in X and/or Y
+	inline void AddText(ImDrawList * DrawList, ImVec2 const & pos, ImU32 col, const char * text_begin, const char* text_end = NULL,
+	                    bool CenterX = false, bool CenterY = false) {
+		if (CenterX || CenterY) {
+			ImVec2 textSize = ImGui::CalcTextSize(text_begin, text_end);
+			if (CenterX && (! CenterY))
+				DrawList->AddText(ImVec2(pos.x - textSize.x/2.0f, pos.y), col, text_begin, text_end);
+			else if ((! CenterX) && CenterY)
+				DrawList->AddText(ImVec2(pos.x, pos.y - textSize.y/2.0f), col, text_begin, text_end);
+			else
+				DrawList->AddText(ImVec2(pos.x - textSize.x/2.0f, pos.y - textSize.y/2.0f), col, text_begin, text_end);
+		}
+		else
+			DrawList->AddText(pos, col, text_begin, text_end);
 	}
 }
 

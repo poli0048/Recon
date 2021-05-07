@@ -8,8 +8,7 @@
 #include <tuple>
 
 //External Includes
-#include "../../../handycpp/Handy.hpp"
-#include "../../../imgui/app/ImGuiApp.hpp"
+#include "../HandyImGuiInclude.hpp"
 
 //Eigen Includes
 #include "../../../eigen/Eigen/Core"

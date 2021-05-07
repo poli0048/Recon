@@ -4,8 +4,7 @@
 #pragma once
 
 //External Includes
-#include "../../../handycpp/Handy.hpp"
-#include "../../../imgui/app/ImGuiApp.hpp"
+#include "../HandyImGuiInclude.hpp"
 
 //Project Includes
 #include "ReconUI.hpp"

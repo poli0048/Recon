@@ -20,8 +20,7 @@
 #include <deque>
 
 //External Includes
-#include "../../../handycpp/Handy.hpp"
-#include "../../../imgui/imgui.h"
+#include "../HandyImGuiInclude.hpp"
 
 //Project Includes
 #include "../EigenAliases.h"

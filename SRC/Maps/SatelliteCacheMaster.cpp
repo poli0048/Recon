@@ -2,8 +2,7 @@
 #include <thread>
 
 //External Includes
-#include "../../../handycpp/Handy.hpp"
-#include "../../../imgui/imgui.h"
+#include "../HandyImGuiInclude.hpp"
 #include "../../../handycpp/Extended/stb_image.h"
 
 //Project Includes

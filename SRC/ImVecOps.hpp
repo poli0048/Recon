@@ -1,10 +1,9 @@
 #pragma once
 
-//Eigen Includes
-#include "../../eigen/Eigen/Core"
+//External Includes
+#include "HandyImGuiInclude.hpp"
 
-//ImGui Includes
-#include "../../imgui/imgui.h"
+//This header is obsolete now
 
 inline Eigen::Vector2d ImVecToEigen(ImVec2 const & a) { return Eigen::Vector2d(a.x, a.y); }
 inline Eigen::Vector4d ImVecToEigen(ImVec4 const & a) { return Eigen::Vector4d(a.x, a.y, a.z, a.w); }

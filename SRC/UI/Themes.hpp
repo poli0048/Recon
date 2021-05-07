@@ -10,8 +10,7 @@
 #include <memory>
 
 //External Includes
-#include "../../../handycpp/Handy.hpp"
-#include "../../../imgui/app/ImGuiApp.hpp"
+#include "../HandyImGuiInclude.hpp"
 
 //To use, just create a ThemeSitter object for the theme you want to use. The theme will be in effect until the sitter is destroyed.
 //You can stack themes by creating a new ThemeSitter object in a local scope - when it is detroyed your previous theme will be restored.

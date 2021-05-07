@@ -8,8 +8,7 @@
 #include <system_error>
 
 //External Includes
-#include "../../../handycpp/Handy.hpp"
-#include "../../../imgui/app/ImGuiApp.hpp"
+#include "../HandyImGuiInclude.hpp"
 #include "../../../nativefiledialog/src/include/nfd.h"
 
 //Project Includes

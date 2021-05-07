@@ -457,8 +457,9 @@ void MapWidget::Draw(void) {
 	}
 	
 	//Draw pass for vehicle widget
+	bool processMouseInputs = true;
 	if (MaxTileZoomLevel >= 12)
-		VehiclesWidget::Instance().DrawMapOverlay(mousePosNM, draw_list, mouseInBounds);
+		processMouseInputs = VehiclesWidget::Instance().DrawMapOverlay(mousePosScreenSpace, mousePosNM, draw_list, mouseInBounds);
 	
 	ImGui::EndChild();
 	mouseInBounds = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
@@ -496,7 +497,7 @@ void MapWidget::Draw(void) {
 	if (! Draw_NavigationAnimation()) {
 		//We keep track of the drag state ourselves so we can allow dragging to work even if the mouse leaves the widget
 		bool toolActive = m_AvoidanceZonesTool.toolActive || m_LandingZonesTool.toolActive || m_MSATool.toolActive || m_SurveyRegionsTool.toolActive;
-		bool startDrag = (mouseInBounds && ((ImGui::IsMouseClicked(1)) || (ImGui::IsMouseClicked(0) && (! toolActive))));
+		bool startDrag = (mouseInBounds && processMouseInputs && ((ImGui::IsMouseClicked(1)) || (ImGui::IsMouseClicked(0) && (! toolActive))));
 		if (startDrag) {
 			dragging = true;
 			MousePos_NormalizedMercator_OnLastClick = ScreenCoordsToNormalizedMercator(ImGui::GetMousePos());

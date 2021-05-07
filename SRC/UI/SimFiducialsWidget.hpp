@@ -10,8 +10,7 @@
 #include <chrono>
 
 //External Includes
-#include "../../../handycpp/Handy.hpp"
-#include "../../../imgui/app/ImGuiApp.hpp"
+#include "../HandyImGuiInclude.hpp"
 #include "../../../nativefiledialog/src/include/nfd.h"
 #include <opencv2/opencv.hpp>
 

@@ -10,8 +10,7 @@
 #include <chrono>
 
 //External Includes
-#include "../../../handycpp/Handy.hpp"
-#include "../../../imgui/app/ImGuiApp.hpp"
+#include "../HandyImGuiInclude.hpp"
 
 //Cereal Includes
 #include "cereal/types/vector.hpp"

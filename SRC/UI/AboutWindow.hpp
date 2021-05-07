@@ -9,8 +9,7 @@
 #include <memory>
 
 //External Includes
-#include "../../../handycpp/Handy.hpp"
-#include "../../../imgui/app/ImGuiApp.hpp"
+#include "../HandyImGuiInclude.hpp"
 
 class AboutWindow {
 	public:

@@ -10,6 +10,8 @@
 //External Includes
 #include "../../handycpp/Handy.hpp"
 
+inline double FractionalPart(double x) { return x - std::floor(x); }
+
 inline double SecondsSinceT0Epoch(std::chrono::time_point<std::chrono::steady_clock> const & Timepoint) {
 	auto duration = Timepoint.time_since_epoch();
 	return double(duration.count()) * double(std::chrono::steady_clock::period::num) / double(std::chrono::steady_clock::period::den);
