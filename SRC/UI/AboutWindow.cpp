@@ -7,7 +7,7 @@
 
 //Project Includes
 #include "AboutWindow.hpp"
-#include "../ImVecOps.hpp"
+//#include "../ImVecOps.hpp"
 #include "../Maps/SatelliteCacheMaster.hpp"
 
 AboutWindow::AboutWindow() {
@@ -31,7 +31,7 @@ void AboutWindow::Draw() {
 		
 		ImGui::BeginChild("About Scrollable Region", ImVec2(0,0), true, ImGuiWindowFlags_AlwaysUseWindowPadding);
 	
-		const char HeadingLabel[] = "Recon Drone Planning and Control Suite";
+		const char HeadingLabel[] = "Recon: A Flexible, Multi-Drone Ground Control Station";
 		float HeadingWidth = ImGui::CalcTextSize(HeadingLabel).x;
 		float gapWidth = std::max(0.5f*(ImGui::GetContentRegionAvail().x - HeadingWidth), 0.0f);
 		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + gapWidth);

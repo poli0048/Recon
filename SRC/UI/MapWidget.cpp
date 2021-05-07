@@ -44,20 +44,20 @@ static double Smoothstep(double x, int order) {
 constexpr int32_t MapWidget::tileWidth; //Constexprs need to be defines in a translation unit unless using C++17
 
 //Coordinate conversion utilities for screenSpace <--> Normalized Mercator (using current map widget state)
-Eigen::Vector2d MapWidget::ScreenCoordsToNormalizedMercator(ImVec2 ScreenCords) {
-	Eigen::Vector2d WidgetCoords  = Eigen::Vector2d(ScreenCords.x, ScreenCords.y) - MapWidgetULCorner_ScreenSpace;
+Eigen::Vector2d MapWidget::ScreenCoordsToNormalizedMercator(Eigen::Vector2d const & ScreenCords) {
+	Eigen::Vector2d WidgetCoords = ScreenCords - MapWidgetULCorner_ScreenSpace;
 	return WidgetCoordsToNormalizedMercator(WidgetCoords, WindowULCorner_NormalizedMercator, zoom, tileWidth);
 }
 
-ImVec2 MapWidget::NormalizedMercatorToScreenCoords(Eigen::Vector2d const & NMCoords) {
+Eigen::Vector2d MapWidget::NormalizedMercatorToScreenCoords(Eigen::Vector2d const & NMCoords) {
 	Eigen::Vector2d WidgetCoords = NormalizedMercatorToWidgetCoords(NMCoords, WindowULCorner_NormalizedMercator, zoom, tileWidth);
 	Eigen::Vector2d ScreenCoords = WidgetCoords + MapWidgetULCorner_ScreenSpace;
-	return ImVec2(ScreenCoords(0), ScreenCoords(1));
+	return ScreenCoords;
 }
 
 //Adjust map pan so the given NMCoords align with the given screen coords
-void MapWidget::SetMapPan(ImVec2 ScreenCoords, Eigen::Vector2d const & NMCoords) {
-	Eigen::Vector2d WidgetCoords = Eigen::Vector2d(ScreenCoords.x, ScreenCoords.y) - MapWidgetULCorner_ScreenSpace;
+void MapWidget::SetMapPan(Eigen::Vector2d const & ScreenCoords, Eigen::Vector2d const & NMCoords) {
+	Eigen::Vector2d WidgetCoords = ScreenCoords - MapWidgetULCorner_ScreenSpace;
 	
 	//Solve for WindowULCorner_NormalizedMercator so that:
 	//WidgetCoordsToNormalizedMercator(WidgetCoords, WindowULCorner_NormalizedMercator, zoom, tileWidth) = NMCoords
@@ -116,8 +116,7 @@ std::tuple<Eigen::Vector2d, double> MapWidget::GetMapLocationAndZoomForGivenLatL
 
 void MapWidget::GetCurrentLatLonBounds(Eigen::Vector2d & LatBounds, Eigen::Vector2d & LonBounds) {
 	Eigen::Vector2d MapWidgetLRCorner_ScreenSpace = MapWidgetULCorner_ScreenSpace + MapWidgetDims;
-	ImVec2 MapWidgetLRCorner_ScreenSpace_ImVec(MapWidgetLRCorner_ScreenSpace(0), MapWidgetLRCorner_ScreenSpace(1));
-	Eigen::Vector2d WindowLRCorner_NormalizedMercator = ScreenCoordsToNormalizedMercator(MapWidgetLRCorner_ScreenSpace_ImVec);
+	Eigen::Vector2d WindowLRCorner_NormalizedMercator = ScreenCoordsToNormalizedMercator(MapWidgetLRCorner_ScreenSpace);
 	
 	Eigen::Vector2d ULCornerLatLon = NMToLatLon(WindowULCorner_NormalizedMercator);
 	Eigen::Vector2d LRCornerLatLon = NMToLatLon(WindowLRCorner_NormalizedMercator);
@@ -396,7 +395,7 @@ void MapWidget::Draw(void) {
 		m_MSATool.toolActive = false;
 	}
 	
-	//If the mouse is in bounds of the widget, print the cursos position
+	//If the mouse is in bounds of the widget, print the cursor position
 	if (mouseInBounds) {
 		char degreeSign[3] = {0xC2_i8, 0xB0_i8, 0x00_i8};
 		Eigen::Vector2d mousePosLatLon = NMToLatLon(mousePosNM);

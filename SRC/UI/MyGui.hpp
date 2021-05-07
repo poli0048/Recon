@@ -12,7 +12,6 @@
 
 //Project Includes
 #include "../Colormaps.hpp"
-#include "../ImVecOps.hpp"
 #include "../Journal.h"
 
 namespace MyGui {

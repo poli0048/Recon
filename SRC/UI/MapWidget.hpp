@@ -36,9 +36,9 @@ class MapWidget {
 		//Secondary state variables - kept up to date in the draw loop
 		int32_t numSatTilesDrawn = 0;
 		int32_t numDataTilesDrawn = 0;
-		ImVec2 mousePosScreenSpace; //Position of mouse cursor - updated everytime we go through our draw loop.
-		Eigen::Vector2d mousePosNM; //Position of mouse cursor - updated everytime we go through our draw loop.
-		bool mouseInBounds;         //Whether the cursor is over the widget - updated each time through the draw loop.
+		Eigen::Vector2d mousePosScreenSpace; //Position of mouse cursor - updated everytime we go through our draw loop.
+		Eigen::Vector2d mousePosNM;          //Position of mouse cursor - updated everytime we go through our draw loop.
+		bool mouseInBounds;                  //Whether the cursor is over the widget - updated each time through the draw loop.
 		Eigen::Vector2d MapWidgetULCorner_ScreenSpace; //updated in draw loop - screen-space position of upper-left corner of widget
 		Eigen::Vector2d MapWidgetDims; //Dimensions of the map widget - updated every time we go through our draw loop. Format: <Width, Height>
 		
@@ -59,13 +59,13 @@ class MapWidget {
 		bool                             AnimationInProgress;   //Set when the animation is done and the End State has been effected.
 		
 		//Pan/Zoom adjustment and animation
-		void SetMapPan(ImVec2 ScreenCoords, Eigen::Vector2d const & NMCoords); //Adjust map pan so the given NMCoords align with the given screen coords
+		void SetMapPan(Eigen::Vector2d const & ScreenCoords, Eigen::Vector2d const & NMCoords); //Adjust map pan so the given NMCoords align with the given screen coords
 		bool Draw_NavigationAnimation(void); //Update state based on current animation, if applicable. Returns true during animations. Called from Draw().
 		void ComputeNavigationProfiles(std::tuple<Eigen::Vector2d, double> const & StartState, std::tuple<Eigen::Vector2d, double> const & EndState);
 		
 		//Coordinate conversion utilities (using current map widget state)
-		Eigen::Vector2d ScreenCoordsToNormalizedMercator(ImVec2                  ScreenCords);
-		ImVec2          NormalizedMercatorToScreenCoords(Eigen::Vector2d const & NMCoords   );
+		Eigen::Vector2d ScreenCoordsToNormalizedMercator(Eigen::Vector2d const & ScreenCords);
+		Eigen::Vector2d NormalizedMercatorToScreenCoords(Eigen::Vector2d const & NMCoords   );
 		
 		//Functions for drawing visible satellite and data tiles and flight paths
 		void Draw_SatTiles(int32_t MaxSatZoomLevel, Eigen::Vector4d const & ViewableAreaNM, ImDrawList * DrawList);

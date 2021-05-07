@@ -38,18 +38,20 @@ class SurveyRegionsTool {
 	};
 	
 	private:
-		Math::Vector2 m_popupDims;
+		Eigen::Vector2d m_popupDims;
 		
 		VertexAddress m_editNodeAddress;
 		std::Evector<Eigen::Vector2d> m_editPolyLine_NM; //When dragging or creating new object, this is the working copy of the simple polygon under edit
 
-		void DrawTriangle(Math::Vector2 p_min, float scale, ImDrawList * DrawList);
-		void Draw_DropDown(Math::Vector2 PopupULCorner, float PopupWidth);
+		void DrawTriangle(Eigen::Vector2d const & p_min, float scale, ImDrawList * DrawList);
+		void Draw_DropDown(Eigen::Vector2d const & PopupULCorner, float PopupWidth);
 		void Draw_Instructions(std::string const & Text, ImDrawList * DrawList);
 		
 		void FinishNewPolyOrHole(SurveyRegion * surveyRegion);
 		
 	public:
+		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+		
 		//Fields   ********************************************************************
 		bool toolActive;
 		
@@ -67,7 +69,7 @@ class SurveyRegionsTool {
 		~SurveyRegionsTool() = default;
 		
 		bool Draw_Button(void); //Returns true on transition from Inactive --> Active
-		void Draw_Overlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
+		void Draw_Overlay(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
 };
 
 

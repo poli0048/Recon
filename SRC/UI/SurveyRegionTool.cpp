@@ -6,19 +6,12 @@
 //Project Includes
 #include "SurveyRegionTool.hpp"
 #include "MapWidget.hpp"
-#include "../ImVecOps.hpp"
 #include "../Maps/MapUtils.hpp"
 #include "ModalDialogs.hpp"
 #include "MyGui.hpp"
 #include "VisWidget.hpp"
 
 #define PI 3.14159265358979
-
-static ImVec2 RoundToNearestPixel(ImVec2 P) {
-	P.x = std::round(P.x);
-	P.y = std::round(P.y);
-	return P;
-}
 
 SurveyRegionsTool::SurveyRegionsTool() :
 	m_popupDims(200,200),
@@ -34,9 +27,10 @@ bool SurveyRegionsTool::Draw_Button(void) {
 	auto style = ImGui::GetStyle();
 	ImGui::PushID("Survey Regions Tool");
 
-	Math::Vector2 RectULCorner = ImGui::GetCursorScreenPos();
-	RectULCorner.x -= style.ItemInnerSpacing.x;
-	ImGui::SetCursorScreenPos(RectULCorner + style.ItemInnerSpacing);
+	Eigen::Vector2d RectULCorner = ImGui::GetCursorScreenPos();
+	RectULCorner(0) -= style.ItemInnerSpacing.x;
+	Eigen::Vector2d cursorScreenPos = RectULCorner + (Eigen::Vector2d) style.ItemInnerSpacing;
+	ImGui::SetCursorScreenPos(cursorScreenPos);
 
 	//Display foreground first
 	draw_list->ChannelsSetCurrent(1);
@@ -44,16 +38,16 @@ bool SurveyRegionsTool::Draw_Button(void) {
 	ImGui::Text(u8" \uf5ee  Survey Region ");
 	
 	//Compute sizes and bounds of button regions
-	Math::Vector2 RectLRCorner = RectULCorner + ImGui::GetItemRectSize() + style.ItemInnerSpacing * Math::Vector2(2.0f, 2.0f);
-	Math::Vector2 ArrowULCorner = Math::Vector2(RectLRCorner.x, RectULCorner.y);
-	Math::Vector2 ArrowLRCorner = Math::Vector2(RectLRCorner.x + ImGui::GetFontSize(), RectLRCorner.y);
+	Eigen::Vector2d RectLRCorner = RectULCorner + (Eigen::Vector2d) ImGui::GetItemRectSize() + 2.0 * (Eigen::Vector2d) style.ItemInnerSpacing;
+	Eigen::Vector2d ArrowULCorner(RectLRCorner(0), RectULCorner(1));
+	Eigen::Vector2d ArrowLRCorner(RectLRCorner(0) + ImGui::GetFontSize(), RectLRCorner(1));
 	
 	DrawTriangle(ArrowULCorner, 1.0f, draw_list);
 	
 	//Display background for toggle button
 	ImGui::SetCursorScreenPos(RectULCorner);
 	draw_list->ChannelsSetCurrent(0);
-	if (ImGui::InvisibleButton("SurveyRegionButton", RectLRCorner - RectULCorner))
+	if (ImGui::InvisibleButton("SurveyRegionButton", (Eigen::Vector2d) (RectLRCorner - RectULCorner)))
 		toolActive = !toolActive;
 	
 	ImU32 bg_color;
@@ -72,7 +66,7 @@ bool SurveyRegionsTool::Draw_Button(void) {
 	
 	//Display background for arrow drop-down button
 	ImGui::SetCursorScreenPos(ArrowULCorner);
-	if (ImGui::InvisibleButton("SurveyRegionArrow", ArrowLRCorner - ArrowULCorner) && (!ImGui::IsPopupOpen("Popup")))
+	if (ImGui::InvisibleButton("SurveyRegionArrow", (Eigen::Vector2d) (ArrowLRCorner - ArrowULCorner)) && (!ImGui::IsPopupOpen("Popup")))
 		ImGui::OpenPopup("Survey Region DropDown");
 	bg_color = ImGui::IsItemHovered() ? ImColor(style.Colors[ImGuiCol_ButtonHovered]) : ImColor(style.Colors[ImGuiCol_Button]);
 	draw_list->AddRectFilled(ArrowULCorner, ArrowLRCorner, bg_color, 0.0f);
@@ -81,22 +75,23 @@ bool SurveyRegionsTool::Draw_Button(void) {
 	//Merge draw list channels
 	draw_list->ChannelsMerge();
 	
-	Draw_DropDown(Math::Vector2(RectULCorner.x, RectLRCorner.y), ArrowLRCorner.x - RectULCorner.x);
+	Eigen::Vector2d PopupULCorner(RectULCorner(0), RectLRCorner(1));
+	Draw_DropDown(PopupULCorner, ArrowLRCorner(0) - RectULCorner(0));
 	
 	ImGui::PopID();
 	return ((! wasToolActive) && toolActive);
 }
 
-void SurveyRegionsTool::Draw_DropDown(Math::Vector2 PopupULCorner, float PopupWidth) {
+void SurveyRegionsTool::Draw_DropDown(Eigen::Vector2d const & PopupULCorner, float PopupWidth) {
 	auto style = ImGui::GetStyle();
 	
-	ImRect popup_rect(PopupULCorner, PopupULCorner + m_popupDims);
+	ImRect popup_rect(PopupULCorner, (Eigen::Vector2d) (PopupULCorner + m_popupDims));
 	ImGui::SetNextWindowPos(popup_rect.Min);
 	ImGui::SetNextWindowSize(popup_rect.GetSize());
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, style.FramePadding);
 	
 	if (ImGui::BeginPopup("Survey Region DropDown")) {
-		Math::Vector2 WindowStartCursorPos = ImGui::GetCursorPos();
+		Eigen::Vector2d WindowStartCursorPos = ImGui::GetCursorPos();
 		
 		//Get the name of the currently active survey region
 		std::string regionName("None");
@@ -138,8 +133,8 @@ void SurveyRegionsTool::Draw_DropDown(Math::Vector2 PopupULCorner, float PopupWi
 		}
 		
 		float popupWidth  = std::max(13.0f*ImGui::GetFontSize(), ImGui::CalcTextSize(regionName.c_str()).x + 2.0f*ImGui::GetFontSize());
-		float popupHeight = ImGui::GetCursorPosY() - WindowStartCursorPos.y + 2.0f*style.FramePadding.y;
-		m_popupDims       = Math::Vector2(popupWidth, popupHeight);
+		float popupHeight = ImGui::GetCursorPosY() - WindowStartCursorPos(1) + 2.0f*style.FramePadding.y;
+		m_popupDims       << popupWidth, popupHeight;
 	
 		ImGui::EndPopup();
 	}
@@ -147,31 +142,30 @@ void SurveyRegionsTool::Draw_DropDown(Math::Vector2 PopupULCorner, float PopupWi
 	ImGui::PopStyleVar();
 }
 
-void SurveyRegionsTool::DrawTriangle(Math::Vector2 p_min, float scale, ImDrawList * DrawList) {
+void SurveyRegionsTool::DrawTriangle(Eigen::Vector2d const & p_min, float scale, ImDrawList * DrawList) {
 	const float h = ImGui::GetFontSize() * 1.00f;
 	const float r = h * 0.40f * scale;
-	Math::Vector2 center = p_min + Math::Vector2(h*0.50f, h*0.50f*scale);
+	Eigen::Vector2d center = p_min + Eigen::Vector2d(h*0.50f, h*0.50f*scale);
 
-	Math::Vector2 a, b, c;
-	center.y += r*0.25f;
-	a = center + Math::Vector2(0,1)*r;
-	b = center + Math::Vector2(-0.866f,-0.5f)*r;
-	c = center + Math::Vector2(0.866f,-0.5f)*r;
+	center(1) += r*0.25f;
+	Eigen::Vector2d a = center + Eigen::Vector2d(   0.0,  1.0)*r;
+	Eigen::Vector2d b = center + Eigen::Vector2d(-0.866, -0.5)*r;
+	Eigen::Vector2d c = center + Eigen::Vector2d( 0.866, -0.5)*r;
 
 	DrawList->AddTriangleFilled(a, b, c, ImGui::GetColorU32(ImGuiCol_Text));
 }
 
-static void DrawPlus(ImDrawList * DrawList, ImVec2 Center_ScreenSpace, ImU32 Color) {
-	ImVec2 p_min = Center_ScreenSpace;
-	ImVec2 p_max = Center_ScreenSpace;
-	p_min.x -= 2.0f;    p_min.y -= 10.0f;
-	p_max.x += 2.0f;    p_max.y += 10.0f;
+static void DrawPlus(ImDrawList * DrawList, Eigen::Vector2d const & Center_ScreenSpace, ImU32 Color) {
+	Eigen::Vector2d p_min = Center_ScreenSpace;
+	Eigen::Vector2d p_max = Center_ScreenSpace;
+	p_min(0) -= 2.0f;    p_min(1) -= 10.0f;
+	p_max(0) += 2.0f;    p_max(1) += 10.0f;
 	DrawList->AddRectFilled(p_min, p_max, Color, 0.0f, ImDrawCornerFlags_None);
 	//DrawList->AddRectFilled(p_min, p_max, Color, 0.0f, ImDrawCornerFlags_All);
 	p_min = Center_ScreenSpace;
 	p_max = Center_ScreenSpace;
-	p_min.x -= 10.0f;    p_min.y -= 2.0f;
-	p_max.x += 10.0f;    p_max.y += 2.0f;
+	p_min(0) -= 10.0f;    p_min(1) -= 2.0f;
+	p_max(0) += 10.0f;    p_max(1) += 2.0f;
 	DrawList->AddRectFilled(p_min, p_max, Color, 0.0f, ImDrawCornerFlags_None);
 	//DrawList->AddRectFilled(p_min, p_max, Color, 0.0f, ImDrawCornerFlags_All);
 }
@@ -202,7 +196,7 @@ void SurveyRegionsTool::Draw_Instructions(std::string const & Text, ImDrawList *
 }
 
 
-void SurveyRegionsTool::Draw_Overlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds) {
+void SurveyRegionsTool::Draw_Overlay(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds) {
 	//If the survey region layer isn't supposed to be visible just return now
 	if (! VisWidget::Instance().LayerVisible_SurveyRegion)
 		return;
@@ -219,9 +213,9 @@ void SurveyRegionsTool::Draw_Overlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector
 	auto prevFlags = DrawList->Flags;
 	DrawList->Flags = (DrawList->Flags & (~ImDrawListFlags_AntiAliasedFill)); //Disable anti-aliasing to prevent seams along triangle edges
 	for (auto const & triangle : surveyRegion->m_triangulation) {
-		ImVec2 pointA_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointA);
-		ImVec2 pointB_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointB);
-		ImVec2 pointC_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointC);
+		Eigen::Vector2d pointA_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointA);
+		Eigen::Vector2d pointB_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointB);
+		Eigen::Vector2d pointC_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointC);
 		DrawList->AddTriangleFilled(pointA_ScreenSpace, pointB_ScreenSpace, pointC_ScreenSpace, fillColor);
 	}
 	DrawList->Flags = prevFlags; //Restore previous flags (restore previous anti-aliasing state)
@@ -242,7 +236,7 @@ void SurveyRegionsTool::Draw_Overlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector
 		}
 		
 		//Convert vertex vectors for each simple poly to screen space and hover-test them
-		std::vector<std::vector<ImVec2>> simplePolyVertices_ScreenSpace;
+		std::Evector<std::Evector<Eigen::Vector2d>> simplePolyVertices_ScreenSpace;
 		simplePolyVertices_ScreenSpace.reserve(simplePolys.size());
 		VertexAddress hoveredVertexAddress; //Left with componentIndex = -1 if nothing is hovered
 		for (auto const & item : simplePolys) {
@@ -252,12 +246,9 @@ void SurveyRegionsTool::Draw_Overlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector
 			simplePolyVertices_ScreenSpace.emplace_back();
 			simplePolyVertices_ScreenSpace.back().reserve(vertices_NM.size());
 			for (int index = 0; index < int(vertices_NM.size()); index++) {
-				ImVec2 vertex_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(vertices_NM[index]);
+				Eigen::Vector2d vertex_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(vertices_NM[index]);
 				simplePolyVertices_ScreenSpace.back().push_back(vertex_ScreenSpace);
-				float deltaX = CursorPos_ScreenSpace.x - vertex_ScreenSpace.x;
-				float deltaY = CursorPos_ScreenSpace.y - vertex_ScreenSpace.y;
-				float cursorDist_pixels = std::sqrt(deltaX * deltaX + deltaY * deltaY);
-				if (cursorDist_pixels < nodeRadius_pixels)
+				if ((CursorPos_ScreenSpace - vertex_ScreenSpace).norm() < nodeRadius_pixels)
 					hoveredVertexAddress = VertexAddress(simplePolyAddress, index);
 			}
 		}
@@ -266,11 +257,11 @@ void SurveyRegionsTool::Draw_Overlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector
 		for (int simplePolyIndex = 0; simplePolyIndex < int(simplePolys.size()); simplePolyIndex++) {
 			auto simpPolyAddr = std::get<0>(simplePolys[simplePolyIndex]);
 			if ((m_toolState != 1) || (simpPolyAddr.componentIndex != m_editNodeAddress.componentIndex) || (simpPolyAddr.holeIndex != m_editNodeAddress.holeIndex)) {
-				std::vector<ImVec2> const & Vertices_ScreenSpace(simplePolyVertices_ScreenSpace[simplePolyIndex]);
+				std::Evector<Eigen::Vector2d> const & Vertices_ScreenSpace(simplePolyVertices_ScreenSpace[simplePolyIndex]);
 				//Do not use the busted-ass AddPolyline() function for this or edge thicknesses will be all over the place
 				for (int index = 0; index < int(Vertices_ScreenSpace.size()); index++) {
-					ImVec2 p1 = Vertices_ScreenSpace[index];
-					ImVec2 p2 = (index + 1 == int(Vertices_ScreenSpace.size())) ? Vertices_ScreenSpace[0] : Vertices_ScreenSpace[index + 1];
+					Eigen::Vector2d p1 = Vertices_ScreenSpace[index];
+					Eigen::Vector2d p2 = (index + 1 == int(Vertices_ScreenSpace.size())) ? Vertices_ScreenSpace[0] : Vertices_ScreenSpace[index + 1];
 					DrawList->AddLine(p1, p2, IM_COL32(0, 0, 0, 255), edgeThickness_pixels);
 				}
 			}
@@ -278,13 +269,13 @@ void SurveyRegionsTool::Draw_Overlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector
 		
 		//Draw edge under edit
 		if (! m_editPolyLine_NM.empty()) {
-			std::vector<ImVec2> vertices_ScreenSpace;
+			std::Evector<Eigen::Vector2d> vertices_ScreenSpace;
 			vertices_ScreenSpace.reserve(m_editPolyLine_NM.size());
 			for (auto const & vertex_NM : m_editPolyLine_NM)
 				vertices_ScreenSpace.push_back(MapWidget::Instance().NormalizedMercatorToScreenCoords(vertex_NM));
 			for (int index = 0; index < int(vertices_ScreenSpace.size()); index++) {
-				ImVec2 p1 = vertices_ScreenSpace[index];
-				ImVec2 p2 = (index + 1 == int(vertices_ScreenSpace.size())) ? vertices_ScreenSpace[0] : vertices_ScreenSpace[index + 1];
+				Eigen::Vector2d p1 = vertices_ScreenSpace[index];
+				Eigen::Vector2d p2 = (index + 1 == int(vertices_ScreenSpace.size())) ? vertices_ScreenSpace[0] : vertices_ScreenSpace[index + 1];
 				if ((m_toolState < 2) || (index + 1 < int(vertices_ScreenSpace.size())))
 					DrawList->AddLine(p1, p2, IM_COL32(0, 0, 0, 255), edgeThickness_pixels);
 			}
@@ -295,7 +286,7 @@ void SurveyRegionsTool::Draw_Overlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector
 			for (int simplePolyIndex = 0; simplePolyIndex < int(simplePolys.size()); simplePolyIndex++) {
 				auto simplePolyAddress = std::get<0>(simplePolys[simplePolyIndex]);
 				//auto simplePolyPtr     = std::get<1>(simplePolys[simplePolyIndex]);
-				std::vector<ImVec2> const & Vertices_ScreenSpace(simplePolyVertices_ScreenSpace[simplePolyIndex]);
+				std::Evector<Eigen::Vector2d> const & Vertices_ScreenSpace(simplePolyVertices_ScreenSpace[simplePolyIndex]);
 				if ((m_editNodeAddress.componentIndex != simplePolyAddress.componentIndex) || (m_editNodeAddress.holeIndex != simplePolyAddress.holeIndex)) {
 					for (int vertexIndex = 0; vertexIndex < int(Vertices_ScreenSpace.size()); vertexIndex++) {
 						ImU32 nodeColor = IM_COL32(150, 150, 150, 255);
@@ -309,7 +300,7 @@ void SurveyRegionsTool::Draw_Overlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector
 		
 		//Draw Nodes of simple polygons under edit
 		for (int vertexIndex = 0; vertexIndex < int(m_editPolyLine_NM.size()); vertexIndex++) {
-			ImVec2 vertex_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(m_editPolyLine_NM[vertexIndex]);
+			Eigen::Vector2d vertex_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(m_editPolyLine_NM[vertexIndex]);
 			ImU32 nodeColor = IM_COL32(150, 150, 150, 255);
 			if (vertexIndex == m_editNodeAddress.vertexIndex)
 				nodeColor = IM_COL32(255, 255, 255, 255);
@@ -366,7 +357,7 @@ void SurveyRegionsTool::Draw_Overlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector
 							double delta_NM = (projection_NM - CursorPos_NM).norm();
 							double delta_pixels = PixelsPerNMUnit * delta_NM;
 							if (delta_pixels < nodeRadius_pixels) {
-								ImVec2 projection_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(projection_NM);
+								//Eigen::Vector2d projection_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(projection_NM);
 								//DrawPlus(DrawList, projection_ScreenSpace, IM_COL32(255, 255, 255, 255));
 								InstructionsStr = std::string("Click to add vertex.");
 								if (ImGui::IsMouseClicked(0)) {
@@ -417,12 +408,8 @@ void SurveyRegionsTool::Draw_Overlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector
 			if (CursorInBounds) {
 				bool vertexHovered = false;
 				for (int vertexIndex = 0; vertexIndex < int(m_editPolyLine_NM.size()); vertexIndex++) {
-					ImVec2 vertex_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(m_editPolyLine_NM[vertexIndex]);
-					float deltaX = CursorPos_ScreenSpace.x - vertex_ScreenSpace.x;
-					float deltaY = CursorPos_ScreenSpace.y - vertex_ScreenSpace.y;
-					float cursorDist_pixels = std::sqrt(deltaX * deltaX + deltaY * deltaY);
-					if (cursorDist_pixels < nodeRadius_pixels) {
-						//This vertex is hovered
+					Eigen::Vector2d vertex_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(m_editPolyLine_NM[vertexIndex]);
+					if ((CursorPos_ScreenSpace - vertex_ScreenSpace).norm() < nodeRadius_pixels) {
 						vertexHovered = true;
 						
 						//Hovering over the initial vertex
@@ -430,8 +417,8 @@ void SurveyRegionsTool::Draw_Overlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector
 							InstructionsStr = std::string("Click to finish object.\nPress 'Del' or 'Backspace' to delete vertex.");
 							
 							//Add a visual indicator at the point of action that finishing the polygon is happening
-							ImVec2 vertex_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(m_editPolyLine_NM[0]);
-							DrawList->AddCircleFilled(vertex_ScreenSpace, 2.0f*nodeRadius_pixels, IM_COL32(255, 255, 255, 255), 30);
+							Eigen::Vector2d initVertex_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(m_editPolyLine_NM[0]);
+							DrawList->AddCircleFilled(initVertex_ScreenSpace, 2.0f*nodeRadius_pixels, IM_COL32(255, 255, 255, 255), 30);
 							
 							if (ImGui::IsMouseClicked(0)) {
 								FinishNewPolyOrHole(surveyRegion);
@@ -496,7 +483,7 @@ void SurveyRegionsTool::Draw_Overlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector
 					InstructionsStr = "Drop to complete object."s;
 					
 					//Add a visual indicator at the point of action that finishing the polygon is happening
-					ImVec2 vertex_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(m_editPolyLine_NM[0]);
+					Eigen::Vector2d vertex_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(m_editPolyLine_NM[0]);
 					DrawList->AddCircleFilled(vertex_ScreenSpace, 2.0f*nodeRadius_pixels, IM_COL32(255, 255, 255, 255), 30);
 				}
 			}

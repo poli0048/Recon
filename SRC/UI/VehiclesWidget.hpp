@@ -81,7 +81,7 @@ class VehiclesWidget {
 		
 		//The overlay returns true of the map widget should process mouse input and false if we have already processed it and the widget should ignore it
 		inline void Draw();
-		inline bool DrawMapOverlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
+		inline bool DrawMapOverlay(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
 	
 	private:
 		Journal & Log;
@@ -123,7 +123,8 @@ class VehiclesWidget {
 		}
 		
 		static inline std::filesystem::path GetPathForSimVideoInput(void);
-		static inline bool IsDroneHovered(ImVec2 CursorPos_ScreenSpace, Eigen::Vector2d const & drone_ScreenSpace, Eigen::Matrix2d const & R, float IconWidth_pixels);
+		static inline bool IsDroneHovered(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & drone_ScreenSpace,
+		                                  Eigen::Matrix2d const & R, float IconWidth_pixels);
 		
 		inline void StartManualControl(DroneInterface::Drone & Drone, vehicleState & State);
 		inline void StopManualControl(DroneInterface::Drone & Drone, vehicleState & State);
@@ -134,7 +135,7 @@ class VehiclesWidget {
 		inline void DrawVideoWindows(void);
 		inline void ControlThreadMain(void);
 		
-		inline void DrawMission_ManualControl(vehicleState * State, ImVec2 dronePos_ScreenSpace, ImDrawList * DrawList);
+		inline void DrawMission_ManualControl(vehicleState * State, Eigen::Vector2d const & dronePos_ScreenSpace, ImDrawList * DrawList);
 		
 		//Limited coordinate conversion utilities
 		static inline Eigen::Vector3d positionLLA2ECEF(double lat, double lon, double alt);
@@ -333,37 +334,35 @@ inline void VehiclesWidget::DrawVideoWindows(void) {
 	}
 }
 
-inline bool VehiclesWidget::IsDroneHovered(ImVec2 CursorPos_ScreenSpace, Eigen::Vector2d const & drone_ScreenSpace, Eigen::Matrix2d const & R, float IconWidth_pixels) {
-	Eigen::Vector2d cursorScreenSpace(CursorPos_ScreenSpace.x, CursorPos_ScreenSpace.y);
-	Eigen::Vector2d v = cursorScreenSpace - drone_ScreenSpace;
+inline bool VehiclesWidget::IsDroneHovered(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & drone_ScreenSpace,
+                                           Eigen::Matrix2d const & R, float IconWidth_pixels) {
+	Eigen::Vector2d v = CursorPos_ScreenSpace - drone_ScreenSpace;
 	Eigen::Vector2d w = R.transpose()*v;
 	return ((w(0) >= -0.5f*IconWidth_pixels) && (w(0) <= 0.5f*IconWidth_pixels) &&
 	        (w(1) >= -0.5f*IconWidth_pixels) && (w(1) <= 0.5f*IconWidth_pixels));
 }
 
-inline void VehiclesWidget::DrawMission_ManualControl(vehicleState * State, ImVec2 dronePos_ScreenSpace, ImDrawList * DrawList) {
+inline void VehiclesWidget::DrawMission_ManualControl(vehicleState * State, Eigen::Vector2d const & dronePos_ScreenSpace, ImDrawList * DrawList) {
 	float droneIconWidth_pixels = ProgOptions::Instance()->DroneIconScale*96.0f;
 	Eigen::Vector2d targetPos_NM = LatLonToNM(State->m_targetLatLon);
-	ImVec2 targetPos_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(targetPos_NM);
-	Eigen::Vector2d target(targetPos_ScreenSpace.x, targetPos_ScreenSpace.y);
-	Eigen::Vector2d droneCenter(dronePos_ScreenSpace.x, dronePos_ScreenSpace.y);
-	Eigen::Vector2d v = target - droneCenter;
+	Eigen::Vector2d targetPos_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(targetPos_NM);
+	Eigen::Vector2d v = targetPos_ScreenSpace - dronePos_ScreenSpace;
 	if (v.norm() > droneIconWidth_pixels) {
 		//Only draw if the drone isn't essentially on top of it's target position
 		int numSegments = (int) std::floor(v.norm() / (3.0 * ImGui::GetFontSize()));
 		
 		v.normalize();
-		Eigen::Vector2d p0 = target - (ImGui::GetFontSize() - 1.0)*v;
-		DrawList->AddLine(dronePos_ScreenSpace, ImVec2(p0(0), p0(1)), IM_COL32(180,180,180,128), ImGui::GetFontSize()/3.0f);
+		Eigen::Vector2d p0 = targetPos_ScreenSpace - (ImGui::GetFontSize() - 1.0)*v;
+		DrawList->AddLine(dronePos_ScreenSpace, p0, IM_COL32(180,180,180,128), ImGui::GetFontSize()/3.0f);
 		
 		Eigen::Matrix2d R;
 		R << 0, -1,
 			1,  0;
 		Eigen::Vector2d w = R*v;
-		Eigen::Vector2d p1 = target;
+		Eigen::Vector2d p1 = targetPos_ScreenSpace;
 		Eigen::Vector2d p2 = p1 - ImGui::GetFontSize()*v + ImGui::GetFontSize()/2.0f*w;
 		Eigen::Vector2d p3 = p1 - ImGui::GetFontSize()*v - ImGui::GetFontSize()/2.0f*w;
-		DrawList->AddTriangleFilled(ImVec2(p1(0), p1(1)), ImVec2(p2(0), p2(1)), ImVec2(p3(0), p3(1)), IM_COL32(180,180,180,255));
+		DrawList->AddTriangleFilled(p1, p2, p3, IM_COL32(180,180,180,255));
 		
 		//For simple animation: t goes from 0 to 1 every 3 seconds and then repeats
 		double t = FractionalPart(SecondsSinceT0Epoch(std::chrono::steady_clock::now())/3.0);
@@ -374,14 +373,15 @@ inline void VehiclesWidget::DrawMission_ManualControl(vehicleState * State, ImVe
 			p2 = p1 - ImGui::GetFontSize()*v + ImGui::GetFontSize()/2.0f*w;
 			p3 = p1 - ImGui::GetFontSize()*v - ImGui::GetFontSize()/2.0f*w;
 			if (n + 1 < numSegments)
-				DrawList->AddTriangleFilled(ImVec2(p1(0), p1(1)), ImVec2(p2(0), p2(1)), ImVec2(p3(0), p3(1)), IM_COL32(180,180,180,255));
+				DrawList->AddTriangleFilled(p1, p2, p3, IM_COL32(180,180,180,255));
 			else
-				DrawList->AddTriangleFilled(ImVec2(p1(0), p1(1)), ImVec2(p2(0), p2(1)), ImVec2(p3(0), p3(1)), IM_COL32(180,180,180,t*255));
+				DrawList->AddTriangleFilled(p1, p2, p3, IM_COL32(180,180,180,t*255));
 		}
 	}
 }
 
-inline bool VehiclesWidget::DrawMapOverlay(ImVec2 CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds) {
+inline bool VehiclesWidget::DrawMapOverlay(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList,
+                                           bool CursorInBounds) {
 	float droneIconWidth_pixels = ProgOptions::Instance()->DroneIconScale*96.0f;
 	
 	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
@@ -409,13 +409,12 @@ inline bool VehiclesWidget::DrawMapOverlay(ImVec2 CursorPos_ScreenSpace, Eigen::
 		if (drones[n]->GetPosition(Latitude, Longitude, Altitude, Timestamp) && drones[n]->GetOrientation(Yaw, Pitch, Roll, Timestamp)) {
 			Eigen::Vector2d dronePos_LatLon(Latitude, Longitude);
 			Eigen::Vector2d dronePos_NM = LatLonToNM(dronePos_LatLon);
-			ImVec2 dronePos_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(dronePos_NM);
-			Eigen::Vector2d drone_ScreenSpace(dronePos_ScreenSpace.x, dronePos_ScreenSpace.y);
+			Eigen::Vector2d dronePos_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(dronePos_NM);
 			
 			Eigen::Matrix2d R;
 			R << cos(Yaw), -sin(Yaw),
 			     sin(Yaw),  cos(Yaw);
-			if (IsDroneHovered(CursorPos_ScreenSpace, drone_ScreenSpace, R, droneIconWidth_pixels)) {
+			if (IsDroneHovered(CursorPos_ScreenSpace, dronePos_ScreenSpace, R, droneIconWidth_pixels)) {
 				droneHoveredIndex = int(n);
 				break;
 			}
@@ -442,24 +441,22 @@ inline bool VehiclesWidget::DrawMapOverlay(ImVec2 CursorPos_ScreenSpace, Eigen::
 						if (CursorInBounds) {
 							Eigen::Vector2d dronePos_LatLon(Latitude, Longitude);
 							Eigen::Vector2d dronePos_NM = LatLonToNM(dronePos_LatLon);
-							ImVec2 dronePos_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(dronePos_NM);
+							Eigen::Vector2d dronePos_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(dronePos_NM);
 							
 							//All calculations in this block are in screen space
-							Eigen::Vector2d cursor(CursorPos_ScreenSpace.x, CursorPos_ScreenSpace.y);
-							Eigen::Vector2d drone(dronePos_ScreenSpace.x, dronePos_ScreenSpace.y);
-							Eigen::Vector2d v = drone - cursor;
+							Eigen::Vector2d v = dronePos_ScreenSpace - CursorPos_ScreenSpace;
 							if (v.norm() > 5.0) {
 								v.normalize();
 								Eigen::Matrix2d R;
 								R << 0, -1,
 									1,  0;
 								Eigen::Vector2d w = R*v;
-								Eigen::Vector2d p1 = cursor;
-								Eigen::Vector2d p2 = cursor + ImGui::GetFontSize()*v + ImGui::GetFontSize()/2.0f*w;
-								Eigen::Vector2d p3 = cursor + ImGui::GetFontSize()*v - ImGui::GetFontSize()/2.0f*w;
-								Eigen::Vector2d p4 = cursor + (ImGui::GetFontSize() - 1.0)*v;
-								DrawList->AddLine(dronePos_ScreenSpace, ImVec2(p4(0), p4(1)), IM_COL32_WHITE, ImGui::GetFontSize()/3.0f);
-								DrawList->AddTriangleFilled(ImVec2(p1(0), p1(1)), ImVec2(p2(0), p2(1)), ImVec2(p3(0), p3(1)), IM_COL32_WHITE);
+								Eigen::Vector2d p1 = CursorPos_ScreenSpace;
+								Eigen::Vector2d p2 = CursorPos_ScreenSpace + ImGui::GetFontSize()*v + ImGui::GetFontSize()/2.0f*w;
+								Eigen::Vector2d p3 = CursorPos_ScreenSpace + ImGui::GetFontSize()*v - ImGui::GetFontSize()/2.0f*w;
+								Eigen::Vector2d p4 = CursorPos_ScreenSpace + (ImGui::GetFontSize() - 1.0)*v;
+								DrawList->AddLine(dronePos_ScreenSpace, p4, IM_COL32_WHITE, ImGui::GetFontSize()/3.0f);
+								DrawList->AddTriangleFilled(p1, p2, p3, IM_COL32_WHITE);
 							}
 						}
 					}
@@ -516,37 +513,32 @@ inline bool VehiclesWidget::DrawMapOverlay(ImVec2 CursorPos_ScreenSpace, Eigen::
 		if (drones[n]->GetPosition(Latitude, Longitude, Altitude, Timestamp) && drones[n]->GetOrientation(Yaw, Pitch, Roll, Timestamp)) {
 			Eigen::Vector2d dronePos_LatLon(Latitude, Longitude);
 			Eigen::Vector2d dronePos_NM = LatLonToNM(dronePos_LatLon);
-			ImVec2 dronePos_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(dronePos_NM);
-			Eigen::Vector2d droneCenter(dronePos_ScreenSpace.x, dronePos_ScreenSpace.y);
+			Eigen::Vector2d dronePos_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(dronePos_NM);
 			
 			//Draw an indication of the current objective or mission for the drone (target location or current waypoint mission)
 			if (droneStates[n]->m_userControlEnabled && (! std::isnan(droneStates[n]->m_targetLatLon(0))) && (! std::isnan(droneStates[n]->m_targetLatLon(1))))
-				DrawMission_ManualControl(droneStates[n], dronePos_ScreenSpace, DrawList);
+				DrawMission_ManualControl(droneStates[n], dronePos_SS, DrawList);
 			else {
 				//TODO: Check for current waypoint mission and if the drone has one draw it
 			}
 			
-			Eigen::Vector2d p1_ScreenSpace = droneCenter + Eigen::Vector2d(-1.0*droneIconWidth_pixels/2.0f, -1.0*droneIconWidth_pixels/2.0f);
-			Eigen::Vector2d p2_ScreenSpace = droneCenter + Eigen::Vector2d(     droneIconWidth_pixels/2.0f, -1.0*droneIconWidth_pixels/2.0f);
-			Eigen::Vector2d p3_ScreenSpace = droneCenter + Eigen::Vector2d(     droneIconWidth_pixels/2.0f,      droneIconWidth_pixels/2.0f);
-			Eigen::Vector2d p4_ScreenSpace = droneCenter + Eigen::Vector2d(-1.0*droneIconWidth_pixels/2.0f,      droneIconWidth_pixels/2.0f);
+			Eigen::Vector2d p1_SS = dronePos_SS + Eigen::Vector2d(-1.0*droneIconWidth_pixels/2.0f, -1.0*droneIconWidth_pixels/2.0f);
+			Eigen::Vector2d p2_SS = dronePos_SS + Eigen::Vector2d(     droneIconWidth_pixels/2.0f, -1.0*droneIconWidth_pixels/2.0f);
+			Eigen::Vector2d p3_SS = dronePos_SS + Eigen::Vector2d(     droneIconWidth_pixels/2.0f,      droneIconWidth_pixels/2.0f);
+			Eigen::Vector2d p4_SS = dronePos_SS + Eigen::Vector2d(-1.0*droneIconWidth_pixels/2.0f,      droneIconWidth_pixels/2.0f);
 			
 			Eigen::Matrix2d R;
 			R << cos(Yaw), -sin(Yaw),
 			     sin(Yaw),  cos(Yaw);
-			p1_ScreenSpace = R*(p1_ScreenSpace - droneCenter) + droneCenter;
-			p2_ScreenSpace = R*(p2_ScreenSpace - droneCenter) + droneCenter;
-			p3_ScreenSpace = R*(p3_ScreenSpace - droneCenter) + droneCenter;
-			p4_ScreenSpace = R*(p4_ScreenSpace - droneCenter) + droneCenter;
+			p1_SS = R*(p1_SS - dronePos_SS) + dronePos_SS;
+			p2_SS = R*(p2_SS - dronePos_SS) + dronePos_SS;
+			p3_SS = R*(p3_SS - dronePos_SS) + dronePos_SS;
+			p4_SS = R*(p4_SS - dronePos_SS) + dronePos_SS;
 			
-			ImVec2 p1(p1_ScreenSpace(0), p1_ScreenSpace(1));
-			ImVec2 p2(p2_ScreenSpace(0), p2_ScreenSpace(1));
-			ImVec2 p3(p3_ScreenSpace(0), p3_ScreenSpace(1));
-			ImVec2 p4(p4_ScreenSpace(0), p4_ScreenSpace(1));
 			if (int(n) == droneHoveredIndex)
-				DrawList->AddImageQuad(m_IconTexture_HighlightedDroneWithArrow, p1, p2, p3, p4);
+				DrawList->AddImageQuad(m_IconTexture_HighlightedDroneWithArrow, p1_SS, p2_SS, p3_SS, p4_SS);
 			else
-				DrawList->AddImageQuad(m_IconTexture_DroneWithArrow, p1, p2, p3, p4);
+				DrawList->AddImageQuad(m_IconTexture_DroneWithArrow, p1_SS, p2_SS, p3_SS, p4_SS);
 			
 			//Add Text for n+1 under drone (and manual control indicator)
 			std::string droneLabel = std::to_string((unsigned int) n + 1U);
@@ -554,18 +546,16 @@ inline bool VehiclesWidget::DrawMapOverlay(ImVec2 CursorPos_ScreenSpace, Eigen::
 				droneLabel += u8" \uf11b";
 			ImVec2 textSize = ImGui::CalcTextSize(droneLabel.c_str());
 			
-			Eigen::Vector2d p5_ScreenSpace = 0.5*(p3_ScreenSpace + p4_ScreenSpace);
+			Eigen::Vector2d p5_ScreenSpace = 0.5*(p3_SS + p4_SS);
 			Eigen::Vector2d v1 = R*Eigen::Vector2d(0.0, 1.0);
 			Eigen::Vector2d p6_ScreenSpace = p5_ScreenSpace + v1*double(textSize.y); //Center point of text
-			//ImVec2 p6(p6_ScreenSpace(0) - textSize.x/2.0f, p6_ScreenSpace(1) - textSize.y/2.0f); //Offset half the text size so p6 represents center of text
-			//DrawList->AddText(p6, IM_COL32_WHITE, droneLabel.c_str());
 			MyGui::AddText(DrawList, p6_ScreenSpace, IM_COL32_WHITE, droneLabel.c_str(), NULL, true, true);
 		}
 	}
 	
 	{
 		//Draw Drone Control Popup
-		ImExt::Style styleSitter(StyleVar::WindowPadding, Math::Vector2(4.0f));
+		ImExt::Style styleSitter(StyleVar::WindowPadding, ImVec2(4.0f, 4.0f));
 		if (ImGui::BeginPopup("Drone Control Popup", ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize)) {
 			if ((m_indexOfDroneWithContextMenuOpen < 0) || (m_indexOfDroneWithContextMenuOpen >= int(droneStates.size()))) {
 				m_indexOfDroneWithContextMenuOpen = -1;
@@ -603,7 +593,7 @@ inline bool VehiclesWidget::DrawMapOverlay(ImVec2 CursorPos_ScreenSpace, Eigen::
 				ImGui::SameLine();
 				ImGui::TextDisabled(u8"\uf059");
 				if (ImGui::IsItemHovered()) {
-					ImExt::Style tooltipStyle(StyleVar::WindowPadding, Math::Vector2(4.0f));
+					ImExt::Style tooltipStyle(StyleVar::WindowPadding, ImVec2(4.0f, 4.0f));
 					ImGui::BeginTooltip();
 					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
 					ImGui::TextUnformatted("If checked, the vehicle will yaw to point in the direction of motion each time it is commanded to move.");
@@ -625,61 +615,56 @@ inline bool VehiclesWidget::DrawMapOverlay(ImVec2 CursorPos_ScreenSpace, Eigen::
 				
 				//Make a fancy yaw widget
 				ImU32 composCol = IM_COL32(255,100,100,255);
-				ImVec2 startPos_ScreenSpace = ImGui::GetCursorScreenPos();
+				Eigen::Vector2d startPos_ScreenSpace = ImGui::GetCursorScreenPos();
 				float widgetSize = height + 2.0f*ImGui::GetStyle().FramePadding.y + ImGui::GetFontSize();
 				ImGui::Dummy(ImVec2(widgetSize, widgetSize));
 				ImDrawList * draw_list = ImGui::GetWindowDrawList();
-				Eigen::Vector2d center(startPos_ScreenSpace.x + widgetSize/2.0f, startPos_ScreenSpace.y + widgetSize/2.0f);
+				Eigen::Vector2d center(startPos_ScreenSpace(0) + widgetSize/2.0f, startPos_ScreenSpace(1) + widgetSize/2.0f);
 				float radius = 0.45f*widgetSize - ImGui::GetFontSize()/2.0f;
-				draw_list->AddCircle(ImVec2(center(0), center(1)), radius, composCol, 80, ImGui::GetFontSize());
+				draw_list->AddCircle(center, radius, composCol, 80, ImGui::GetFontSize());
 				
 				//Draw North marker
 				Eigen::Vector2d NCenter = center - Eigen::Vector2d(0.0, radius - 0.55*ImGui::GetFontSize());
-				draw_list->AddCircleFilled(ImVec2(NCenter(0), NCenter(1)), ImGui::GetFontSize(), composCol, 20);
-				MyGui::AddText(draw_list, ImVec2(NCenter(0), NCenter(1)), IM_COL32_BLACK, "N", NULL, true, true);
+				draw_list->AddCircleFilled(NCenter, ImGui::GetFontSize(), composCol, 20);
+				MyGui::AddText(draw_list, NCenter, IM_COL32_BLACK, "N", NULL, true, true);
 				
 				//Draw South marker
 				Eigen::Vector2d SCenter = center + Eigen::Vector2d(0.0, radius - 0.55*ImGui::GetFontSize());
-				draw_list->AddCircleFilled(ImVec2(SCenter(0), SCenter(1)), ImGui::GetFontSize(), composCol, 20);
-				MyGui::AddText(draw_list, ImVec2(SCenter(0), SCenter(1)), IM_COL32_BLACK, "S", NULL, true, true);
+				draw_list->AddCircleFilled(SCenter, ImGui::GetFontSize(), composCol, 20);
+				MyGui::AddText(draw_list, SCenter, IM_COL32_BLACK, "S", NULL, true, true);
 				
 				//Draw East marker
 				Eigen::Vector2d ECenter = center + Eigen::Vector2d(radius - 0.55*ImGui::GetFontSize(), 0.0);
-				draw_list->AddCircleFilled(ImVec2(ECenter(0), ECenter(1)), ImGui::GetFontSize(), composCol, 20);
-				MyGui::AddText(draw_list, ImVec2(ECenter(0), ECenter(1)), IM_COL32_BLACK, "E", NULL, true, true);
+				draw_list->AddCircleFilled(ECenter, ImGui::GetFontSize(), composCol, 20);
+				MyGui::AddText(draw_list, ECenter, IM_COL32_BLACK, "E", NULL, true, true);
 				
 				//Draw West marker
 				Eigen::Vector2d WCenter = center - Eigen::Vector2d(radius - 0.55*ImGui::GetFontSize(), 0.0);
-				draw_list->AddCircleFilled(ImVec2(WCenter(0), WCenter(1)), ImGui::GetFontSize(), composCol, 20);
-				MyGui::AddText(draw_list, ImVec2(WCenter(0), WCenter(1)), IM_COL32_BLACK, "W", NULL, true, true);
+				draw_list->AddCircleFilled(WCenter, ImGui::GetFontSize(), composCol, 20);
+				MyGui::AddText(draw_list, WCenter, IM_COL32_BLACK, "W", NULL, true, true);
 				
 				//Draw drone icon
 				float iconWidth = std::min(0.75f*radius, 2.0f*droneIconWidth_pixels);
-				Eigen::Vector2d p1_ScreenSpace = center + Eigen::Vector2d(-1.0*iconWidth/2.0f, -1.0*iconWidth/2.0f);
-				Eigen::Vector2d p2_ScreenSpace = center + Eigen::Vector2d(     iconWidth/2.0f, -1.0*iconWidth/2.0f);
-				Eigen::Vector2d p3_ScreenSpace = center + Eigen::Vector2d(     iconWidth/2.0f,      iconWidth/2.0f);
-				Eigen::Vector2d p4_ScreenSpace = center + Eigen::Vector2d(-1.0*iconWidth/2.0f,      iconWidth/2.0f);
+				Eigen::Vector2d p1_SS = center + Eigen::Vector2d(-1.0*iconWidth/2.0f, -1.0*iconWidth/2.0f);
+				Eigen::Vector2d p2_SS = center + Eigen::Vector2d(     iconWidth/2.0f, -1.0*iconWidth/2.0f);
+				Eigen::Vector2d p3_SS = center + Eigen::Vector2d(     iconWidth/2.0f,      iconWidth/2.0f);
+				Eigen::Vector2d p4_SS = center + Eigen::Vector2d(-1.0*iconWidth/2.0f,      iconWidth/2.0f);
 				Eigen::Matrix2d R;
 				double PI = 3.14159265358979;
 				double yaw = state->m_targetYawDeg*PI/180.0;
 				R << cos(yaw), -sin(yaw),
 					sin(yaw),  cos(yaw);
-				p1_ScreenSpace = R*(p1_ScreenSpace - center) + center;
-				p2_ScreenSpace = R*(p2_ScreenSpace - center) + center;
-				p3_ScreenSpace = R*(p3_ScreenSpace - center) + center;
-				p4_ScreenSpace = R*(p4_ScreenSpace - center) + center;
-				ImVec2 p1(p1_ScreenSpace(0), p1_ScreenSpace(1));
-				ImVec2 p2(p2_ScreenSpace(0), p2_ScreenSpace(1));
-				ImVec2 p3(p3_ScreenSpace(0), p3_ScreenSpace(1));
-				ImVec2 p4(p4_ScreenSpace(0), p4_ScreenSpace(1));
-				draw_list->AddImageQuad(m_IconTexture_DroneWithArrow, p1, p2, p3, p4);
+				p1_SS = R*(p1_SS - center) + center;
+				p2_SS = R*(p2_SS - center) + center;
+				p3_SS = R*(p3_SS - center) + center;
+				p4_SS = R*(p4_SS - center) + center;
+				draw_list->AddImageQuad(m_IconTexture_DroneWithArrow, p1_SS, p2_SS, p3_SS, p4_SS);
 				
 				//If the mouse is over the indicator, allow setting yaw through a click
-				float dx = CursorPos_ScreenSpace.x - (float) center(0);
-				float dy = CursorPos_ScreenSpace.y - (float) center(1);
-				if (std::sqrt(dx*dx + dy*dy) <= radius) {
+				Eigen::Vector2d delta = CursorPos_ScreenSpace - center;
+				if (delta.norm() <= radius) {
 					if (ImGui::IsMouseDown(0)) {
-						state->m_targetYawDeg = float(std::atan2(double(dy), double(dx))*180.0/PI + 90.0);
+						state->m_targetYawDeg = float(std::atan2(delta(1), delta(0))*180.0/PI + 90.0);
 						if (state->m_targetYawDeg < 0.0f)
 							state->m_targetYawDeg += 360.0f;
 					}
@@ -1136,18 +1121,14 @@ inline void VehiclesWidget::DrawDroneInteractable(DroneInterface::Drone & drone,
 	auto style = ImGui::GetStyle();
 	ImGui::PushID(drone.GetDroneSerial().c_str());
 
-	Math::Vector2 pos = ImGui::GetCursorScreenPos();
-	ImGui::SetCursorScreenPos(pos + style.ItemInnerSpacing);
+	Eigen::Vector2d pos = ImGui::GetCursorScreenPos();
+	ImGui::SetCursorScreenPos((Eigen::Vector2d) (pos + (Eigen::Vector2d) style.ItemInnerSpacing));
 
 	//Display node foreground first
 	draw_list->ChannelsSetCurrent(1);
 	
 	float startX = ImGui::GetCursorPosX();
 	ImGui::Image(m_IconTexture_Drone, ImVec2(2.0f*ImGui::GetFontSize(), 2.0f*ImGui::GetFontSize()));
-	//ImVec2 p0 = ImGui::GetCursorScreenPos();
-	//ImVec2 p1(p0.x + 2.0f*ImGui::GetFontSize(), p0.y + 2.0f*ImGui::GetFontSize());
-	//draw_list->AddImage(m_IconTexture_Drone, p0, p1);
-	//ImGui::Dummy(ImVec2(1,1));
 	ImGui::SameLine(startX + 2.4f*ImGui::GetFontSize());
 	std::string droneNumStr = std::to_string((unsigned int) DroneIndex + 1U);
 	ImGui::BeginGroup();
@@ -1209,7 +1190,7 @@ inline void VehiclesWidget::DrawDroneInteractable(DroneInterface::Drone & drone,
 	//Save the size of what we have emitted and reset cursor position
 	float contentHeight = ImGui::GetItemRectSize().y + 2.0f*style.ItemInnerSpacing.y;
 	ImGui::SetCursorScreenPos(pos);
-	Math::Vector2 itemRectSize(ImGui::GetContentRegionAvail().x, contentHeight);
+	Eigen::Vector2d itemRectSize(ImGui::GetContentRegionAvail().x, contentHeight);
 	
 	//Display node background next
 	draw_list->ChannelsSetCurrent(0);
@@ -1217,9 +1198,9 @@ inline void VehiclesWidget::DrawDroneInteractable(DroneInterface::Drone & drone,
 	ImGui::InvisibleButton("node", itemRectSize);
 	if (ImGui::IsItemHovered())
 		//draw_list->AddRectFilled(pos, pos + itemRectSize, ImColor(style.Colors[ImGuiCol_HeaderActive]), 3.0f);
-		draw_list->AddRectFilled(pos, pos + itemRectSize, IM_COL32(120,120,80,255), 3.0f);
+		draw_list->AddRectFilled(pos, (Eigen::Vector2d) (pos + itemRectSize), IM_COL32(120,120,80,255), 3.0f);
 	else
-		draw_list->AddRectFilled(pos, pos + itemRectSize, ImColor(style.Colors[ImGuiCol_Header]), 3.0f);
+		draw_list->AddRectFilled(pos, (Eigen::Vector2d) (pos + itemRectSize), ImColor(style.Colors[ImGuiCol_Header]), 3.0f);
 
 	//Cleanup - pop object ID and merge draw list channels
 	ImGui::PopID();

@@ -12,16 +12,18 @@
 
 class AvoidanceZonesTool {
 	private:
-		Math::Vector2 m_popupDims;
+		Eigen::Vector2d m_popupDims;
 		bool m_popupOpen;
 
-		void DrawTriangle(Math::Vector2 p_min, float scale, ImDrawList * DrawList);
-		void Draw_DropDown(Math::Vector2 PopupULCorner, float PopupWidth);
+		void DrawTriangle(Eigen::Vector2d const & p_min, float scale, ImDrawList * DrawList);
+		void Draw_DropDown(Eigen::Vector2d const & PopupULCorner, float PopupWidth);
 
 		void DrawTool(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList);
 		void ExecuteEdit(Eigen::Vector2d const & CursorPos_NM);
 		
 	public:
+		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+		
 		//Fields   ********************************************************************
 		bool toolActive;
 		

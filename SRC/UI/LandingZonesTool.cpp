@@ -6,7 +6,6 @@
 //Project Includes
 #include "LandingZonesTool.hpp"
 #include "MapWidget.hpp"
-#include "../ImVecOps.hpp"
 #include "../Maps/MapUtils.hpp"
 #include "../Maps/DataTileProvider.hpp"
 
@@ -32,9 +31,10 @@ bool LandingZonesTool::Draw_Button(void) {
 	auto style = ImGui::GetStyle();
 	ImGui::PushID("Landing Zones Tool");
 
-	Math::Vector2 RectULCorner = ImGui::GetCursorScreenPos();
-	RectULCorner.x -= style.ItemInnerSpacing.x;
-	ImGui::SetCursorScreenPos(RectULCorner + style.ItemInnerSpacing);
+	Eigen::Vector2d RectULCorner = ImGui::GetCursorScreenPos();
+	RectULCorner(0) -= style.ItemInnerSpacing.x;
+	Eigen::Vector2d cursorScreenPos = RectULCorner + (Eigen::Vector2d) style.ItemInnerSpacing;
+	ImGui::SetCursorScreenPos(cursorScreenPos);
 
 	//Display foreground first
 	draw_list->ChannelsSetCurrent(1);
@@ -42,16 +42,16 @@ bool LandingZonesTool::Draw_Button(void) {
 	ImGui::Text(u8" \uf5af  Landing Zones ");
 	
 	//Compute sizes and bounds of button regions
-	Math::Vector2 RectLRCorner = RectULCorner + ImGui::GetItemRectSize() + style.ItemInnerSpacing * Math::Vector2(2.0f, 2.0f);
-	Math::Vector2 ArrowULCorner = Math::Vector2(RectLRCorner.x, RectULCorner.y);
-	Math::Vector2 ArrowLRCorner = Math::Vector2(RectLRCorner.x + ImGui::GetFontSize(), RectLRCorner.y);
+	Eigen::Vector2d RectLRCorner = RectULCorner + (Eigen::Vector2d) ImGui::GetItemRectSize() + 2.0 * (Eigen::Vector2d) style.ItemInnerSpacing;
+	Eigen::Vector2d ArrowULCorner(RectLRCorner(0), RectULCorner(1));
+	Eigen::Vector2d ArrowLRCorner(RectLRCorner(0) + ImGui::GetFontSize(), RectLRCorner(1));
 	
 	DrawTriangle(ArrowULCorner, 1.0f, draw_list);
 	
 	//Display background for toggle button
 	ImGui::SetCursorScreenPos(RectULCorner);
 	draw_list->ChannelsSetCurrent(0);
-	if (ImGui::InvisibleButton("LandingZonesButton", RectLRCorner - RectULCorner))
+	if (ImGui::InvisibleButton("LandingZonesButton", (Eigen::Vector2d) (RectLRCorner - RectULCorner)))
 		toolActive = !toolActive;
 	
 	ImU32 bg_color;
@@ -70,7 +70,7 @@ bool LandingZonesTool::Draw_Button(void) {
 	
 	//Display background for arrow drop-down button
 	ImGui::SetCursorScreenPos(ArrowULCorner);
-	if (ImGui::InvisibleButton("LandingZonesArrow", ArrowLRCorner - ArrowULCorner) && (!ImGui::IsPopupOpen("Popup")))
+	if (ImGui::InvisibleButton("LandingZonesArrow", (Eigen::Vector2d) (ArrowLRCorner - ArrowULCorner)) && (!ImGui::IsPopupOpen("Popup")))
 		ImGui::OpenPopup("Landing Zones DropDown");
 	bg_color = ImGui::IsItemHovered() ? ImColor(style.Colors[ImGuiCol_ButtonHovered]) : ImColor(style.Colors[ImGuiCol_Button]);
 	draw_list->AddRectFilled(ArrowULCorner, ArrowLRCorner, bg_color, 0.0f);
@@ -79,16 +79,17 @@ bool LandingZonesTool::Draw_Button(void) {
 	//Merge draw list channels
 	draw_list->ChannelsMerge();
 	
-	Draw_DropDown(Math::Vector2(RectULCorner.x, RectLRCorner.y), ArrowLRCorner.x - RectULCorner.x);
+	Eigen::Vector2d PopupULCorner(RectULCorner(0), RectLRCorner(1));
+	Draw_DropDown(PopupULCorner, ArrowLRCorner(0) - RectULCorner(0));
 	
 	ImGui::PopID();
 	return ((! wasToolActive) && toolActive);
 }
 
-void LandingZonesTool::Draw_DropDown(Math::Vector2 PopupULCorner, float PopupWidth) {
+void LandingZonesTool::Draw_DropDown(Eigen::Vector2d const & PopupULCorner, float PopupWidth) {
 	auto style = ImGui::GetStyle();
 	
-	ImRect popup_rect(PopupULCorner, PopupULCorner + m_popupDims);
+	ImRect popup_rect(PopupULCorner, (Eigen::Vector2d) (PopupULCorner + m_popupDims));
 	ImGui::SetNextWindowPos(popup_rect.Min);
 	ImGui::SetNextWindowSize(popup_rect.GetSize());
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, style.FramePadding);
@@ -96,7 +97,7 @@ void LandingZonesTool::Draw_DropDown(Math::Vector2 PopupULCorner, float PopupWid
 	if (ImGui::BeginPopup("Landing Zones DropDown")) {
 		m_popupOpen = true;
 		
-		Math::Vector2 WindowStartCursorPos = ImGui::GetCursorPos();
+		Eigen::Vector2d WindowStartCursorPos = ImGui::GetCursorPos();
 		
 		ImGui::RadioButton("Circle", &m_shape, 0);
 		ImGui::RadioButton("Rectangle", &m_shape, 1);
@@ -138,8 +139,8 @@ void LandingZonesTool::Draw_DropDown(Math::Vector2 PopupULCorner, float PopupWid
 		ImGui::RadioButton("Erase", &m_EditMode, 1);
 		
 		float popupWidth  = std::max(100.0f, ImGui::CalcTextSize("Angle (degrees): 00").x + 2.0f*style.ItemSpacing.x);
-		float popupHeight = ImGui::GetCursorPosY() - WindowStartCursorPos.y + 2.0f*style.FramePadding.y;
-		m_popupDims       = Math::Vector2(popupWidth, popupHeight);
+		float popupHeight = ImGui::GetCursorPosY() - WindowStartCursorPos(1) + 2.0f*style.FramePadding.y;
+		m_popupDims       << popupWidth, popupHeight;
 	
 		ImGui::EndPopup();
 	}
@@ -149,16 +150,15 @@ void LandingZonesTool::Draw_DropDown(Math::Vector2 PopupULCorner, float PopupWid
 	ImGui::PopStyleVar();
 }
 
-void LandingZonesTool::DrawTriangle(Math::Vector2 p_min, float scale, ImDrawList * DrawList) {
+void LandingZonesTool::DrawTriangle(Eigen::Vector2d const & p_min, float scale, ImDrawList * DrawList) {
 	const float h = ImGui::GetFontSize() * 1.00f;
 	const float r = h * 0.40f * scale;
-	Math::Vector2 center = p_min + Math::Vector2(h*0.50f, h*0.50f*scale);
+	Eigen::Vector2d center = p_min + Eigen::Vector2d(h*0.50f, h*0.50f*scale);
 
-	Math::Vector2 a, b, c;
-	center.y += r*0.25f;
-	a = center + Math::Vector2(0,1)*r;
-	b = center + Math::Vector2(-0.866f,-0.5f)*r;
-	c = center + Math::Vector2(0.866f,-0.5f)*r;
+	center(1) += r*0.25f;
+	Eigen::Vector2d a = center + Eigen::Vector2d(   0.0,  1.0)*r;
+	Eigen::Vector2d b = center + Eigen::Vector2d(-0.866, -0.5)*r;
+	Eigen::Vector2d c = center + Eigen::Vector2d( 0.866, -0.5)*r;
 
 	DrawList->AddTriangleFilled(a, b, c, ImGui::GetColorU32(ImGuiCol_Text));
 }
@@ -168,8 +168,7 @@ void LandingZonesTool::Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDraw
 	if (m_popupOpen) {
 		//Draw sample shape in middle of the screen
 		Eigen::Vector2d MapCenter_ScreenSpace = MapWidget::Instance().MapWidgetULCorner_ScreenSpace + 0.5*MapWidget::Instance().MapWidgetDims;
-		ImVec2 center_ScreenSpace(float(MapCenter_ScreenSpace(0)), float(MapCenter_ScreenSpace(1)));
-		Eigen::Vector2d center_NM = MapWidget::Instance().ScreenCoordsToNormalizedMercator(center_ScreenSpace);
+		Eigen::Vector2d center_NM = MapWidget::Instance().ScreenCoordsToNormalizedMercator(MapCenter_ScreenSpace);
 		DrawTool(center_NM, DrawList);
 		return;
 	}
@@ -183,7 +182,7 @@ void LandingZonesTool::Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDraw
 void LandingZonesTool::DrawTool(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList) {
 	if (m_shape == 0) { //Circle
 		double radiusInPixels = MetersToPixels(m_radius, CursorPos_NM(1), MapWidget::Instance().zoom);
-		ImVec2 samplePos_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(CursorPos_NM);
+		Eigen::Vector2d samplePos_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(CursorPos_NM);
 		
 		DrawList->AddCircle(samplePos_ScreenSpace, float(radiusInPixels)+1.0f, IM_COL32(255, 255, 255, 255), 30, 2.0f);
 		DrawList->AddCircle(samplePos_ScreenSpace, float(radiusInPixels)-1.0f, IM_COL32(0, 0, 0, 255), 30, 2.0f);
@@ -207,20 +206,20 @@ void LandingZonesTool::DrawTool(Eigen::Vector2d const & CursorPos_NM, ImDrawList
 		P3_NM = R_CW * (P3_NM - CursorPos_NM) + CursorPos_NM;
 		P4_NM = R_CW * (P4_NM - CursorPos_NM) + CursorPos_NM;
 		
-		Math::Vector2 P1_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(P1_NM);
-		Math::Vector2 P2_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(P2_NM);
-		Math::Vector2 P3_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(P3_NM);
-		Math::Vector2 P4_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(P4_NM);
+		Eigen::Vector2d P1_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(P1_NM);
+		Eigen::Vector2d P2_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(P2_NM);
+		Eigen::Vector2d P3_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(P3_NM);
+		Eigen::Vector2d P4_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(P4_NM);
 		
 		//Eigen::Matrix2d R = smp->GetR().transpose();
 		Eigen::Vector2d V1_E = R_CW * Eigen::Vector2d( 0.707106781186547, 0.707106781186547);
 		Eigen::Vector2d V2_E = R_CW * Eigen::Vector2d(-0.707106781186547, 0.707106781186547);
-		Math::Vector2 V1 = EigenToImVec(V1_E) * Math::Vector2(1, -1);
-		Math::Vector2 V2 = EigenToImVec(V2_E) * Math::Vector2(1, -1);
-		Math::Vector2 P1P_ScreenSpace = P1_ScreenSpace + 1.414214f*2.0f*V1;
-		Math::Vector2 P2P_ScreenSpace = P2_ScreenSpace + 1.414214f*2.0f*V2;
-		Math::Vector2 P3P_ScreenSpace = P3_ScreenSpace - 1.414214f*2.0f*V1;
-		Math::Vector2 P4P_ScreenSpace = P4_ScreenSpace - 1.414214f*2.0f*V2;
+		Eigen::Vector2d V1(V1_E(0), -1.0 * V1_E(1));
+		Eigen::Vector2d V2(V2_E(0), -1.0 * V2_E(1));
+		Eigen::Vector2d P1P_ScreenSpace = P1_ScreenSpace + 1.414214f*2.0f*V1;
+		Eigen::Vector2d P2P_ScreenSpace = P2_ScreenSpace + 1.414214f*2.0f*V2;
+		Eigen::Vector2d P3P_ScreenSpace = P3_ScreenSpace - 1.414214f*2.0f*V1;
+		Eigen::Vector2d P4P_ScreenSpace = P4_ScreenSpace - 1.414214f*2.0f*V2;
 		
 		DrawList->AddQuad(P1_ScreenSpace, P2_ScreenSpace, P3_ScreenSpace, P4_ScreenSpace, IM_COL32(255, 255, 255, 255), 2.0f);
 		DrawList->AddQuad(P1P_ScreenSpace, P2P_ScreenSpace, P3P_ScreenSpace, P4P_ScreenSpace, IM_COL32(0, 0, 0, 255), 2.0f);
