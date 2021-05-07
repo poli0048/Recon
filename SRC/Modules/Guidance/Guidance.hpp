@@ -71,12 +71,6 @@ namespace Guidance {
 			inline void AbortMission_AllDronesHover(void);
 			inline void AbortMission_AllDronesLandNow(void);
 			inline void AbortMission_AllDronesReturnHomeAndLand(void);
-			
-			//Mission Accessors
-			//1 - Retrieve the mission number for each drone with a current mission (incremented each time a mission is uploaded)
-			//2 - Retrieve a *copy* of each current mission (along with mission numbers). Thread-safe
-			inline void GetCurrentMissionNums(std::unordered_map<std::string, int> & MissionNums);
-			inline void GetCurrentMissions(std::unordered_map<std::string, std::tuple<int, DroneInterface::WaypointMission>> & Missions);
 	};
 	
 	//A struct containing a few parameters typically needed at the same time to define a conventional serpentine waypoint mission.
@@ -257,20 +251,6 @@ namespace Guidance {
 		m_dronesUnderCommand.clear();
 		m_currentDroneMissions.clear();
 		m_surveyRegion.Clear();
-	}
-	
-	//Retrieve the mission number for each drone with a current mission (incremented each time a mission is uploaded)
-	inline void GuidanceEngine::GetCurrentMissionNums(std::unordered_map<std::string, int> & MissionNums) {
-		std::scoped_lock lock(m_mutex);
-		MissionNums.clear();
-		for (auto const & kv : m_currentDroneMissions)
-			MissionNums[kv.first] = std::get<0>(kv.second);
-	}
-	
-	//Retrieve a *copy* of each current mission (along with mission numbers). Thread-safe
-	inline void GuidanceEngine::GetCurrentMissions(std::unordered_map<std::string, std::tuple<int, DroneInterface::WaypointMission>> & Missions) {
-		std::scoped_lock lock(m_mutex);
-		Missions = m_currentDroneMissions;
 	}
 	
 	inline void GuidanceEngine::ModuleMain(void) {
