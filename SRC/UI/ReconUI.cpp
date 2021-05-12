@@ -12,6 +12,7 @@
 #include "MapWidget.hpp"
 #include "VisWidget.hpp"
 #include "VehiclesWidget.hpp"
+#include "CommandWidget.hpp"
 #include "ConsoleWidget.hpp"
 #include "StatusBar.hpp"
 #include "../ProgOptions.hpp"
@@ -58,20 +59,26 @@ void ReconUI::Draw() {
 		float statusBarHeight     = ImGui::GetFontSize();
 		float MainRegionHeight    = ImGui::GetContentRegionAvail().y - statusBarHeight - childSpacing;
 		float VehiclesChildHeight = VehiclesWidget::Instance().GetWidgetRecommendedHeight() + 2.0*ImGui::GetStyle().WindowPadding.y;
+		float CommandChildHeight  = CommandWidget::Instance().GetWidgetRecommendedHeight() + 2.0*ImGui::GetStyle().WindowPadding.y;
 		float ConsoleWidgetHeight = ConsoleWidget::Instance().GetWidgetHeight();
 		bool  ConsoleVisible      = ConsoleWidgetHeight >= 1.0f;
 		float MapChildtHeight     = ConsoleVisible ? (MainRegionHeight - ConsoleWidgetHeight - childSpacing) : MainRegionHeight;
 		
 		//Upper-Left Pane - Layer visibility and parameters
-		float paneHeight = MainRegionHeight - VehiclesChildHeight - childSpacing;
+		float paneHeight = MainRegionHeight - VehiclesChildHeight - CommandChildHeight - 2.0f*childSpacing;
 		ImGui::BeginChild("LayerListPane", ImVec2(0, paneHeight), true);
 		VisWidget::Instance().Draw();
 		ImGui::EndChild(); //LayerListPane
 		
-		//Lower-Left Pane
+		//Middle-Left Pane - Connected vehicles
 		ImGui::BeginChild("VehiclesWidgetChildWin", ImVec2(0, VehiclesChildHeight), true, ImGuiWindowFlags_NoScrollbar);
 		VehiclesWidget::Instance().Draw();
-		ImGui::EndChild(); //VehiclesWidgetChildWin
+		ImGui::EndChild();
+		
+		//Lower-Left Pane - Command Widget
+		ImGui::BeginChild("CommandWidgetChildWin", ImVec2(0, CommandChildHeight), true, ImGuiWindowFlags_NoScrollbar);
+		CommandWidget::Instance().Draw();
+		ImGui::EndChild();
 		
 		ImGui::NextColumn();
 		

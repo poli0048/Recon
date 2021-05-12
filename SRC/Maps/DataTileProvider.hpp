@@ -149,8 +149,8 @@ namespace Maps {
 			//resources for loading so later calls accessing the same location will eventually succeed (and return True).
 			bool TryGetData(Eigen::Vector2d const & Position_NM, DataLayer layer, double & Value);
 			
-			//Same as TryGetData, but will block until the requested data is available.
-			//double GetData(Eigen::Vector2d const & Position_NM, DataLayer layer); //TODO
+			//Same as TryGetData, but will block until the requested data is available (up to a given number of seconds, after which it will return NaN)
+			double GetData(Eigen::Vector2d const & Position_NM, DataLayer layer, double Timeout);
 			
 			//FRF Edit Tools - when painting, tiles will be created as needed. Painting is done at a fixed pyramid level (set in a constexpr above)
 			//and lower-res levels are derived from this level and updated as needed. We make a special exception and take the rectangle angle in

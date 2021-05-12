@@ -19,32 +19,6 @@
 #include "../OpenInFileManager.hpp"
 #include "MyGui.hpp"
 
-class DummyButtonStyle {
-	public:
-		ImExt::Style m_style;
-		
-		DummyButtonStyle() {
-			Math::Vector4 dummyButtonColor = ImGui::GetStyle().Colors[ImGuiCol_Button];
-			dummyButtonColor.x = 0.3f*dummyButtonColor.x + 0.2f;
-			dummyButtonColor.y = 0.3f*dummyButtonColor.y + 0.2f;
-			dummyButtonColor.z = 0.3f*dummyButtonColor.z + 0.2f;
-			m_style(StyleCol::Button,        dummyButtonColor);
-			m_style(StyleCol::ButtonHovered, dummyButtonColor);
-			m_style(StyleCol::ButtonActive,  dummyButtonColor);
-		}
-};
-
-class RedButtonStyle {
-	public:
-		ImExt::Style m_style;
-		
-		RedButtonStyle() {
-			m_style(StyleCol::Button,        Math::Vector4(0.9f, 0.2f, 0.2f, 1.0f));
-			m_style(StyleCol::ButtonHovered, Math::Vector4(1.0f, 0.3f, 0.3f, 1.0f));
-			m_style(StyleCol::ButtonActive,  Math::Vector4(1.0f, 0.4f, 0.4f, 1.0f));
-		}
-};
-
 class InformationDialog {
 	private:
 		bool showRequest = false;
@@ -283,7 +257,7 @@ class SelectActiveRegionDialog {
 				float DeleteButtonWidth = ImGui::CalcTextSize(" Delete ").x + 2.0f*ImGui::GetStyle().FramePadding.x;
 				ImGui::SameLine(ImGui::GetContentRegionAvail().x - DeleteButtonWidth);
 				{
-					RedButtonStyle styleSitter;
+					MyGui::RedButtonStyle styleSitter;
 					if (ImGui::Button("Delete", ImVec2(DeleteButtonWidth, 0))) {
 						std::filesystem::path surveyRegionsFolderPath = Handy::Paths::ThisExecutableDirectory() / "Survey Regions";
 						std::filesystem::path filePath  = surveyRegionsFolderPath / (m_regionList[itemIndex] + ".region");
@@ -316,7 +290,7 @@ class SelectActiveRegionDialog {
 				bool NameIsOK = (isFilenameReasonable(m_modalTextBuf_Name) &&
 				                ((! Handy::Contains(m_regionList, std::string(m_modalTextBuf_Name))) || (m_regionList[itemIndex] == m_modalTextBuf_Name)));
 				if (! NameIsOK) {
-					DummyButtonStyle styleSitter;
+					MyGui::DummyButtonStyle styleSitter;
 					ImGui::Button("Rename", ImVec2(RenameButtonWidth,0));
 				}
 				else {
@@ -405,7 +379,7 @@ class SelectActiveRegionDialog {
 				}
 				ImGui::SameLine();
 				if (m_selection < 0) {
-					DummyButtonStyle styleSitter;
+					MyGui::DummyButtonStyle styleSitter;
 					ImGui::Button("Make Selected Region Active", ImVec2(ActionButtonWidth,0));
 				}
 				else {

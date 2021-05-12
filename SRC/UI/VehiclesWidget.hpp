@@ -21,6 +21,7 @@
 #include "../Modules/DJI-Drone-Interface/DroneManager.hpp"
 #include "../Utilities.hpp"
 #include "MapWidget.hpp"
+#include "../Maps/DataTileProvider.hpp"
 #include "../Maps/MapUtils.hpp"
 #include "../ProgOptions.hpp"
 #include "../Modules/Guidance/Guidance.hpp"
@@ -50,6 +51,7 @@ class VehiclesWidget {
 		bool                             m_autoYawOnMove = true;
 		float                            m_vehicleSpeedMPH = 15.0f;
 		Eigen::Vector2d                  m_targetLatLon = Eigen::Vector2d(std::nan(""), std::nan("")); //Lat and Lon (radians) of target pos
+		bool                             m_flyAtDeck = false; //When true fly at min safe altitude (overrides m_targetHAGFeet)
 		
 		vehicleState() = default;
 		vehicleState(std::string const & Serial) : m_serial(Serial) { }
@@ -82,7 +84,14 @@ class VehiclesWidget {
 		//The overlay returns true of the map widget should process mouse input and false if we have already processed it and the widget should ignore it
 		inline void Draw();
 		inline bool DrawMapOverlay(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
-	
+		
+		//Public controls for drones - not for internal use in this class... these are for other modules to order drones around
+		//These methods take care of instructing the guidance module to start/stop commanding drones when necessary
+		inline bool StartManualControlOfDrone(std::string Serial);
+		inline void StopManualControlOfDrone(std::string Serial);
+		inline void AllDronesStopAndHover(void);
+		inline void AllDronesHitTheDeck(void);
+		
 	private:
 		Journal & Log;
 		ImTextureID m_IconTexture_Drone;
@@ -126,7 +135,7 @@ class VehiclesWidget {
 		static inline bool IsDroneHovered(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & drone_ScreenSpace,
 		                                  Eigen::Matrix2d const & R, float IconWidth_pixels);
 		
-		inline void StartManualControl(DroneInterface::Drone & Drone, vehicleState & State);
+		inline void StartManualControl(DroneInterface::Drone & Drone, vehicleState & State, bool FlyAtDeck = false);
 		inline void DroneCommand_Hover(DroneInterface::Drone & Drone, vehicleState & State);
 		inline void DroneCommand_LandNow(DroneInterface::Drone & Drone, vehicleState & State);
 		inline void DroneCommand_GoHomeAndLand(DroneInterface::Drone & Drone, vehicleState & State);
@@ -197,12 +206,10 @@ inline void VehiclesWidget::ControlThreadMain(void) {
 			
 			//If we have up-to-date drone telemetry, we set the EN velocity to hold a desired position
 			if ((! std::isnan(myState.m_targetLatLon(0))) && (! std::isnan(myState.m_targetLatLon(1)))) {
-				DroneInterface::Drone::TimePoint TS1, TS2;
-				double Latitude, Longitude, Altitude, V_North, V_East, V_Down;
-				if (drone->GetPosition(Latitude, Longitude, Altitude, TS1) && drone->GetVelocity(V_North, V_East, V_Down, TS2)) {
-					double age1 = SecondsElapsed(TS1, std::chrono::steady_clock::now());
-					double age2 = SecondsElapsed(TS2, std::chrono::steady_clock::now());
-					if ((age1 > 4.0) || (age2 > 4.0))
+				DroneInterface::Drone::TimePoint posTimestamp;
+				double Latitude, Longitude, Altitude;
+				if (drone->GetPosition(Latitude, Longitude, Altitude, posTimestamp)) {
+					if (SecondsElapsed(posTimestamp, std::chrono::steady_clock::now()) > 4.0)
 						std::cerr << "Warning in ControlThreadMain(): Drone telemetry is old! Zeroing velocity.\r\n";
 					else {
 						//Compute 2D distance from target and unit vector in EN from current position to target position
@@ -225,6 +232,22 @@ inline void VehiclesWidget::ControlThreadMain(void) {
 							v_EN *= std::sqrt(2.0 * maxDecel * distFromTarget);
 						command.V_North = v_EN(1);
 						command.V_East  = v_EN(0);
+						
+						//If we are currently being told to fly at the deck, set HAG based on MSA
+						if (myState.m_flyAtDeck) {
+							double MSA;
+							Eigen::Vector2d Position_NM = LatLonToNM(Eigen::Vector2d(Latitude, Longitude));
+							if (Maps::DataTileProvider::Instance()->TryGetData(Position_NM, Maps::DataLayer::MinSafeAltitude, MSA)) {
+								DroneInterface::Drone::TimePoint HAGTimestamp;
+								double HAG;
+								if (drone->GetHAG(HAG, HAGTimestamp) && (SecondsElapsed(HAGTimestamp, std::chrono::steady_clock::now()) < 4.0)) {
+									double groundAlt = Altitude - HAG;
+									double minSafeHAG = MSA - groundAlt;
+									myState.m_targetHAGFeet = minSafeHAG*3.280839895;
+									command.HAG = minSafeHAG;
+								}
+							}
+						}
 					}
 				}
 			}
@@ -640,22 +663,51 @@ inline bool VehiclesWidget::DrawMapOverlay(Eigen::Vector2d const & CursorPos_Scr
 			
 			if (state->m_userControlEnabled) {
 				//Popup for drone under manual control
-				ImGui::BeginChild("Drag Control Area", ImVec2(15.0f*ImGui::GetFontSize(), 0), true);
+				ImGui::BeginChild("Drag Control Area", ImVec2(17.0f*ImGui::GetFontSize(), 0), true);
 				float yStart = ImGui::GetCursorPosY();
 				
 				ImGui::TextUnformatted("Commanded State");
 				ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
-				ImGui::TextUnformatted("Height Above Ground:");
+				ImGui::TextUnformatted("Height Above Ground");
+				ImGuiStyle & style(ImGui::GetStyle());
+				float checkWidgetWidth = ImGui::CalcTextSize("Hit Deck ").x + 2.0f*ImGui::GetFontSize() + 2.0f*style.FramePadding.x + 3.0f*style.ItemSpacing.x;
+				ImGui::SameLine(ImGui::GetContentRegionMax().x - checkWidgetWidth);
+				ImGui::TextUnformatted("Hit Deck ");
+				ImGui::SameLine();
+				ImGui::Checkbox("##HitDeck", &(state->m_flyAtDeck));
+				ImGui::SameLine();
+				ImGui::TextDisabled(u8"\uf059");
+				if (ImGui::IsItemHovered()) {
+					ImExt::Style tooltipStyle(StyleVar::WindowPadding, ImVec2(4.0f, 4.0f));
+					ImGui::BeginTooltip();
+					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+					ImGui::TextUnformatted("If checked, the vehicle altitude will be adjusted to the Min Safe Altitude for it's current location. "
+					                       "If the vehicle is moved with this box checked it's altitude will track the Min Safe Altitude function "
+					                       "as the vehicle moves. If there is no min safe altitude set for the drones location, the drone will "
+					                       "hold the last set altitude.");
+					ImGui::PopTextWrapPos();
+					ImGui::EndTooltip();
+				}
 				ImGui::SetNextItemWidth(-1.0f);
-				ImGui::DragFloat("##HeightDrag", &(state->m_targetHAGFeet), 0.25f, 0.0f, 400.0f, "%.0f (feet)");
+				if (state->m_flyAtDeck) {
+					ImExt::Style styleSitter;
+					Math::Vector4 inactiveWidgetColor = ImGui::GetStyle().Colors[ImGuiCol_Header];
+					styleSitter(StyleCol::Button,        inactiveWidgetColor);
+					styleSitter(StyleCol::ButtonHovered, inactiveWidgetColor);
+					styleSitter(StyleCol::ButtonActive,  inactiveWidgetColor);
+					std::string buttonText = std::to_string((int) std::round(state->m_targetHAGFeet)) + " (feet)"s;
+					ImGui::Button(buttonText.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0));
+				}
+				else
+					ImGui::DragFloat("##HeightDrag", &(state->m_targetHAGFeet), 0.25f, 0.0f, 400.0f, "%.0f (feet)");
 				ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 				
-				ImGui::TextUnformatted("Movement Speed:");
+				ImGui::TextUnformatted("Movement Speed");
 				ImGui::SetNextItemWidth(-1.0f);
 				ImGui::DragFloat("##SpeedDrag", &(state->m_vehicleSpeedMPH), 0.05f, 1.0f, 33.6f, "%.1f (mph)");
 				ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 				
-				ImGui::TextUnformatted("Yaw:");
+				ImGui::TextUnformatted("Yaw");
 				ImGui::SetNextItemWidth(-1.0f);
 				ImGui::DragFloat("##YawDrag", &(state->m_targetYawDeg), 0.25f, 0.0f, 359.0f, "%.0f (degrees)");
 				ImGui::Spacing();
@@ -813,12 +865,66 @@ inline std::filesystem::path VehiclesWidget::GetPathForSimVideoInput(void) {
 	return std::filesystem::path();
 }
 
-inline void VehiclesWidget::StartManualControl(DroneInterface::Drone & Drone, vehicleState & State) {
+inline bool VehiclesWidget::StartManualControlOfDrone(std::string Serial) {
+	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
+	
+	//Iterate through each connected drone - if the serial matches, start manual control of the drone and return true.
+	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
+		if (m_currentDroneSerials[n] == Serial) {
+			DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
+			if (drone == nullptr)
+				continue;
+			StartManualControl(*drone, m_vehicleStates.at(m_currentDroneSerials[n]));
+			return true;
+		}
+	}
+	return false;
+}
+
+inline void VehiclesWidget::StopManualControlOfDrone(std::string Serial) {
+	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
+	
+	//Iterate through each connected drone - if the serial matches, stop manual control of the drone.
+	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
+		if (m_currentDroneSerials[n] == Serial) {
+			DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
+			if (drone == nullptr)
+				continue;
+			DroneCommand_Hover(*drone, m_vehicleStates.at(m_currentDroneSerials[n]));
+			return;
+		}
+	}
+}
+
+inline void VehiclesWidget::AllDronesStopAndHover(void) {
+	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
+	
+	//Iterate through each connected drone and execute the command
+	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
+		DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
+		if (drone == nullptr)
+			continue;
+		StartManualControl(*drone, m_vehicleStates.at(m_currentDroneSerials[n]), false);
+	}
+}
+
+inline void VehiclesWidget::AllDronesHitTheDeck(void) {
+	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
+	
+	//Iterate through each connected drone and execute the command
+	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
+		DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
+		if (drone == nullptr)
+			continue;
+		StartManualControl(*drone, m_vehicleStates.at(m_currentDroneSerials[n]), true);
+	}
+}
+
+inline void VehiclesWidget::StartManualControl(DroneInterface::Drone & Drone, vehicleState & State, bool FlyAtDeck) {
 	std::cerr << "Starting manual control for drone: " << Drone.GetDroneSerial() << ".\r\n";
 	
-	//Instruct the guidance module to stop commanding this drone (if it currently is) and hover the drone to cancel any current mission
+	//Instruct the guidance module to stop commanding this drone (if it currently is)
 	Guidance::GuidanceEngine::Instance().RemoveLowFlier(Drone.GetDroneSerial());
-	Drone.Hover();
 	
 	//Initialize the target position to the drone's current position (or NaN if unknown to zero out commanded velocity)
 	DroneInterface::Drone::TimePoint Timestamp;
@@ -829,7 +935,7 @@ inline void VehiclesWidget::StartManualControl(DroneInterface::Drone & Drone, ve
 	else
 		std::cerr << "Warning: Starting manual control without full & current telemetry. No initial position target.\r\n";
 	
-	//Initialize the target yaw and height above ground based on current state - then turn on manual control
+	//Initialize the target yaw and height above ground based on current state, as well as FlyAtDeck - then turn on manual control
 	double Yaw, Pitch, Roll, HAG;
 	double PI = 3.14159265358979;
 	State.m_targetHAGFeet = 100.0f; //Default value
@@ -842,6 +948,7 @@ inline void VehiclesWidget::StartManualControl(DroneInterface::Drone & Drone, ve
 		State.m_targetYawDeg = Yaw*180.0/PI;
 	else
 		std::cerr << "Warning: Starting manual control without full & current telemetry. Defaulting yaw to 0 degrees.\r\n";
+	State.m_flyAtDeck = FlyAtDeck;
 	State.m_userControlEnabled = true;
 }
 
@@ -1276,9 +1383,6 @@ inline void VehiclesWidget::Draw() {
 	//Get list of connected drones
 	m_currentDroneSerials = DroneInterface::DroneManager::Instance().GetConnectedDroneSerialNumbers();
 	std::sort(m_currentDroneSerials.begin(), m_currentDroneSerials.end());
-	
-	//Temporary - Add simulated drone to the drone serials vector (this one isn't advertised by the DroneManager module)
-	m_currentDroneSerials.push_back("Simulation"s);
 	
 	//For each connected drone, make sure we have a valid DroneState
 	for (std::string serial : m_currentDroneSerials) {

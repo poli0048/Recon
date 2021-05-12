@@ -20,6 +20,7 @@
 #include "DataTileProvider.hpp"
 #include "DataTileVizEvaluator.hpp"
 #include "MapUtils.hpp"
+#include "../Utilities.hpp"
 
 namespace Maps {
 	//Instantiate static fields
@@ -699,6 +700,19 @@ namespace Maps {
 		}
 		else
 			return false;
+	}
+	
+	//Same as TryGetData, but will block until the requested data is available (up to a given number of seconds, after which it will return NaN)
+	double DataTileProvider::GetData(Eigen::Vector2d const & Position_NM, DataLayer layer, double Timeout) {
+		double value;
+		std::chrono::time_point<std::chrono::steady_clock> startTime = std::chrono::steady_clock::now();
+		while (! TryGetData(Position_NM, layer, value)) {
+			if (SecondsElapsed(startTime, std::chrono::steady_clock::now()) < Timeout)
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			else
+				return std::nan("");
+		}
+		return value;
 	}
 
 	void DataTileProvider::PurgeAllTiles() {

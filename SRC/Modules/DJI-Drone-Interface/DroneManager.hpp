@@ -37,7 +37,8 @@ namespace DroneInterface {
 	};
 	
 	inline std::vector<std::string> DroneManager::GetConnectedDroneSerialNumbers(void) const {
-		return std::vector<std::string>();
+		//return std::vector<std::string>(); //Don't advertise the simulated drone
+		return std::vector<std::string>(1U, "Simulation"s); //Advertise the simulated drone
 	}
 	
 	inline Drone * DroneManager::GetDrone(std::string const & Serial) {

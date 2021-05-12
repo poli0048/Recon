@@ -15,6 +15,32 @@
 #include "../Journal.h"
 
 namespace MyGui {
+	class DummyButtonStyle {
+		public:
+			ImExt::Style m_style;
+			
+			DummyButtonStyle() {
+				Math::Vector4 dummyButtonColor = ImGui::GetStyle().Colors[ImGuiCol_Button];
+				dummyButtonColor.x = 0.3f*dummyButtonColor.x + 0.2f;
+				dummyButtonColor.y = 0.3f*dummyButtonColor.y + 0.2f;
+				dummyButtonColor.z = 0.3f*dummyButtonColor.z + 0.2f;
+				m_style(StyleCol::Button,        dummyButtonColor);
+				m_style(StyleCol::ButtonHovered, dummyButtonColor);
+				m_style(StyleCol::ButtonActive,  dummyButtonColor);
+			}
+	};
+
+	class RedButtonStyle {
+		public:
+			ImExt::Style m_style;
+			
+			RedButtonStyle() {
+				m_style(StyleCol::Button,        Math::Vector4(0.9f, 0.2f, 0.2f, 1.0f));
+				m_style(StyleCol::ButtonHovered, Math::Vector4(1.0f, 0.3f, 0.3f, 1.0f));
+				m_style(StyleCol::ButtonActive,  Math::Vector4(1.0f, 0.4f, 0.4f, 1.0f));
+			}
+	};
+	
 	//A non-selectable label with a header-colored background
 	inline void HeaderLabel(const char * UnformattedText) {
 		//Draw Queue Label with a header-colored background
