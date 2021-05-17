@@ -11,7 +11,7 @@
 #include "MainMenu.hpp"
 #include "MapWidget.hpp"
 #include "VisWidget.hpp"
-#include "VehiclesWidget.hpp"
+#include "VehicleControlWidget.hpp"
 #include "CommandWidget.hpp"
 #include "ConsoleWidget.hpp"
 #include "StatusBar.hpp"
@@ -58,7 +58,7 @@ void ReconUI::Draw() {
 		float childSpacing        = ImGui::GetStyle().ItemSpacing.y;
 		float statusBarHeight     = ImGui::GetFontSize();
 		float MainRegionHeight    = ImGui::GetContentRegionAvail().y - statusBarHeight - childSpacing;
-		float VehiclesChildHeight = VehiclesWidget::Instance().GetWidgetRecommendedHeight() + 2.0*ImGui::GetStyle().WindowPadding.y;
+		float VehiclesChildHeight = VehicleControlWidget::Instance().GetWidgetRecommendedHeight() + 2.0*ImGui::GetStyle().WindowPadding.y;
 		float CommandChildHeight  = CommandWidget::Instance().GetWidgetRecommendedHeight() + 2.0*ImGui::GetStyle().WindowPadding.y;
 		float ConsoleWidgetHeight = ConsoleWidget::Instance().GetWidgetHeight();
 		bool  ConsoleVisible      = ConsoleWidgetHeight >= 1.0f;
@@ -71,8 +71,8 @@ void ReconUI::Draw() {
 		ImGui::EndChild(); //LayerListPane
 		
 		//Middle-Left Pane - Connected vehicles
-		ImGui::BeginChild("VehiclesWidgetChildWin", ImVec2(0, VehiclesChildHeight), true, ImGuiWindowFlags_NoScrollbar);
-		VehiclesWidget::Instance().Draw();
+		ImGui::BeginChild("VehicleControlWidgetChildWin", ImVec2(0, VehiclesChildHeight), true, ImGuiWindowFlags_NoScrollbar);
+		VehicleControlWidget::Instance().Draw();
 		ImGui::EndChild();
 		
 		//Lower-Left Pane - Command Widget

@@ -17,7 +17,7 @@
 //Project Includes
 #include "../EigenAliases.h"
 #include "../SurveyRegionManager.hpp"
-#include "VehiclesWidget.hpp"
+#include "VehicleControlWidget.hpp"
 #include "ReconUI.hpp"
 //#include "MyGui.hpp"
 #include "EmbeddedIcons.hpp"
@@ -118,12 +118,15 @@ inline void CommandWidget::WatchdogThreadMain(void) {
 				drones.push_back(drone);
 			}
 			
+			//Initialize a vector to track which drones are in a hazardous state
+			std::vector<bool> hazardStates(drones.size(), false);
+			
 			//If enabled, check for violations of MSA and avoidance zones
 			if (m_CheckMSA || m_CheckAvoidanceZones) {
-				for (DroneInterface::Drone * drone : drones) {
+				for (size_t n = 0U; n < drones.size(); n++) {
 					DroneInterface::Drone::TimePoint T0;
 					double Latitude, Longitude, Altitude;
-					if ((drone->GetPosition(Latitude, Longitude, Altitude, T0)) && (SecondsElapsed(T0, std::chrono::steady_clock::now()) < 5.0)) {
+					if ((drones[n]->GetPosition(Latitude, Longitude, Altitude, T0)) && (SecondsElapsed(T0, std::chrono::steady_clock::now()) < 5.0)) {
 						Eigen::Vector2d Position_NM = LatLonToNM(Eigen::Vector2d(Latitude, Longitude));
 						double MSA;
 						double LandingZone;
@@ -132,20 +135,22 @@ inline void CommandWidget::WatchdogThreadMain(void) {
 						    Maps::DataTileProvider::Instance()->TryGetData(Position_NM, Maps::DataLayer::MinSafeAltitude, MSA) &&
 						    Maps::DataTileProvider::Instance()->TryGetData(Position_NM, Maps::DataLayer::SafeLandingZones, LandingZone)) {
 							if (std::isnan(MSA)) {
-								std::cerr << "Hazard: Drone with serial " << drone->GetDroneSerial() << " in no-fly zone.\r\n";
-								if (m_pauseDronesOnMSAViolation)
-									VehiclesWidget::Instance().StartManualControlOfDrone(drone->GetDroneSerial());
+								std::cerr << "Hazard: Drone with serial " << drones[n]->GetDroneSerial() << " in no-fly zone.\r\n";
+								VehicleControlWidget::Instance().SetHazardCondition(drones[n]->GetDroneSerial(), m_pauseDronesOnMSAViolation);
+								hazardStates[n] = true;
 							}
 							else if ((Altitude < MSA) && (std::isnan(LandingZone) || (LandingZone < 0.5))) {
-								std::cerr << "Hazard: Drone with serial " << drone->GetDroneSerial() << " below MSA outside of landing zone.\r\n";
-								if (m_pauseDronesOnMSAViolation)
-									VehiclesWidget::Instance().StartManualControlOfDrone(drone->GetDroneSerial());
+								std::cerr << "Hazard: Drone with serial " << drones[n]->GetDroneSerial() << " below MSA outside of landing zone.\r\n";
+								VehicleControlWidget::Instance().SetHazardCondition(drones[n]->GetDroneSerial(), m_pauseDronesOnMSAViolation);
+								hazardStates[n] = true;
 							}
 						}
 						if (m_CheckAvoidanceZones &&
 						    Maps::DataTileProvider::Instance()->TryGetData(Position_NM, Maps::DataLayer::AvoidanceZones, AvoidanceZone)) {
 							if ((! std::isnan(AvoidanceZone)) && (AvoidanceZone >= 0.5)) {
-								std::cerr << "Hazard: Drone with serial " << drone->GetDroneSerial() << " in an avoidance zone.\r\n";
+								std::cerr << "Hazard: Drone with serial " << drones[n]->GetDroneSerial() << " in an avoidance zone.\r\n";
+								VehicleControlWidget::Instance().SetHazardCondition(drones[n]->GetDroneSerial(), false);
+								hazardStates[n] = true;
 							}
 						}
 					}
@@ -171,13 +176,19 @@ inline void CommandWidget::WatchdogThreadMain(void) {
 						if ((pos1_ECEF - pos0_ECEF).norm() < m_vehicleProximityWarnThreshold) {
 							std::cerr << "Hazard: Drones with serials " << drones[n]->GetDroneSerial() << " and";
 							std::cerr << drones[m]->GetDroneSerial() << " are too close.\r\n";
-							if (m_AutoPauseDronesOnProximityViolation) {
-								VehiclesWidget::Instance().StartManualControlOfDrone(drones[n]->GetDroneSerial());
-								VehiclesWidget::Instance().StartManualControlOfDrone(drones[m]->GetDroneSerial());
-							}
+							VehicleControlWidget::Instance().SetHazardCondition(drones[n]->GetDroneSerial(), m_AutoPauseDronesOnProximityViolation);
+							VehicleControlWidget::Instance().SetHazardCondition(drones[m]->GetDroneSerial(), m_AutoPauseDronesOnProximityViolation);
+							hazardStates[n] = true;
+							hazardStates[m] = true;
 						}
 					}
 				}
+			}
+			
+			//For any drones not in a hazardous state, inform the vehicle control widget
+			for (size_t n = 0U; n < drones.size(); n++) {
+				if (! hazardStates[n])
+					VehicleControlWidget::Instance().ClearHazardCondition(drones[n]->GetDroneSerial());
 			}
 			
 			lastCheckTimepoint = std::chrono::steady_clock::now();
@@ -331,12 +342,12 @@ inline void CommandWidget::Draw() {
 			float labelMargin = 1.5f*ImGui::GetFontSize();
 			if (MyGui::BeginMenu(u8"\uf28b", labelMargin, "All drones Stop & Hover")) {
 				if (ImGui::MenuItem("Confirm Command", NULL, false, true))
-					VehiclesWidget::Instance().AllDronesStopAndHover();
+					VehicleControlWidget::Instance().AllDronesStopAndHover();
 				ImGui::EndMenu();
 			}
 			if (MyGui::BeginMenu(u8"\uf0ab", labelMargin, "All drones Hit the Deck")) {
 				if (ImGui::MenuItem("Confirm Command", NULL, false, true))
-					VehiclesWidget::Instance().AllDronesHitTheDeck();
+					VehicleControlWidget::Instance().AllDronesHitTheDeck();
 				ImGui::EndMenu();
 			}
 			

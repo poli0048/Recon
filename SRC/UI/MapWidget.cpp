@@ -14,7 +14,7 @@
 #include "../Maps/DataTileProvider.hpp"
 #include "../ProgOptions.hpp"
 #include "../Maps/MapUtils.hpp"
-#include "VehiclesWidget.hpp"
+#include "VehicleControlWidget.hpp"
 
 #define PI 3.14159265358979
 
@@ -397,13 +397,15 @@ void MapWidget::Draw(void) {
 	
 	//If the mouse is in bounds of the widget, print the cursor position
 	if (mouseInBounds) {
-		char degreeSign[3] = {0xC2_i8, 0xB0_i8, 0x00_i8};
 		Eigen::Vector2d mousePosLatLon = NMToLatLon(mousePosNM);
-		ImVec2 mousePosStringSize = ImGui::CalcTextSize("Lat: -100.000000'   Lon: -100.000000'");
-		ImGui::SameLine();
-		ImGui::Dummy(ImVec2(std::max(ImGui::GetContentRegionAvail().x - mousePosStringSize.x - 20.0f, 0.0f), 1.0f));
-		ImGui::SameLine();
-		ImGui::Text("Lat: % .6f%s   Lon: % .6f%s", mousePosLatLon(0)*180.0/PI, degreeSign, mousePosLatLon(1)*180.0/PI, degreeSign);
+		ImVec2 LatStringSize = ImGui::CalcTextSize("Lat: -100.000000\u00B0   ");
+		ImVec2 LonStringSize = ImGui::CalcTextSize("Lon: -100.000000\u00B0 ");
+		
+		ImGui::SameLine(ImGui::GetContentRegionMax().x - LonStringSize.x - LatStringSize.x);
+		ImGui::Text("Lat: % .6f\u00B0", mousePosLatLon(0)*180.0/PI);
+		
+		ImGui::SameLine(ImGui::GetContentRegionMax().x - LonStringSize.x);
+		ImGui::Text("Lon: % .6f\u00B0", mousePosLatLon(1)*180.0/PI);
 	}
 	
 	//Update the position of the upper-left corner of the map widget, the map widget dims (in pixels)
@@ -458,7 +460,7 @@ void MapWidget::Draw(void) {
 	//Draw pass for vehicle widget
 	bool processMouseInputs = true;
 	if (MaxTileZoomLevel >= 12)
-		processMouseInputs = VehiclesWidget::Instance().DrawMapOverlay(mousePosScreenSpace, mousePosNM, draw_list, mouseInBounds);
+		processMouseInputs = VehicleControlWidget::Instance().DrawMapOverlay(mousePosScreenSpace, mousePosNM, draw_list, mouseInBounds);
 	
 	ImGui::EndChild();
 	mouseInBounds = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);

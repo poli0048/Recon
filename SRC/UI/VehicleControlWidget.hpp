@@ -26,7 +26,7 @@
 #include "../ProgOptions.hpp"
 #include "../Modules/Guidance/Guidance.hpp"
 
-class VehiclesWidget {
+class VehicleControlWidget {
 	struct vehicleState {
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 		
@@ -52,6 +52,7 @@ class VehiclesWidget {
 		float                            m_vehicleSpeedMPH = 15.0f;
 		Eigen::Vector2d                  m_targetLatLon = Eigen::Vector2d(std::nan(""), std::nan("")); //Lat and Lon (radians) of target pos
 		bool                             m_flyAtDeck = false; //When true fly at min safe altitude (overrides m_targetHAGFeet)
+		bool                             m_hazard = false; //True if in hazardous state
 		
 		vehicleState() = default;
 		vehicleState(std::string const & Serial) : m_serial(Serial) { }
@@ -59,16 +60,16 @@ class VehiclesWidget {
 	};
 	
 	public:
-		static VehiclesWidget & Instance() { static VehiclesWidget Widget; return Widget; }
+		static VehicleControlWidget & Instance() { static VehicleControlWidget Widget; return Widget; }
 		
 		//Constructors and Destructors
-		VehiclesWidget() : Log(*(ReconUI::Instance().Log)), m_controlThread(&VehiclesWidget::ControlThreadMain, this) {
+		VehicleControlWidget() : Log(*(ReconUI::Instance().Log)), m_controlThread(&VehicleControlWidget::ControlThreadMain, this) {
 			m_IconTexture_Drone = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_QuadCopterTopView_Light_84x84[0], 84, 84);
 			m_IconTexture_DroneWithArrow = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_QuadCopterTopViewWithArrow_Light_96x96[0], 96, 96);
 			m_IconTexture_HighlightedDrone = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_QuadCopterTopView_LightHighlighted_84x84[0], 84, 84);
 			m_IconTexture_HighlightedDroneWithArrow = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_QuadCopterTopViewWithArrow_LightHighlighted_96x96[0], 96, 96);
 		}
-		~VehiclesWidget() {
+		~VehicleControlWidget() {
 			ImGuiApp::Instance().DeleteImage(m_IconTexture_Drone);
 			ImGuiApp::Instance().DeleteImage(m_IconTexture_DroneWithArrow);
 			ImGuiApp::Instance().DeleteImage(m_IconTexture_HighlightedDrone);
@@ -87,10 +88,14 @@ class VehiclesWidget {
 		
 		//Public controls for drones - not for internal use in this class... these are for other modules to order drones around
 		//These methods take care of instructing the guidance module to start/stop commanding drones when necessary
-		inline bool StartManualControlOfDrone(std::string Serial);
-		inline void StopManualControlOfDrone(std::string Serial);
 		inline void AllDronesStopAndHover(void);
 		inline void AllDronesHitTheDeck(void);
+		
+		//Set/Clear Hazard lets the vehicle control widget decide on how to respond to a hazard instead of requiring the command module to make the call.
+		//This is needed so that the vehicle control widget can react by stopping the vehicle only if it isn't already in a hazardous state. If already in a
+		//hazardous state we don't want to stop the drone again since it would interfere with our ability to command the vehicle out of the hazardous state.
+		inline void SetHazardCondition(std::string Serial, bool PauseOnHazard);
+		inline void ClearHazardCondition(std::string Serial);
 		
 	private:
 		Journal & Log;
@@ -152,7 +157,7 @@ class VehiclesWidget {
 		
 };
 
-inline Eigen::Vector3d VehiclesWidget::positionLLA2ECEF(double lat, double lon, double alt) {
+inline Eigen::Vector3d VehicleControlWidget::positionLLA2ECEF(double lat, double lon, double alt) {
 	double a = 6378137.0;           //Semi-major axis of reference ellipsoid
 	double ecc = 0.081819190842621; //First eccentricity of the reference ellipsoid
 	double eccSquared = ecc*ecc;
@@ -163,7 +168,7 @@ inline Eigen::Vector3d VehiclesWidget::positionLLA2ECEF(double lat, double lon, 
 	return(Eigen::Vector3d(X, Y, Z));
 }
 
-inline Eigen::Matrix3d VehiclesWidget::latLon_2_C_ECEF_ENU(double lat, double lon) {
+inline Eigen::Matrix3d VehicleControlWidget::latLon_2_C_ECEF_ENU(double lat, double lon) {
 	//Populate C_ECEF_NED
 	Eigen::Matrix3d C_ECEF_NED;
 	C_ECEF_NED << -sin(lat)*cos(lon), -sin(lat)*sin(lon),  cos(lat),
@@ -179,7 +184,7 @@ inline Eigen::Matrix3d VehiclesWidget::latLon_2_C_ECEF_ENU(double lat, double lo
 	return C_ECEF_ENU;
 }
 
-inline void VehiclesWidget::ControlThreadMain(void) {
+inline void VehicleControlWidget::ControlThreadMain(void) {
 	double approxLoopPeriod  = 0.15; //seconds
 	
 	while (! m_controlThreadAbort) {
@@ -261,7 +266,7 @@ inline void VehiclesWidget::ControlThreadMain(void) {
 	}
 }
 
-inline void VehiclesWidget::DrawVideoWindows(void) {
+inline void VehicleControlWidget::DrawVideoWindows(void) {
 	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
 		std::string serial = m_currentDroneSerials[n];
 		DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(serial);
@@ -357,7 +362,7 @@ inline void VehiclesWidget::DrawVideoWindows(void) {
 	}
 }
 
-inline bool VehiclesWidget::IsDroneHovered(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & drone_ScreenSpace,
+inline bool VehicleControlWidget::IsDroneHovered(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & drone_ScreenSpace,
                                            Eigen::Matrix2d const & R, float IconWidth_pixels) {
 	Eigen::Vector2d v = CursorPos_ScreenSpace - drone_ScreenSpace;
 	Eigen::Vector2d w = R.transpose()*v;
@@ -365,7 +370,7 @@ inline bool VehiclesWidget::IsDroneHovered(Eigen::Vector2d const & CursorPos_Scr
 	        (w(1) >= -0.5f*IconWidth_pixels) && (w(1) <= 0.5f*IconWidth_pixels));
 }
 
-inline void VehiclesWidget::DrawMission_ManualControl(vehicleState * State, Eigen::Vector2d const & dronePos_ScreenSpace, ImDrawList * DrawList) {
+inline void VehicleControlWidget::DrawMission_ManualControl(vehicleState * State, Eigen::Vector2d const & dronePos_ScreenSpace, ImDrawList * DrawList) {
 	float droneIconWidth_pixels = ProgOptions::Instance()->DroneIconScale*96.0f;
 	Eigen::Vector2d targetPos_NM = LatLonToNM(State->m_targetLatLon);
 	Eigen::Vector2d targetPos_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(targetPos_NM);
@@ -405,7 +410,8 @@ inline void VehiclesWidget::DrawMission_ManualControl(vehicleState * State, Eige
 
 //Note that we don't have a good way to query what portion of a mission has been complete or what the active next waypoint is yet, so
 //we don't draw a line connecting the drone to any waypoints since it would usually be wrong.
-inline void VehiclesWidget::DrawMission_Waypoints(size_t DroneNum, DroneInterface::Drone * Drone, Eigen::Vector2d const & dronePos_ScreenSpace, ImDrawList * DrawList) {
+inline void VehicleControlWidget::DrawMission_Waypoints(size_t DroneNum, DroneInterface::Drone * Drone, Eigen::Vector2d const & dronePos_ScreenSpace,
+                                                        ImDrawList * DrawList) {
 	float droneIconWidth_pixels = ProgOptions::Instance()->DroneIconScale*96.0f;
 	
 	DroneInterface::WaypointMission mission;
@@ -478,7 +484,7 @@ inline void VehiclesWidget::DrawMission_Waypoints(size_t DroneNum, DroneInterfac
 	}
 }
 
-inline bool VehiclesWidget::DrawMapOverlay(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList,
+inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList,
                                            bool CursorInBounds) {
 	float droneIconWidth_pixels = ProgOptions::Instance()->DroneIconScale*96.0f;
 	
@@ -639,6 +645,8 @@ inline bool VehiclesWidget::DrawMapOverlay(Eigen::Vector2d const & CursorPos_Scr
 			
 			//Add Text for n+1 under drone (and manual control indicator)
 			std::string droneLabel = std::to_string((unsigned int) n + 1U);
+			if (droneStates[n]->m_hazard)
+				droneLabel += u8" \uf071";
 			if (droneStates[n]->m_userControlEnabled)
 				droneLabel += u8" \uf11b";
 			ImVec2 textSize = ImGui::CalcTextSize(droneLabel.c_str());
@@ -850,7 +858,7 @@ inline bool VehiclesWidget::DrawMapOverlay(Eigen::Vector2d const & CursorPos_Scr
 }
 
 //Get the path of the first .MOV file in the first sim data set folder in "Simulation-Data-Sets" ("first" in a number-aware lexicographical sense)
-inline std::filesystem::path VehiclesWidget::GetPathForSimVideoInput(void) {
+inline std::filesystem::path VehicleControlWidget::GetPathForSimVideoInput(void) {
 	auto datasetDirs = Handy::SubDirectories(Handy::Paths::ThisExecutableDirectory().parent_path() / "Simulation-Data-Sets"s);
 	std::sort(datasetDirs.begin(), datasetDirs.end(), [](std::string const & A, std::string const & B) -> bool { return StringNumberAwareCompare_LessThan(A, B); });
 	if (datasetDirs.empty())
@@ -865,38 +873,7 @@ inline std::filesystem::path VehiclesWidget::GetPathForSimVideoInput(void) {
 	return std::filesystem::path();
 }
 
-inline bool VehiclesWidget::StartManualControlOfDrone(std::string Serial) {
-	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
-	
-	//Iterate through each connected drone - if the serial matches, start manual control of the drone and return true.
-	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
-		if (m_currentDroneSerials[n] == Serial) {
-			DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
-			if (drone == nullptr)
-				continue;
-			StartManualControl(*drone, m_vehicleStates.at(m_currentDroneSerials[n]));
-			return true;
-		}
-	}
-	return false;
-}
-
-inline void VehiclesWidget::StopManualControlOfDrone(std::string Serial) {
-	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
-	
-	//Iterate through each connected drone - if the serial matches, stop manual control of the drone.
-	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
-		if (m_currentDroneSerials[n] == Serial) {
-			DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
-			if (drone == nullptr)
-				continue;
-			DroneCommand_Hover(*drone, m_vehicleStates.at(m_currentDroneSerials[n]));
-			return;
-		}
-	}
-}
-
-inline void VehiclesWidget::AllDronesStopAndHover(void) {
+inline void VehicleControlWidget::AllDronesStopAndHover(void) {
 	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
 	
 	//Iterate through each connected drone and execute the command
@@ -908,7 +885,7 @@ inline void VehiclesWidget::AllDronesStopAndHover(void) {
 	}
 }
 
-inline void VehiclesWidget::AllDronesHitTheDeck(void) {
+inline void VehicleControlWidget::AllDronesHitTheDeck(void) {
 	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
 	
 	//Iterate through each connected drone and execute the command
@@ -920,7 +897,40 @@ inline void VehiclesWidget::AllDronesHitTheDeck(void) {
 	}
 }
 
-inline void VehiclesWidget::StartManualControl(DroneInterface::Drone & Drone, vehicleState & State, bool FlyAtDeck) {
+//Set/Clear Hazard lets the vehicle control widget decide on how to respond to a hazard instead of requiring the command module to make the call.
+//This is needed so that the vehicle control widget can react by stopping the vehicle only if it isn't already in a hazardous state. If already in a
+//hazardous state we don't want to stop the drone again since it would interfere with our ability to command the vehicle out of the hazardous state.
+inline void VehicleControlWidget::SetHazardCondition(std::string Serial, bool PauseOnHazard) {
+	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
+	
+	//Iterate through each connected drone - if the serial matches, start manual control of the drone and return true.
+	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
+		if (m_currentDroneSerials[n] == Serial) {
+			vehicleState & state(m_vehicleStates.at(Serial));
+			if (PauseOnHazard && (! state.m_hazard)) {
+				DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
+				if (drone != nullptr)
+					StartManualControl(*drone, state);
+			}
+			state.m_hazard = true;
+			return;
+		}
+	}
+}
+
+inline void VehicleControlWidget::ClearHazardCondition(std::string Serial) {
+	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
+	
+	//Iterate through each connected drone - if the serial matches, stop manual control of the drone.
+	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
+		if (m_currentDroneSerials[n] == Serial) {
+			m_vehicleStates.at(m_currentDroneSerials[n]).m_hazard = false;
+			return;
+		}
+	}
+}
+
+inline void VehicleControlWidget::StartManualControl(DroneInterface::Drone & Drone, vehicleState & State, bool FlyAtDeck) {
 	std::cerr << "Starting manual control for drone: " << Drone.GetDroneSerial() << ".\r\n";
 	
 	//Instruct the guidance module to stop commanding this drone (if it currently is)
@@ -952,28 +962,28 @@ inline void VehiclesWidget::StartManualControl(DroneInterface::Drone & Drone, ve
 	State.m_userControlEnabled = true;
 }
 
-inline void VehiclesWidget::DroneCommand_Hover(DroneInterface::Drone & Drone, vehicleState & State) {
+inline void VehicleControlWidget::DroneCommand_Hover(DroneInterface::Drone & Drone, vehicleState & State) {
 	std::cerr << "Drone Command to " << Drone.GetDroneSerial() << ": Hover In Place.\r\n";
 	Guidance::GuidanceEngine::Instance().RemoveLowFlier(Drone.GetDroneSerial()); //Tell the guidance module to stop commanding drone
 	State.m_userControlEnabled = false; //Stop our control loop from commanding the drone
 	Drone.Hover();
 }
 
-inline void VehiclesWidget::DroneCommand_LandNow(DroneInterface::Drone & Drone, vehicleState & State) {
+inline void VehicleControlWidget::DroneCommand_LandNow(DroneInterface::Drone & Drone, vehicleState & State) {
 	std::cerr << "Drone Command to " << Drone.GetDroneSerial() << ": Land Now.\r\n";
 	Guidance::GuidanceEngine::Instance().RemoveLowFlier(Drone.GetDroneSerial()); //Tell the guidance module to stop commanding drone
 	State.m_userControlEnabled = false; //Stop our control loop from commanding the drone
 	Drone.LandNow();
 }
 
-inline void VehiclesWidget::DroneCommand_GoHomeAndLand(DroneInterface::Drone & Drone, vehicleState & State) {
+inline void VehicleControlWidget::DroneCommand_GoHomeAndLand(DroneInterface::Drone & Drone, vehicleState & State) {
 	std::cerr << "Drone Command to " << Drone.GetDroneSerial() << ": Go Home and Land.\r\n";
 	Guidance::GuidanceEngine::Instance().RemoveLowFlier(Drone.GetDroneSerial()); //Tell the guidance module to stop commanding drone
 	State.m_userControlEnabled = false; //Stop our control loop from commanding the drone
 	Drone.GoHomeAndLand();
 }
 
-inline void VehiclesWidget::DrawContextMenu(bool Open, DroneInterface::Drone & drone) {
+inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Drone & drone) {
 	float labelMargin = 1.5f*ImGui::GetFontSize();
 	std::string popupStrIdentifier = drone.GetDroneSerial() + "-ContextMenu"s;
 	
@@ -1281,7 +1291,7 @@ inline void VehiclesWidget::DrawContextMenu(bool Open, DroneInterface::Drone & d
 }
 
 //TODO: So... drone should be passed as a const & but we need the drone class to be const-correct. Do this later to avoid disrupting Ben's work
-inline void VehiclesWidget::DrawDroneInteractable(DroneInterface::Drone & drone, vehicleState & State, size_t DroneIndex) {
+inline void VehicleControlWidget::DrawDroneInteractable(DroneInterface::Drone & drone, vehicleState & State, size_t DroneIndex) {
 	ImDrawList * draw_list = ImGui::GetWindowDrawList();
 	draw_list->ChannelsSplit(2);
 
@@ -1296,8 +1306,10 @@ inline void VehiclesWidget::DrawDroneInteractable(DroneInterface::Drone & drone,
 	
 	float startX = ImGui::GetCursorPosX();
 	ImGui::Image(m_IconTexture_Drone, ImVec2(2.0f*ImGui::GetFontSize(), 2.0f*ImGui::GetFontSize()));
-	ImGui::SameLine(startX + 2.4f*ImGui::GetFontSize());
+	ImGui::SameLine(startX + 2.6f*ImGui::GetFontSize());
 	std::string droneNumStr = std::to_string((unsigned int) DroneIndex + 1U);
+	if (State.m_hazard)
+		droneNumStr += u8" \uf071";
 	ImGui::BeginGroup();
 	if (State.m_userControlEnabled) {
 		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (ImGui::CalcTextSize("\uf11b").x - ImGui::CalcTextSize(droneNumStr.c_str()).x)/2.0f);
@@ -1311,7 +1323,7 @@ inline void VehiclesWidget::DrawDroneInteractable(DroneInterface::Drone & drone,
 	}
 	ImGui::EndGroup();
 	
-	ImGui::SameLine(startX + 4.0f*ImGui::GetFontSize());
+	ImGui::SameLine(startX + 4.6f*ImGui::GetFontSize());
 	ImGui::BeginGroup();
 	std::string FlightModeStr;
 	DroneInterface::Drone::TimePoint Timestamp;
@@ -1374,7 +1386,7 @@ inline void VehiclesWidget::DrawDroneInteractable(DroneInterface::Drone & drone,
 	draw_list->ChannelsMerge();
 }
 
-inline void VehiclesWidget::Draw() {
+inline void VehicleControlWidget::Draw() {
 	float cursorStartYPos = ImGui::GetCursorPos().y;
 	MyGui::HeaderLabel("Connected Vehicles");
 	

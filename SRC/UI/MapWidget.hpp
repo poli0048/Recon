@@ -81,7 +81,7 @@ class MapWidget {
 		friend class LandingZonesTool;
 		friend class MSATool;
 		friend class SurveyRegionsTool;
-		friend class VehiclesWidget;
+		friend class VehicleControlWidget;
 		
 		static MapWidget & Instance() { static MapWidget widget; return widget; }
 		
