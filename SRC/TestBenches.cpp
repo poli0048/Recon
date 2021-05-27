@@ -12,6 +12,9 @@
 #include <opencv2/opencv.hpp>
 //#include <opencv2/core/persistence.hpp>
 
+//TorchLib Includes
+#include "../../libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/include/torch/csrc/api/include/torch/torch.h"
+
 //Project Includes
 #include "TestBenches.hpp"
 #include "Polygon.hpp"
@@ -37,6 +40,7 @@ static bool TestBench18(std::string const & Arg);  static bool TestBench19(std::
 static bool TestBench20(std::string const & Arg);  static bool TestBench21(std::string const & Arg);
 static bool TestBench22(std::string const & Arg);  static bool TestBench23(std::string const & Arg);
 static bool TestBench24(std::string const & Arg);  static bool TestBench25(std::string const & Arg);
+static bool TestBench26(std::string const & Arg);
 
 // ************************************************************************************************************************************************
 // *********************************************************   Public Function Definitions   ******************************************************
@@ -78,6 +82,7 @@ namespace TestBenches {
 			case 23: result = TestBench23(TestBenchArg); break;
 			case 24: result = TestBench24(TestBenchArg); break;
 			case 25: result = TestBench25(TestBenchArg); break;
+			case 26: result = TestBench26(TestBenchArg); break;
 			default: break;
 		}
 		if (result)
@@ -977,6 +982,14 @@ static bool TestBench23(std::string const & Arg) {
 
 static bool TestBench24(std::string const & Arg) { return false; }
 static bool TestBench25(std::string const & Arg) { return false; }
+
+
+static bool TestBench26(std::string const & Arg) {
+	torch::Tensor tensor = torch::rand({2, 3});
+	std::cerr << tensor << std::endl;
+	
+	return true;
+}
 
 
 

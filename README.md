@@ -47,7 +47,8 @@ Recon is designed and developed with a goal of maintaining platform independence
 **Shadow Detection Module Dependencies:**
  * [OpenCV](https://opencv.org/)
 
-**Shadow Propagation Module Dependencies:** TBD
+**Shadow Propagation Module Dependencies:**
+ * [LibTorch](https://pytorch.org/)
 
 **Guidance Module Dependencies:** TBD
 
@@ -62,6 +63,8 @@ You need GCC version 8 or newer to build Recon. Create a directory somewhere, le
 This will create an archive that will be linked into Recon as part of the build process - note that you do not need to "make install" anything. **Important Note:** The given instructions for building GLFW may not work with versions of CMake prior to 3.13.4. If you run into problems you can build on top of the source directory and manually copy the file "libglfw3.a" to path Repos/glfw/Release/src/libglfw3.a.
 
 Next, use your package manager to ensure that you have the following libraries installed on your system (when available also install the "-dev" version): OpenGL, FreeType, LibCURL, and OpenCV. In Debian, you can get the needed dependencies by installing the following packages: libglu1-mesa-dev freeglut3-dev mesa-common-dev, libfreetype6, libfreetype6-dev, libcurl4, libcurl4-openssl-dev, and libopencv-dev.
+
+We use a pre-built version of LibTorch (From the PyTorch project). Download the pre-built from here: [LibTorch 1.8.1](https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.8.1%2Bcpu.zip). Unzip this in your Repos directory to a folder of the same name. If you have done this correctly you should have a folder with path Repos/libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/ that contains "bin", "include", "lib", and "share" sub-directories. You do not need to install anything; Recon will find the API headers and the Recon binary will know to load the dynamically linked libraries from the appropriate sub-directories at compile-time and at run-time, respectively.
 
 Now open a terminal in the Recon directory and run "make". If the build succeeds, the binary program will end up in Repos/Recon/Bin.
 
