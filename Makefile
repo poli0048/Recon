@@ -20,7 +20,7 @@ ifeq ($(BUILD_TYPE),$(filter $(BUILD_TYPE),Optimised-Release Optimised-Debug))
 else
 	OPTFLAGS1 = -ftree-vectorize -march=core2 -msse2 -msse3 -mssse3 -msse4.1 -mno-sse4.2 -mno-sse4a -mno-avx -mno-fma -mno-bmi2
 	OPTFLAGS2 = -mno-avx2 -mno-xop -mno-fma4 -mno-avx512f -mno-avx512vl -mno-avx512pf -mno-avx512er -mno-avx512cd -mno-avx512dq
-	OPTFLAGS3 = -mno-avx512bw -mno-avx512ifma -mno-avx512vbmi -Od -fopenmp
+	OPTFLAGS3 = -mno-avx512bw -mno-avx512ifma -mno-avx512vbmi -Og -fopenmp
 	OPTFLAGS =  $(OPTFLAGS1) $(OPTFLAGS2) $(OPTFLAGS3)
 endif
 

@@ -344,8 +344,11 @@ int main(int argc, const char * argv[]) {
 	log.print("Done.");
 	
 	log.print("Exiting Recon.");
-
+	
 	app.Deinit();
+	
+	Handy::Console::Release(std::cout);
+	Handy::Console::Release(std::cerr);
 	return 0;
 }
 
