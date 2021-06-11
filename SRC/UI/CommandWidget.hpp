@@ -42,6 +42,10 @@ class CommandWidget {
 			ImGuiApp::Instance().DeleteImage(m_IconTexture_Mission);
 			ImGuiApp::Instance().DeleteImage(m_IconTexture_Watchdog);
 			ImGuiApp::Instance().DeleteImage(m_IconTexture_Emergency);
+		}
+		
+		//Should be stopped before DataTileProvider since the private thread sometimes uses that system
+		inline void Stop(void) {
 			m_watchdogThreadAbort = true;
 			if (m_watchdogThread.joinable())
 				m_watchdogThread.join();
@@ -96,6 +100,10 @@ inline Eigen::Vector3d CommandWidget::positionLLA2ECEF(double lat, double lon, d
 
 inline void CommandWidget::WatchdogThreadMain(void) {
 	double approxCheckPeriod  = 2.0; //seconds (doesn't impact abort latancy)
+	
+	//Wait for DataTileProvider to initialize
+	while (Maps::DataTileProvider::Instance() == nullptr)
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	
 	std::chrono::time_point<std::chrono::steady_clock> lastCheckTimepoint = std::chrono::steady_clock::now();
 	while (! m_watchdogThreadAbort) {

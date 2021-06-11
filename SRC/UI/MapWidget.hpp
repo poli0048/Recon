@@ -46,6 +46,9 @@ class MapWidget {
 		bool            dragging = false;
 		Eigen::Vector2d MousePos_NormalizedMercator_OnLastClick;
 		
+		//Textures
+		ImTextureID m_IconTexture_Laptop;
+		
 		//Tools
 		AvoidanceZonesTool m_AvoidanceZonesTool;
 		LandingZonesTool m_LandingZonesTool;
@@ -86,7 +89,7 @@ class MapWidget {
 		static MapWidget & Instance() { static MapWidget widget; return widget; }
 		
 		MapWidget();
-		~MapWidget() = default;
+		~MapWidget();
 		
 		bool DrawDataTiles = true;
 		bool DrawDataTooltip = false;

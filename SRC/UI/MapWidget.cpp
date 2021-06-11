@@ -15,6 +15,8 @@
 #include "../ProgOptions.hpp"
 #include "../Maps/MapUtils.hpp"
 #include "VehicleControlWidget.hpp"
+#include "../Modules/GNSS-Receiver/GNSSReceiver.hpp"
+#include "EmbeddedIcons.hpp"
 
 #define PI 3.14159265358979
 
@@ -74,7 +76,13 @@ MapWidget::MapWidget()
 	  MousePos_NormalizedMercator_OnLastClick(0.0, 0.0),
 	  AnimationTimeInterval(std::make_tuple(std::chrono::steady_clock::now(), std::chrono::steady_clock::now())),
 	  AnimationInProgress(false)
-{ }
+{
+	m_IconTexture_Laptop = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_Laptop_Light_96x75[0], 96, 75);
+}
+
+MapWidget::~MapWidget() {
+	ImGuiApp::Instance().DeleteImage(m_IconTexture_Laptop);
+}
 
 //Set state variables so that the viewable map area approximately corresponds to the given area
 void MapWidget::ZoomToLocation(Eigen::Vector2d const & LatBounds, Eigen::Vector2d const & LonBounds) {
@@ -461,6 +469,20 @@ void MapWidget::Draw(void) {
 	bool processMouseInputs = true;
 	if (MaxTileZoomLevel >= 12)
 		processMouseInputs = VehicleControlWidget::Instance().DrawMapOverlay(mousePosScreenSpace, mousePosNM, draw_list, mouseInBounds);
+	
+	//Draw GCS location (if available)
+	Eigen::Vector2d GCS_Pos_NM;
+	GNSSReceiver::GNSSManager::TimePoint GCS_Pos_Timestamp;
+	if (GNSSReceiver::GNSSManager::Instance().GetPosition_NM(GCS_Pos_NM, GCS_Pos_Timestamp)) {
+		ImExt::Font fnt(Fonts::NormalBold);
+		Eigen::Vector2d GCS_Pos_SS = NormalizedMercatorToScreenCoords(GCS_Pos_NM);
+		float IconWidth_pixels = ProgOptions::Instance()->DroneIconScale*96.0f;
+		Eigen::Vector2d GCS_SS_Min = GCS_Pos_SS - 0.5*Eigen::Vector2d(IconWidth_pixels, 75.0/96.0*IconWidth_pixels);
+		Eigen::Vector2d GCS_SS_Max = GCS_Pos_SS + 0.5*Eigen::Vector2d(IconWidth_pixels, 75.0/96.0*IconWidth_pixels);
+		draw_list->AddImage(m_IconTexture_Laptop, GCS_SS_Min, GCS_SS_Max);
+		Eigen::Vector2d TextPos_SS = GCS_Pos_SS + Eigen::Vector2d(0.0, 0.5*75.0/96.0*IconWidth_pixels + ImGui::GetStyle().ItemSpacing.y);
+		MyGui::AddText(draw_list, TextPos_SS, IM_COL32_WHITE, "GCS", NULL, true, false);
+	}
 	
 	ImGui::EndChild();
 	mouseInBounds = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);

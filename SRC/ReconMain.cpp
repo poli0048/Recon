@@ -25,6 +25,9 @@
 #include "Maps/DataTileProvider.hpp"
 #include "Maps/SatelliteCacheMaster.hpp"
 #include "TestBenches.hpp"
+#include "Modules/GNSS-Receiver/GNSSReceiver.hpp"
+#include "UI/CommandWidget.hpp"
+#include "UI/VehicleControlWidget.hpp"
 
 #if defined IS_WINDOWS
 	#include <tchar.h>
@@ -125,11 +128,7 @@ void parseArgs(int argc, const char * argv[], std::string const & VersionString,
 	//Set default arguments
 	Arguments::Verbose     = false;
 	Arguments::GraphicsAPI = GetDefaultRenderingAPI();
-	//#if defined IS_WINDOWS
-	//	Arguments::FrameSync   = FrameSyncType::Dynamic;
-	//#else
-	Arguments::FrameSync   = FrameSyncType::VSync;
-	//#endif
+	Arguments::FrameSync   = FrameSyncType::Dynamic;
 
 	//Wrap everything in a try block.  Do this every time, because exceptions will be thrown for problems.
 	try {
@@ -317,6 +316,9 @@ int main(int argc, const char * argv[]) {
 	Maps::SatelliteCacheMaster::Instance()->Init(log);
 	log.print("Done.");
 	
+	//Touch the GNSS Manager to trigger singleton object creation
+	GNSSReceiver::GNSSManager::Instance();
+	
 	//Get reference to ImGuiApp Singleton and launch UI
 	ImGuiApp & app = ImGuiApp::Instance();
 	app.Init(Arguments::GraphicsAPI, Arguments::FrameSync, false);
@@ -329,6 +331,13 @@ int main(int argc, const char * argv[]) {
 	ui.Log = &log;
 	app.Main(&ui);
 	
+	//Shutdown the GNSS receiver manager thread
+	GNSSReceiver::GNSSManager::Instance().Shutdown();
+	
+	//Stop modules with private threads before cleaning up the data providers
+	VehicleControlWidget::Instance().Stop();
+	CommandWidget::Instance().Stop();
+	
 	log.print_continued("Destroying Tile Providers . ... ... ");
 	Maps::SatelliteCacheMaster::Instance()->Destroy();
 	Maps::DataTileProvider::Destroy();
@@ -337,7 +346,6 @@ int main(int argc, const char * argv[]) {
 	log.print_continued("Disabling RestClient .. ... ... ... ");
 	RestClient::disable();
 	log.print("Done.");
-	
 	
 	log.print_continued("Saving program options  ... ... ... ");
 	ProgOptions::Destroy();

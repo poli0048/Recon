@@ -68,7 +68,7 @@ inline void SimFiducialsWidget::LoadRefFrame(void) {
 	
 	m_RefFrame = cv::imread(refFramePath.string(), cv::IMREAD_COLOR);
 	cv::Mat refFrame_RGBA(m_RefFrame.size(), CV_8UC4);
-	cv::cvtColor(m_RefFrame, refFrame_RGBA, CV_BGRA2RGBA, 4);
+	cv::cvtColor(m_RefFrame, refFrame_RGBA, cv::COLOR_BGRA2RGBA, 4);
 	m_RefFrameTex = ImGuiApp::Instance().CreateImageRGBA8888(refFrame_RGBA.ptr(), refFrame_RGBA.cols, refFrame_RGBA.rows);
 	IMViewUV0 = ImVec2(0, 0);
 	IMViewUV1 = ImVec2(1, 1);

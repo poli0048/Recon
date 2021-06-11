@@ -74,6 +74,10 @@ class VehicleControlWidget {
 			ImGuiApp::Instance().DeleteImage(m_IconTexture_DroneWithArrow);
 			ImGuiApp::Instance().DeleteImage(m_IconTexture_HighlightedDrone);
 			ImGuiApp::Instance().DeleteImage(m_IconTexture_HighlightedDroneWithArrow);
+		}
+		
+		//Should be stopped before DataTileProvider since the private thread sometimes uses that system
+		inline void Stop(void) {
 			m_controlThreadAbort = true;
 			if (m_controlThread.joinable())
 				m_controlThread.join();
@@ -186,6 +190,10 @@ inline Eigen::Matrix3d VehicleControlWidget::latLon_2_C_ECEF_ENU(double lat, dou
 
 inline void VehicleControlWidget::ControlThreadMain(void) {
 	double approxLoopPeriod  = 0.15; //seconds
+	
+	//Wait for DataTileProvider to initialize
+	while (Maps::DataTileProvider::Instance() == nullptr)
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	
 	while (! m_controlThreadAbort) {
 		double PI = 3.14159265358979;
@@ -301,7 +309,7 @@ inline void VehicleControlWidget::DrawVideoWindows(void) {
 					}
 					if (Frame.type() == CV_8UC4) {
 						cv::Mat Frame_RGBA(Frame.size(), CV_8UC4);
-						cv::cvtColor(Frame, Frame_RGBA, CV_BGRA2RGBA, 4);
+						cv::cvtColor(Frame, Frame_RGBA, cv::COLOR_BGRA2RGBA, 4);
 						ImTextureID Tex = ImGuiApp::Instance().CreateImageRGBA8888(Frame_RGBA.ptr(), Frame_RGBA.cols, Frame_RGBA.rows);
 						std::scoped_lock lock(myState.m_Texmutex);
 						myState.m_Tex = Tex;
@@ -312,7 +320,7 @@ inline void VehicleControlWidget::DrawVideoWindows(void) {
 					}
 					else if (Frame.type() == CV_8UC3) {
 						cv::Mat Frame_RGBA(Frame.size(), CV_8UC4);
-						cv::cvtColor(Frame, Frame_RGBA, CV_BGR2RGBA, 4);
+						cv::cvtColor(Frame, Frame_RGBA, cv::COLOR_BGR2RGBA, 4);
 						ImTextureID Tex = ImGuiApp::Instance().CreateImageRGBA8888(Frame_RGBA.ptr(), Frame_RGBA.cols, Frame_RGBA.rows);
 						std::scoped_lock lock(myState.m_Texmutex);
 						myState.m_Tex = Tex;

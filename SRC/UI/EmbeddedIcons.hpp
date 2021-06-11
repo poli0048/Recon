@@ -18,3 +18,6 @@ extern const uint8_t Icon_Play_84x84[];
 extern const uint8_t Icon_Warning_84x84[];
 extern const uint8_t Icon_Watchdog_Dark_84x84[];
 extern const uint8_t Icon_Watchdog_Light_84x84[];
+
+extern const uint8_t Icon_Laptop_Dark_96x75[];
+extern const uint8_t Icon_Laptop_Light_96x75[];

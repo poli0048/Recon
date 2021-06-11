@@ -34,6 +34,71 @@ inline Eigen::Vector2d LatLonToNM(Eigen::Vector2d const & LatLon) {
 	return Eigen::Vector2d(x,y);
 }
 
+//Compute ECEF position (in meters) from WGS84 latitude, longitude, and altitude.
+//Input vector is: [Lat (radians), Lon (radians), Alt (m)]
+inline Eigen::Vector3d LLA2ECEF(Eigen::Vector3d const & Position_LLA) {
+	double lat = Position_LLA(0);
+	double lon = Position_LLA(1);
+	double alt = Position_LLA(2);
+	
+	double a = 6378137.0;           //Semi-major axis of reference ellipsoid
+	double ecc = 0.081819190842621; //First eccentricity of the reference ellipsoid
+	double eccSquared = ecc*ecc;
+	double N = a/sqrt(1.0 - eccSquared*sin(lat)*sin(lat));
+	double X = (N + alt)*cos(lat)*cos(lon);
+	double Y = (N + alt)*cos(lat)*sin(lon);
+	double Z = (N*(1 - eccSquared) + alt)*sin(lat);
+	
+	return Eigen::Vector3d(X, Y, Z);
+}
+
+//Compute latitude (radians), longitude (radians), and altitude (height above WGS84 ref. elipsoid, in meters) from ECEF position (in meters)
+//Latitude and longitude are also both given with respect to the WGS84 reference elipsoid.
+//Output is the vector [Lat (radians), Lon (radians), Alt (m)]
+inline Eigen::Vector3d ECEF2LLA(Eigen::Vector3d const & Position_ECEF) {
+	double x = Position_ECEF(0);
+	double y = Position_ECEF(1);
+	double z = Position_ECEF(2);
+	
+	//Set constants
+	double R_0 = 6378137.0;
+	double R_P = 6356752.314;
+	double ecc = 0.081819190842621;
+	
+	//Calculate longitude (radians)
+	double lon = atan2(y, x);
+	
+	//Compute intermediate values needed for lat and alt
+	double eccSquared = ecc*ecc;
+	double p = sqrt(x*x + y*y);
+	double E = sqrt(R_0*R_0 - R_P*R_P);
+	double F = 54.0*(R_P*z)*(R_P*z);
+	double G = p*p + (1.0 - eccSquared)*z*z - eccSquared*E*E;
+	double c = pow(ecc,4.0)*F*p*p/pow(G,3.0);
+	double s = pow(1.0 + c + sqrt(c*c + 2.0*c),1.0/3.0);
+	double P = (F/(3.0*G*G))/((s + (1.0/s) + 1.0)*(s + (1.0/s) + 1.0));
+	double Q = sqrt(1.0 + 2.0*pow(ecc,4.0)*P);
+	double k_1 = -1.0*P*eccSquared*p/(1.0 + Q);
+	double k_2 = 0.5*R_0*R_0*(1.0 + 1.0/Q);
+	double k_3 = -1.0*P*(1.0 - eccSquared)*z*z/(Q*(1.0 + Q));
+	double k_4 = -0.5*P*p*p;
+	double r_0 = k_1 + sqrt(k_2 + k_3 + k_4);
+	double k_5 = (p - eccSquared*r_0);
+	double U = sqrt(k_5*k_5 + z*z);
+	double V = sqrt(k_5*k_5 + (1.0 - eccSquared)*z*z);
+
+	double z_0 = (R_P*R_P*z)/(R_0*V);
+	double e_p = (R_0/R_P)*ecc;
+	
+	//Calculate latitude (radians)
+	double lat = atan((z + z_0*e_p*e_p)/p);
+
+	//Calculate Altitude (m)
+	double alt = U*(1.0 - (R_P*R_P/(R_0*V)));
+	
+	return Eigen::Vector3d(lat, lon, alt);
+}
+
 inline Eigen::Vector2d WidgetCoordsToNormalizedMercator(Eigen::Vector2d const & WidgetCords, Eigen::Vector2d const & ULCorner_NM, double Zoom, int32_t tileWidth) {
 	double screenPixelLengthNM = 2.0 / (pow(2.0, Zoom) * ((double) tileWidth));
 	return (ULCorner_NM + Eigen::Vector2d(WidgetCords(0)*screenPixelLengthNM, -1.0*WidgetCords(1)*screenPixelLengthNM));

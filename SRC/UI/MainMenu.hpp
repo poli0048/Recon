@@ -16,6 +16,7 @@
 #include "../Journal.h"
 #include "MyGui.hpp"
 #include "SimFiducialsWidget.hpp"
+#include "../Modules/GNSS-Receiver/GNSSReceiver.hpp"
 
 class MainMenu {
 	public:
@@ -58,6 +59,20 @@ inline void MainMenu::Draw() {
 		}
 		
 		if (ImGui::BeginMenu("Locations")) {
+			Eigen::Vector3d GCS_LLA;
+			std::chrono::time_point<std::chrono::steady_clock> GCS_Pos_Timestamp;
+			if (GNSSReceiver::GNSSManager::Instance().GetPosition_LLA(GCS_LLA, GCS_Pos_Timestamp)) {
+				float cursorX = ImGui::GetCursorPosX();
+				float selectableWidth = 18.4f*ImGui::GetFontSize() + ImGui::CalcTextSize("\uf057").x;
+				if (ImGui::Selectable("Current Location (GNSS)", false, 0, ImVec2(selectableWidth,0))) {
+					double const eps = 0.00004; //Radians
+					MapWidget::Instance().StartAnimation(GCS_LLA(0) - eps, GCS_LLA(0) + eps, GCS_LLA(1) - eps, GCS_LLA(1) + eps);
+				}
+				ImGui::SameLine();
+				ImGui::SetCursorPosX(cursorX + 18.4f*ImGui::GetFontSize());
+				ImGui::TextUnformatted("\uf124");
+				ImGui::Separator();
+			}
 			for (size_t bookmarkIndex = 0U; bookmarkIndex < BookmarkManager::Instance().Bookmarks.size(); bookmarkIndex++) {
 				LocationBookmark const & bookmark(BookmarkManager::Instance().Bookmarks[bookmarkIndex]);
 				ImGui::PushID((int) bookmarkIndex);
