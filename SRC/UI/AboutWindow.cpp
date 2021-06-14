@@ -19,19 +19,13 @@ void AboutWindow::Draw() {
 	ImExt::Window::Options wOpts;
 	wOpts.Flags = WindowFlags::NoCollapse | WindowFlags::NoSavedSettings | WindowFlags::NoDocking | WindowFlags::NoTitleBar | WindowFlags::NoResize;
 	wOpts.POpen = &Visible;
+	wOpts.Size(Math::Vector2(40.0f*ImGui::GetFontSize(), 18.0f*ImGui::GetFontSize()), Condition::Appearing);
 	if (ImExt::Window window("About", wOpts); window.ShouldDrawContents()) {
-		//If the window is appearing, set a reasonable size
-		if (window.IsAppearing()) {
-			float winWidth  = 45.0f * ImGui::GetFontSize();
-			float winHeight = 25.0f * ImGui::GetFontSize();
-			ImGui::SetWindowSize(ImVec2(winWidth, winHeight));
-		}
-		
 		ImExt::Style style(StyleVar::WindowPadding, Math::Vector2(20.0f));
 		
 		ImGui::BeginChild("About Scrollable Region", ImVec2(0,0), true, ImGuiWindowFlags_AlwaysUseWindowPadding);
 	
-		const char HeadingLabel[] = "Recon: A Flexible, Multi-Vehicle Ground Control Station for small UAS";
+		const char HeadingLabel[] = "Recon: A Multi-Vehicle Ground Control Station for small UAS";
 		float HeadingWidth = ImGui::CalcTextSize(HeadingLabel).x;
 		float gapWidth = std::max(0.5f*(ImGui::GetContentRegionAvail().x - HeadingWidth), 0.0f);
 		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + gapWidth);

@@ -87,7 +87,7 @@ inline void MainMenu::Draw() {
 				ImGui::PopID();
 			}
 			ImGui::Separator();
-			if (ImGui::MenuItem("New Bookmark")) {
+			if (ImGui::MenuItem("New Bookmark (Current View)")) {
 				Eigen::Vector2d LatBounds, LonBounds;
 				MapWidget::Instance().GetCurrentLatLonBounds(LatBounds, LonBounds);
 				NewBookmarkDialog::Instance().Show(LatBounds, LonBounds);

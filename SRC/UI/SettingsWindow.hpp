@@ -98,9 +98,7 @@ inline void SettingsWindow::Draw() {
 			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
 			ImGui::TextUnformatted("100%: Full resolution.\n50%: 1 tile pixel takes up 2 pixels x 2 pixels on your screen.\n\n"
 			                       "Reducing the map DPI improves UI responsiveness (recommended for computers with high resolution displays "
-			                       "and slower integrated graphics). This setting does not prevent you from viewing mosaics at their full resolution. "
-			                       "Instead it adjusts the map zoom levels at which different resolution imagery is loaded. If you zoom in enough "
-			                       "you will always be able to see the highest resolution imagery.");
+			                       "and slower integrated graphics).");
 			ImGui::PopTextWrapPos();
 			ImGui::EndTooltip();
 		}
@@ -137,7 +135,7 @@ inline void SettingsWindow::Draw() {
 			                       "If a receiver is present, your location will appear on the map and in the Locations menu. This also enables "
 			                       "absolute timestamps on certain collected data (such as generated shadow map files).\n\n"
 			                       "Currently, only UBLOX receivers (Gen 6 and later) are supported. If you are looking for a good, supported receiver, " 
-			                       "We recommend the GPS-17285 NEO-M9N breakout board from SparkFun, coupled with a Taoglas Titan AA.108.301111 "
+			                       "we recommend the GPS-17285 NEO-M9N breakout board from SparkFun, coupled with a Taoglas Titan AA.108.301111 "
 			                       "antenna (DigiKey Part # 931-1135-ND). Connect using the boards USB-C interface.");
 			ImGui::PopTextWrapPos();
 			ImGui::EndTooltip();
