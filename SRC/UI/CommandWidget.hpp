@@ -23,9 +23,6 @@
 #include "EmbeddedIcons.hpp"
 #include "../Modules/DJI-Drone-Interface/DroneManager.hpp"
 #include "../Utilities.hpp"
-//#include "MapWidget.hpp"
-//#include "../Maps/MapUtils.hpp"
-//#include "../ProgOptions.hpp"
 #include "../Modules/Guidance/Guidance.hpp"
 
 class CommandWidget {

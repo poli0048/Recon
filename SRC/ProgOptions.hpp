@@ -41,6 +41,12 @@ class ProgOptions {
 		static void Destroy() { delete s_instance; s_instance = nullptr; }
 		static ProgOptions * Instance(void) { return s_instance; }
 		
+		//Important: options may be accessed off-main-thread, which means we need a mechanism for negotiating access. We opt to just add a
+		//mutex as a public field and require that this be locked while accessing (reading or writing) any other fields. This is locked in
+		//ReconUI::Draw() so all access from the main draw thread are covered by that; you only need to manually lock this when accessing
+		//fields of this class off the main thread.
+		std::mutex OptionsMutex;
+		
 		//The options are public fields so we can hand pointers to them directy to ImGui to expose the options.
 		float UIScaleFactor;    //Scale factor for all UI elements
 		float MapDPIPercentage; //Val = X: Map tiles selected so 1 screen pixel = X/100 tile pixels. Generally set between 50 and 100.
@@ -48,7 +54,6 @@ class ProgOptions {
 		float zoomSpeed;        //Normalized so that 1.0 is reasonable.
 		Themes::Theme UITheme;  //Light, Dark, etc.
 		
-		//TODO: We really should protect at least these with a mutex since they can be accessed off the draw thread in the GNSS receiver module
 		bool GNSSModuleEnabled;             //If true, the GNSS receiver module should listen for GNSS receivers at the specified device path
 		bool GNSSModuleVerbose;             //If true, the GNSS receiver module will print out info about receiver status (for debugging GNSS)
 		std::string GNSSReceiverDevicePath; //Path to serial device representing the GNSS receiver (or the port number on Windows)

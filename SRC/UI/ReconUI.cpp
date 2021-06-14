@@ -29,6 +29,9 @@ void ReconUI::Postframe() {
 void ReconUI::Draw() {
 	static bool firstDrawPass = true;
 	
+	//Lock progOptions - this covers all access from the main thread in drawing the UI
+	std::scoped_lock progOptionsLock(ProgOptions::Instance()->OptionsMutex);
+	
 	//Either open the Demo/Style window, or set the global theme
 	std::unique_ptr<Themes::ThemeSitter> themeSitter;
 	if (show_demo_window)

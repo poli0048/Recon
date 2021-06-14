@@ -140,24 +140,30 @@ class NAVSolution {
 		bool initialized = false; //Set to true when at least one of the above is true (and thus, iTOW is populated)
 		std::chrono::time_point<std::chrono::steady_clock> timestamp; //Time when first component is decoded.
 		
-		uint32_t iTOW = 0U;
-		int32_t fTOW;
-		int16_t week;
-		uint8_t valid;
-		uint32_t tAcc;
+		//Initialize all fields to prevent compiler warnings about possible use-before-set bugs
+		uint32_t iTOW  = 0U;
+		int32_t  fTOW  = 0;
+		int16_t  week  = 0;
+		uint8_t  valid = 0U;
+		uint32_t tAcc  = 0U;
 		
-		int32_t ecefX, ecefY, ecefZ;
-		uint32_t pAcc;
+		int32_t  ecefX = 0;
+		int32_t  ecefY = 0;
+		int32_t  ecefZ = 0;
+		uint32_t pAcc  = 0U;
 		
-		uint8_t gpsFix, flags, fixStat, flags2;
-		uint32_t ttff;
+		uint8_t  gpsFix  = 0U;
+		uint8_t  flags   = 0U;
+		uint8_t  fixStat = 0U;
+		uint8_t  flags2  = 0U;
+		uint32_t ttff    = 0U;
 		
 		bool isComplete(void) { return (isDecoded_POSECEF && isDecoded_STATUS && isDecoded_TIMEGPS); }
 		void reset(void) {
 			isDecoded_POSECEF = false;
-			isDecoded_STATUS = false;
+			isDecoded_STATUS  = false;
 			isDecoded_TIMEGPS = false;
-			initialized = false;
+			initialized       = false;
 		}
 		
 		void decode_NAV_POSECEF(uint8_t * rawUBXPacket) {
@@ -306,29 +312,47 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 	NAVSolution currentSol;
 	NAVSig      currentSigs;
 	while (! m_abort) {
-		ProgOptions * opts = ProgOptions::Instance();
-		if (opts == nullptr) {
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-			continue;
+		//Grab copies of the relavent options from progOptions so we don't have to hold a lock on progOptions for long
+		bool GNSSModuleEnabled = false;
+		bool GNSSModuleVerbose = false;
+		std::string GNSSReceiverDevicePath;
+		int GNSSReceiverBaudRate = -1;
+		{
+			ProgOptions * opts = ProgOptions::Instance();
+			if (opts != nullptr) {
+				std::scoped_lock progOptionsLock(opts->OptionsMutex);
+				GNSSModuleEnabled      = opts->GNSSModuleEnabled;
+				GNSSModuleVerbose      = opts->GNSSModuleVerbose;
+				GNSSReceiverDevicePath = opts->GNSSReceiverDevicePath;
+				GNSSReceiverBaudRate   = opts->GNSSReceiverBaudRate;
+			}
 		}
-		if (! opts->GNSSModuleEnabled) {
-			m_running = false;
-			m_receiverConnected = false;
+		
+		//Update receiver-connected status
+		m_receiverConnected = (SecondsElapsed(last_Packet_Timestamp, std::chrono::steady_clock::now()) < 4.0);
+		
+		//Service any reset request
+		if (m_reset) {
+			std::cerr << "GNSS receiver module resetting.\r\n";
+			gnssSerialDev.reset();
+			m_reset = false;
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			continue;
 		}
 		
-		//If we get here, we the module is running.
-		m_running = true;
-		m_receiverConnected = (SecondsElapsed(last_Packet_Timestamp, std::chrono::steady_clock::now()) < 4.0);
+		//If not running, just sleep and continue
+		if (! GNSSModuleEnabled) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			continue;
+		}
 		
 		//If the serial device is not open. Try to open it and attempt to configure a UBLOX GNSS receiver that might be listening
 		if (gnssSerialDev == nullptr) {
 			try {
-				gnssSerialDev.reset(new serial::Serial(opts->GNSSReceiverDevicePath, opts->GNSSReceiverBaudRate, serial::Timeout::simpleTimeout(1000)));
+				gnssSerialDev.reset(new serial::Serial(GNSSReceiverDevicePath, GNSSReceiverBaudRate, serial::Timeout::simpleTimeout(1000)));
 			}
 			catch (...) {
-				if (opts->GNSSModuleVerbose)
+				if (GNSSModuleVerbose)
 					std::cerr << "GNSS Config failure (Exception on port open) - will retry in 2 seconds\r\n";
 				gnssSerialDev.reset();
 				for (int n = 0; n < 20; n++) {
@@ -338,7 +362,7 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 				continue;
 			}
 			if (! gnssSerialDev->isOpen()) {
-				if (opts->GNSSModuleVerbose)
+				if (GNSSModuleVerbose)
 					std::cerr << "GNSS Config failure (Port not open) - will retry in 2 seconds\r\n";
 				gnssSerialDev.reset();
 				for (int n = 0; n < 20; n++) {
@@ -377,7 +401,7 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 				UBXPacket_CFG_PRT::encodeSet(UBXPacket, PortID, txReady, mode, baudRate, inProtoMask, outProtoMask);
 				gnssSerialDev->write(UBXPacket);
 				if (! isAcknowledged(gnssSerialDev.get(), MESSAGE_CLASS_CFG, MESSAGE_ID_CFG_PRT)) {
-					if (opts->GNSSModuleVerbose)
+					if (GNSSModuleVerbose)
 						std::cerr << "GNSS Config failure (No Ack for CFG_PRT) - will retry in 2 seconds\r\n";
 					gnssSerialDev.reset();
 					for (int n = 0; n < 20; n++) {
@@ -388,7 +412,7 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 				}
 			}
 			else {
-				if (opts->GNSSModuleVerbose)
+				if (GNSSModuleVerbose)
 					std::cerr << "GNSS Config failure (No reply to CFG_PRT poll request) - will retry in 2 seconds\r\n";
 				gnssSerialDev.reset();
 				for (int n = 0; n < 20; n++) {
@@ -403,7 +427,7 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 			UBXPacket_CFG_MSG::encodeSet(UBXPacket, MESSAGE_CLASS_NAV, MESSAGE_ID_NAV_POSECEF, 1U);
 			gnssSerialDev->write(UBXPacket);
 			if (! isAcknowledged(gnssSerialDev.get(), MESSAGE_CLASS_CFG, MESSAGE_ID_CFG_MSG)) {
-				if (opts->GNSSModuleVerbose)
+				if (GNSSModuleVerbose)
 					std::cerr << "GNSS Config failure (No Ack for CFG_MSG) - will retry in 2 seconds\r\n";
 				gnssSerialDev.reset();
 				for (int n = 0; n < 20; n++) {
@@ -418,7 +442,7 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 			UBXPacket_CFG_MSG::encodeSet(UBXPacket, MESSAGE_CLASS_NAV, MESSAGE_ID_NAV_STATUS, 1U);
 			gnssSerialDev->write(UBXPacket);
 			if (! isAcknowledged(gnssSerialDev.get(), MESSAGE_CLASS_CFG, MESSAGE_ID_CFG_MSG)) {
-				if (opts->GNSSModuleVerbose)
+				if (GNSSModuleVerbose)
 					std::cerr << "GNSS Config failure (No Ack for CFG_MSG) - will retry in 2 seconds\r\n";
 				gnssSerialDev.reset();
 				for (int n = 0; n < 20; n++) {
@@ -433,7 +457,7 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 			UBXPacket_CFG_MSG::encodeSet(UBXPacket, MESSAGE_CLASS_NAV, MESSAGE_ID_NAV_TIMEGPS, 1U);
 			gnssSerialDev->write(UBXPacket);
 			if (! isAcknowledged(gnssSerialDev.get(), MESSAGE_CLASS_CFG, MESSAGE_ID_CFG_MSG)) {
-				if (opts->GNSSModuleVerbose)
+				if (GNSSModuleVerbose)
 					std::cerr << "GNSS Config failure (No Ack for CFG_MSG) - will retry in 2 seconds\r\n";
 				gnssSerialDev.reset();
 				for (int n = 0; n < 20; n++) {
@@ -455,7 +479,7 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 			UBXPacket_CFG_RATE::encodeSet(UBXPacket, measRate, uint16_t(1U), timeRef);
 			gnssSerialDev->write(UBXPacket);
 			if (! isAcknowledged(gnssSerialDev.get(), MESSAGE_CLASS_CFG, MESSAGE_ID_CFG_RATE)) {
-				if (opts->GNSSModuleVerbose)
+				if (GNSSModuleVerbose)
 					std::cerr << "GNSS Config failure (No Ack for CFG_RATE) - will retry in 2 seconds\r\n";
 				gnssSerialDev.reset();
 				for (int n = 0; n < 20; n++) {
@@ -466,7 +490,7 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 			}
 			
 			//Poll for Hardware Status
-			if (opts->GNSSModuleVerbose) {
+			if (GNSSModuleVerbose) {
 				UBXPacket.clear();
 				UBXPacket_MON_HW::encodePollRequest(UBXPacket);
 				gnssSerialDev->write(UBXPacket);
@@ -502,7 +526,7 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 		
 		//We made it through configuration... let's make sure the port is still open
 		if (! gnssSerialDev->isOpen()) {
-			if (opts->GNSSModuleVerbose)
+			if (GNSSModuleVerbose)
 				std::cerr << "GNSS error (port unexpectedly closed) - will re-init in 1 second\r\n";
 			gnssSerialDev.reset();
 			for (int n = 0; n < 10; n++) {

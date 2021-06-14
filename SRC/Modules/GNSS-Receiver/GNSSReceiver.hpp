@@ -27,8 +27,8 @@ namespace GNSSReceiver {
 			using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 		private:
 			std::thread       m_managerThread;
-			std::atomic<bool> m_running;
 			std::atomic<bool> m_receiverConnected;
+			std::atomic<bool> m_reset;
 			std::atomic<bool> m_abort;
 			std::mutex        m_mutex; //Protects non-atomic fields
 			
@@ -43,7 +43,7 @@ namespace GNSSReceiver {
 			static GNSSManager & Instance() { static GNSSManager Obj; return Obj; }
 			
 			//Constructors and Destructors
-			GNSSManager() : m_managerThread(&GNSSManager::ModuleMain, this), m_running(false), m_receiverConnected(false), m_abort(false),
+			GNSSManager() : m_managerThread(&GNSSManager::ModuleMain, this), m_receiverConnected(false), m_reset(false), m_abort(false),
 			                                m_pos_ECEF(std::nan(""), std::nan(""), std::nan("")),
 			                                m_validSolutionReceived(false) { }
 			~GNSSManager() { Shutdown(); }
@@ -54,11 +54,10 @@ namespace GNSSReceiver {
 					m_managerThread.join();
 			}
 			
-			//Returns true if manager is running (either talking to GNSS receiver or listening for one)
-			inline bool IsRunning(void) { return m_running; }
-			
 			//Returns true if a GNSS receiver is currently connected
 			inline bool IsConnected(void) { return m_receiverConnected; }
+			
+			inline void Reset(void) { m_reset = true; }
 			
 			//Get the most recent position. Returns false if not available
 			inline bool GetPosition_ECEF(Eigen::Vector3d & Pos_ECEF, TimePoint & Timestamp);
