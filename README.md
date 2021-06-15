@@ -42,12 +42,13 @@ Recon is designed and developed with a goal of maintaining platform independence
  * [FreeType](https://www.freetype.org/)
  * [LibCurl](https://curl.se/libcurl/)
  * [OpenCV4](https://opencv.org/)
+ * [serial](https://github.com/wjwwood/serial)
 
 **Shadow Propagation Module Dependencies:**
  * [LibTorch](https://pytorch.org/)
 
 # Building On Linux
-You need GCC version 8 or newer to build Recon. Create a directory somewhere, let's call it "Repos". Clone the Recon repository into this directory (so this file has path "Repos/Recon/README.md"). Similarly clone the following dependencies into the Repos folder: Eigen, Dear ImGUI, HandyCPP, RestClient-CPP, Native File Dialog, Flexible Raster Format, Cereal, and GLFW. These dependencies are all referenced using relative paths in the Recon project. Next, GLFW needs to be compiled as follows:
+You need GCC version 8 or newer to build Recon. Create a directory somewhere, let's call it "Repos". Clone the Recon repository into this directory (so this file has path "Repos/Recon/README.md"). Similarly clone the following dependencies into the Repos folder: Eigen, Dear ImGUI, HandyCPP, RestClient-CPP, Native File Dialog, Flexible Raster Format, Cereal, GLFW, and serial. These dependencies are all referenced using relative paths in the Recon project. Next, GLFW needs to be compiled as follows:
  * Open a terminal to the GLFW directory
  * mkdir Release
  * cd Release
