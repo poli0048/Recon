@@ -30,7 +30,8 @@ class CommandWidget {
 		static CommandWidget & Instance() { static CommandWidget Widget; return Widget; }
 		
 		//Constructors and Destructors
-		CommandWidget() : Log(*(ReconUI::Instance().Log)), m_watchdogThread(&CommandWidget::WatchdogThreadMain, this) {
+		CommandWidget() : Log(*(ReconUI::Instance().Log)) {
+			m_watchdogThread = std::thread(&CommandWidget::WatchdogThreadMain, this);
 			m_IconTexture_Mission   = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_Play_84x84[0],           84, 84);
 			m_IconTexture_Watchdog  = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_Watchdog_Light_84x84[0], 84, 84);
 			m_IconTexture_Emergency = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_Warning_84x84[0],        84, 84);

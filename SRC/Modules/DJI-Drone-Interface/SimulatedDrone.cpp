@@ -15,7 +15,7 @@
 //DroneInterface::Drone::TimePoint InitTimepoint = std::chrono::steady_clock::now(); //Used for testing message age warnings
 
 namespace DroneInterface {
-	SimulatedDrone::SimulatedDrone() : m_MainThread(&SimulatedDrone::DroneMain, this), m_abort(false) {
+	SimulatedDrone::SimulatedDrone() : m_abort(false) {
 		//Set up a waypoint mission that we can pretend to be flying
 		m_LastMission.Waypoints.clear();
 		m_LastMission.Waypoints.emplace_back();
@@ -76,6 +76,8 @@ namespace DroneInterface {
 		m_LastMission.CurvedTrajectory = false;
 		
 		m_flightMode = 1;
+		
+		m_MainThread = std::thread(&SimulatedDrone::DroneMain, this);
 	}
 	
 	SimulatedDrone::~SimulatedDrone() {

@@ -27,3 +27,4 @@ FORCEINLINE   ImVec4(Eigen::Vector4d         const & v4) : x(v4(0)), y(v4(1)), z
 FORCEINLINE operator Eigen::Vector4d()       const { return Eigen::Vector4d(x, y, z, w); }
 
 #include "../../imgui/app/ImGuiApp.hpp"
+#include "../../implot/implot.h"

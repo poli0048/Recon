@@ -10,8 +10,10 @@
 #include "Drone.hpp"
 
 namespace DroneInterface {
-	RealDrone::RealDrone() : m_thread(&RealDrone::DroneMain, this), m_abort(false) {
+	RealDrone::RealDrone() : m_abort(false) {
 		//Initialization Here (Retrieve serial number, etc.)
+		
+		m_thread = std::thread(&RealDrone::DroneMain, this);
 	}
 	
 	RealDrone::~RealDrone() {

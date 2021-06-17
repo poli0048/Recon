@@ -319,6 +319,9 @@ int main(int argc, const char * argv[]) {
 	//Touch the GNSS Manager to trigger singleton object creation
 	GNSSReceiver::GNSSManager::Instance();
 	
+	//Set up context for ImPlot
+	ImPlot::CreateContext();
+	
 	//Get reference to ImGuiApp Singleton and launch UI
 	ImGuiApp & app = ImGuiApp::Instance();
 	app.Init(Arguments::GraphicsAPI, Arguments::FrameSync, false);
@@ -330,6 +333,9 @@ int main(int argc, const char * argv[]) {
 	ReconUI & ui = ReconUI::Instance();
 	ui.Log = &log;
 	app.Main(&ui);
+	
+	//Destroy context for ImPlot
+	ImPlot::DestroyContext();
 	
 	//Shutdown the GNSS receiver manager thread
 	GNSSReceiver::GNSSManager::Instance().Shutdown();

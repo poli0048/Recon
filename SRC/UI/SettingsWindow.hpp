@@ -197,7 +197,7 @@ inline void SettingsWindow::Draw() {
 			ImExt::Style tooltipStyle(StyleVar::WindowPadding, Math::Vector2(4.0f));
 			ImGui::BeginTooltip();
 			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-			ImGui::TextUnformatted("Baud rate for serial comms, in bits per second. Note: If you are connecting your GNSS receiver over USB, "
+			ImGui::TextUnformatted("Baud rate for serial comms, in bits/second. Note: If you are connecting your GNSS receiver over USB, "
 			                       "this setting has no effect.");
 			ImGui::PopTextWrapPos();
 			ImGui::EndTooltip();
@@ -246,8 +246,8 @@ inline void SettingsWindow::Draw() {
 			ImExt::Style tooltipStyle(StyleVar::WindowPadding, Math::Vector2(4.0f));
 			ImGui::BeginTooltip();
 			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-			ImGui::TextUnformatted("Changing the port or baud rate may not take effect immediately if the GNSS receiver module currently "
-			                       "has another port open. Resetting the module will force the new settings into effect immediately. "
+			ImGui::TextUnformatted("Changing the port or baud rate may not take effect immediately if the GNSS receiver module is already "
+			                       "talking to a receiver. Resetting the module will force the new settings into effect immediately. "
 			                       "Regardless of whether you reset the module or not, your setting will be saved and used on next program launch.");
 			ImGui::PopTextWrapPos();
 			ImGui::EndTooltip();

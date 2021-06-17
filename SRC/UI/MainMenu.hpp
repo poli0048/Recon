@@ -17,6 +17,7 @@
 #include "MyGui.hpp"
 #include "SimFiducialsWidget.hpp"
 #include "../Modules/GNSS-Receiver/GNSSReceiver.hpp"
+#include "GNSSReceiverWindow.hpp"
 
 class MainMenu {
 	public:
@@ -50,8 +51,26 @@ inline void MainMenu::Draw() {
 			if (ImGui::MenuItem(consoleText.c_str()))
 				ConsoleWidget::Instance().AppearHideToggle();
 			
-			if (ImGui::MenuItem("Show Simulation GCP Marker Tool"))
+			if (ImGui::MenuItem("Show Simulation GCP Marker Tool")) {
 				SimFiducialsWidget::Instance().m_visible = true;
+				ImExt::Window::FocusWindow("Simulation Fiducials Marker");
+			}
+			
+			{
+				float cursorX = ImGui::GetCursorPosX();
+				float selectableWidth = 16.0f*ImGui::GetFontSize() + ImGui::CalcTextSize("\xef\x9e\xbf").x;
+				if (ImGui::Selectable("Show GNSS Receiver Window", false, 0, ImVec2(selectableWidth,0))) {
+					GNSSReceiverWindow::Instance().Visible = true;
+					ImExt::Window::FocusWindow("GNSS Receiver");
+				}
+				ImGui::SameLine();
+				ImGui::SetCursorPosX(cursorX + 16.0f*ImGui::GetFontSize());
+				ImGui::TextUnformatted("\xef\x9e\xbf");
+				ImGui::Separator();
+			}
+			
+			//if (ImGui::MenuItem("Show GNSS Receiver Window"))
+			//	GNSSReceiverWindow::Instance().Visible = true;
 			
 			if (ImGui::MenuItem("Show/Hide Demo Window"))
 				ReconUI::Instance().show_demo_window = ! ReconUI::Instance().show_demo_window;

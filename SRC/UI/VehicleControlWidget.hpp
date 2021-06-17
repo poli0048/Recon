@@ -63,7 +63,8 @@ class VehicleControlWidget {
 		static VehicleControlWidget & Instance() { static VehicleControlWidget Widget; return Widget; }
 		
 		//Constructors and Destructors
-		VehicleControlWidget() : Log(*(ReconUI::Instance().Log)), m_controlThread(&VehicleControlWidget::ControlThreadMain, this) {
+		VehicleControlWidget() : Log(*(ReconUI::Instance().Log)) {
+			m_controlThread = std::thread(&VehicleControlWidget::ControlThreadMain, this);
 			m_IconTexture_Drone = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_QuadCopterTopView_Light_84x84[0], 84, 84);
 			m_IconTexture_DroneWithArrow = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_QuadCopterTopViewWithArrow_Light_96x96[0], 96, 96);
 			m_IconTexture_HighlightedDrone = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_QuadCopterTopView_LightHighlighted_84x84[0], 84, 84);

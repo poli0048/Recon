@@ -19,6 +19,7 @@
 #include "ModalDialogs.hpp"
 #include "TextureUploadFlowRestrictor.hpp"
 #include "SimFiducialsWidget.hpp"
+#include "GNSSReceiverWindow.hpp"
 
 ReconUI::ReconUI() { }
 void ReconUI::Preframe() { }
@@ -111,6 +112,7 @@ void ReconUI::Draw() {
 	AboutWindow::Instance().Draw();
 	SettingsWindow::Instance().Draw();
 	SimFiducialsWidget::Instance().Draw();
+	GNSSReceiverWindow::Instance().Draw();
 	
 	//Draw secondary non-singleton windows
 	DrawChildren();

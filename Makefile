@@ -83,7 +83,9 @@ EXTERNAL_SRCFILES = ../restclient-cpp/source/connection.cc \
                     ../Flexible-Raster-Format/FRF.cpp \
                     ../handycpp/Handy.cpp \
                     ../serial/src/serial.cc \
-                    ../serial/src/impl/unix.cc
+                    ../serial/src/impl/unix.cc \
+                    ../implot/implot.cpp \
+                    ../implot/implot_items.cpp
 
 # **********************************************   Populate Object File Lists   *********************************************
 RECON_OBJFILES    = $(patsubst SRC/%.cpp,OBJ/%.o,$(RECON_SRCFILES))

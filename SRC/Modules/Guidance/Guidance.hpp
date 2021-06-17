@@ -55,7 +55,9 @@ namespace Guidance {
 			static GuidanceEngine & Instance() { static GuidanceEngine Obj; return Obj; }
 			
 			//Constructors and Destructors
-			GuidanceEngine() : m_engineThread(&GuidanceEngine::ModuleMain, this), m_running(false), m_abort(false), m_missionPrepDone(false) { }
+			GuidanceEngine() : m_running(false), m_abort(false), m_missionPrepDone(false) {
+				m_engineThread = std::thread(&GuidanceEngine::ModuleMain, this);
+			}
 			~GuidanceEngine() {
 				m_abort = true;
 				if (m_engineThread.joinable())

@@ -96,7 +96,9 @@ namespace ShadowDetection {
 			static ShadowDetectionEngine & Instance() { static ShadowDetectionEngine Obj; return Obj; }
 			
 			//Constructors and Destructors
-			ShadowDetectionEngine() : m_engineThread(&ShadowDetectionEngine::ModuleMain, this), m_running(false), m_abort(false) { }
+			ShadowDetectionEngine() : m_running(false), m_abort(false) {
+				m_engineThread = std::thread(&ShadowDetectionEngine::ModuleMain, this);
+			}
 			~ShadowDetectionEngine() {
 				Stop();
 				m_abort = true;

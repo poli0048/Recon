@@ -14,10 +14,7 @@ namespace Maps {
 //This instantiates the s_instance static field, but the constructor will not be called until Init is run
 SatelliteCacheMaster * SatelliteCacheMaster::s_instance = nullptr;
 
-SatelliteCacheMaster::SatelliteCacheMaster(Journal & LogRef)
-	: Log(LogRef),
-	  m_garbageCollectionThreadAbort(false)
-{
+SatelliteCacheMaster::SatelliteCacheMaster(Journal & LogRef) : Log(LogRef), m_garbageCollectionThreadAbort(false) {
 	m_cacheMem     = new CacheMem(Log);
 	m_cacheFile    = new CacheFile(this, Log);
 	m_webRetriever = new WebRetriever(this, Log);

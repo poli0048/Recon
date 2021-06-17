@@ -11,7 +11,7 @@
 //Project Includes
 #include "GNSSReceiver.hpp"
 #include "../../ProgOptions.hpp"
-#include "../../Utilities.hpp"
+//#include "../../Utilities.hpp"
 
 #define UBX_HEADER_LENGTH 6U //Number of bytes that proceed the payload of a raw UBX packet
 
@@ -48,6 +48,7 @@
 //We use POSECEF, STATUS, and TIMEGPS messages because they are supported from UBX6 through UBX9. SOL and SVINFO have been replaced
 //We can use SIG to get info on tracked satelites (to get C/N0s)... but we should not require this since it doesn't exist on older receivers.
 #define MESSAGE_ID_NAV_POSECEF 0x01
+#define MESSAGE_ID_NAV_POSLLH  0x02
 #define MESSAGE_ID_NAV_STATUS  0x03
 #define MESSAGE_ID_NAV_TIMEGPS 0x20
 #define MESSAGE_ID_NAV_SIG     0x43
@@ -135,6 +136,7 @@ class NAVSolution {
 		~NAVSolution() = default;
 		
 		bool isDecoded_POSECEF = false;
+		bool isDecoded_POSLLH  = false;
 		bool isDecoded_STATUS  = false;
 		bool isDecoded_TIMEGPS = false;
 		bool initialized = false; //Set to true when at least one of the above is true (and thus, iTOW is populated)
@@ -158,9 +160,13 @@ class NAVSolution {
 		uint8_t  flags2  = 0U;
 		uint32_t ttff    = 0U;
 		
-		bool isComplete(void) { return (isDecoded_POSECEF && isDecoded_STATUS && isDecoded_TIMEGPS); }
+		uint32_t hAcc = 0U;
+		uint32_t vAcc = 0U;
+		
+		bool isComplete(void) { return (isDecoded_POSECEF && isDecoded_POSLLH && isDecoded_STATUS && isDecoded_TIMEGPS); }
 		void reset(void) {
 			isDecoded_POSECEF = false;
+			isDecoded_POSLLH  = false;
 			isDecoded_STATUS  = false;
 			isDecoded_TIMEGPS = false;
 			initialized       = false;
@@ -172,6 +178,7 @@ class NAVSolution {
 			else {
 				if (iTOW != decodeField_U4(rawUBXPacket + UBX_HEADER_LENGTH + 0U)) {
 					reset();
+					//std::cerr << "NAVSolution reset event.\r\n";
 					SetTimestamp();
 				}
 			}
@@ -186,12 +193,32 @@ class NAVSolution {
 			isDecoded_POSECEF = true;
 		}
 		
+		void decode_NAV_POSLLH(uint8_t * rawUBXPacket) {
+			if (! initialized)
+				SetTimestamp();
+			else {
+				if (iTOW != decodeField_U4(rawUBXPacket + UBX_HEADER_LENGTH + 0U)) {
+					reset();
+					//std::cerr << "NAVSolution reset event.\r\n";
+					SetTimestamp();
+				}
+			}
+			
+			iTOW  = decodeField_U4(rawUBXPacket + UBX_HEADER_LENGTH + 0U);
+			hAcc  = decodeField_U4(rawUBXPacket + UBX_HEADER_LENGTH + 20U);
+			vAcc  = decodeField_U4(rawUBXPacket + UBX_HEADER_LENGTH + 24U);
+			
+			initialized = true;
+			isDecoded_POSLLH = true;
+		}
+		
 		void decode_NAV_STATUS(uint8_t * rawUBXPacket) {
 			if (! initialized)
 				SetTimestamp();
 			else {
 				if (iTOW != decodeField_U4(rawUBXPacket + UBX_HEADER_LENGTH + 0U)) {
 					reset();
+					//std::cerr << "NAVSolution reset event.\r\n";
 					SetTimestamp();
 				}
 			}
@@ -213,6 +240,7 @@ class NAVSolution {
 			else {
 				if (iTOW != decodeField_U4(rawUBXPacket + UBX_HEADER_LENGTH + 0U)) {
 					reset();
+					//std::cerr << "NAVSolution reset event.\r\n";
 					SetTimestamp();
 				}
 			}
@@ -437,6 +465,21 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 				continue;
 			}
 			
+			//Request NAV-POSLLH packets
+			UBXPacket.clear();
+			UBXPacket_CFG_MSG::encodeSet(UBXPacket, MESSAGE_CLASS_NAV, MESSAGE_ID_NAV_POSLLH, 1U);
+			gnssSerialDev->write(UBXPacket);
+			if (! isAcknowledged(gnssSerialDev.get(), MESSAGE_CLASS_CFG, MESSAGE_ID_CFG_MSG)) {
+				if (GNSSModuleVerbose)
+					std::cerr << "GNSS Config failure (No Ack for CFG_MSG) - will retry in 2 seconds\r\n";
+				gnssSerialDev.reset();
+				for (int n = 0; n < 20; n++) {
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+					if (m_abort) return;
+				}
+				continue;
+			}
+			
 			//Request NAV-STATUS packets
 			UBXPacket.clear();
 			UBXPacket_CFG_MSG::encodeSet(UBXPacket, MESSAGE_CLASS_NAV, MESSAGE_ID_NAV_STATUS, 1U);
@@ -542,20 +585,58 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 			last_Packet_Timestamp = std::chrono::steady_clock::now();
 			if ((getMessageClass(&(UBXPacket[0])) == MESSAGE_CLASS_NAV) && (getMessageID(&(UBXPacket[0])) == MESSAGE_ID_NAV_POSECEF))
 				currentSol.decode_NAV_POSECEF(&(UBXPacket[0]));
+			if ((getMessageClass(&(UBXPacket[0])) == MESSAGE_CLASS_NAV) && (getMessageID(&(UBXPacket[0])) == MESSAGE_ID_NAV_POSLLH))
+				currentSol.decode_NAV_POSLLH(&(UBXPacket[0]));
 			else if ((getMessageClass(&(UBXPacket[0])) == MESSAGE_CLASS_NAV) && (getMessageID(&(UBXPacket[0])) == MESSAGE_ID_NAV_STATUS))
 				currentSol.decode_NAV_STATUS(&(UBXPacket[0]));
 			else if ((getMessageClass(&(UBXPacket[0])) == MESSAGE_CLASS_NAV) && (getMessageID(&(UBXPacket[0])) == MESSAGE_ID_NAV_TIMEGPS))
 				currentSol.decode_NAV_TIMEGPS(&(UBXPacket[0]));
 			else if ((getMessageClass(&(UBXPacket[0])) == MESSAGE_CLASS_NAV) && (getMessageID(&(UBXPacket[0])) == MESSAGE_ID_NAV_SIG)) {
 				currentSigs.decode_NAV_SIG(&(UBXPacket[0]));
-				std::cerr << "C/N0s: ";
+				
+				std::scoped_lock lock(m_mutex);
+				m_lastNAV_SIG_Timestamp = std::chrono::steady_clock::now(); //This is more crude since it isn't used for timing
+				m_satCount_GPS      = 0; //Number of usable GPS     sats being tracked
+				m_satCount_SBAS     = 0; //Number of usable SBAS    sats being tracked
+				m_satCount_Galileo  = 0; //Number of usable Galileo sats being tracked
+				m_satCount_BeiDou   = 0; //Number of usable BeiDou  sats being tracked
+				m_satCount_IMES     = 0; //Number of usable IMES    sats being tracked
+				m_satCount_QZSS     = 0; //Number of usable QZSS    sats being tracked
+				m_satCount_GLONASS  = 0; //Number of usable GLONASS sats being tracked
+				m_satsWithCodeLock  = 0; //Number of sats with code lock
+				m_satsWithPhaseLock = 0; //Number of sats with carrier phase lock
+				m_CN0s.clear();
+				
 				for (size_t n = 0U; n < currentSigs.cno.size(); n++) {
-					std::cerr << (unsigned int) currentSigs.cno[n];
-					if (n + 1 < currentSigs.cno.size())
-						std::cerr << ", ";
-					else
-						std::cerr << "\r\n";
+					if (currentSigs.qualityInd[n] >= 4U) {
+						switch (currentSigs.gnssId[n]) {
+							case 0: m_satCount_GPS++;     break;
+							case 1: m_satCount_SBAS++;    break;
+							case 2: m_satCount_Galileo++; break;
+							case 3: m_satCount_BeiDou++;  break;
+							case 4: m_satCount_IMES++;    break;
+							case 5: m_satCount_QZSS++;    break;
+							case 6: m_satCount_GLONASS++; break;
+							default: break;
+						}
+					}
+					if (currentSigs.qualityInd[n] >= 4U)
+						m_satsWithCodeLock++;
+					if (currentSigs.qualityInd[n] >= 5U)
+						m_satsWithPhaseLock++;
+					m_CN0s[std::make_tuple(currentSigs.gnssId[n], currentSigs.svId[n])] = currentSigs.cno[n];
 				}
+				
+				/*if (GNSSModuleVerbose) {
+					std::cerr << "C/N0s: ";
+					for (size_t n = 0U; n < currentSigs.cno.size(); n++) {
+						std::cerr << (unsigned int) currentSigs.cno[n];
+						if (n + 1 < currentSigs.cno.size())
+							std::cerr << ", ";
+						else
+							std::cerr << "\r\n";
+					}
+				}*/
 			}
 		}
 		
@@ -563,7 +644,21 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 		if (currentSol.isComplete()) {
 			if (currentSol.flags & uint8_t(1)) {
 				//Position and velocity are valid
+				std::scoped_lock lock(m_mutex);
 				m_pos_ECEF << double(currentSol.ecefX)/100.0, double(currentSol.ecefY)/100.0, double(currentSol.ecefZ)/100.0;
+				m_pos_3DAccuracy = double(currentSol.pAcc)/100.0;
+				m_pos_2DAccuracy = double(currentSol.hAcc)/1000.0;
+				m_pos_VAccuracy  = double(currentSol.vAcc)/1000.0;
+				
+				//If GPS time (week and TOW) are valid, set relavent fields (TOW is NAN until this happens)
+				if (currentSol.valid & uint8_t(3U)) {
+					m_time_GPSWeek = uint32_t(currentSol.week);
+					m_time_GPSTOW = 1e-3*double(currentSol.iTOW) + 1e-9*double(currentSol.fTOW);
+					
+					if (m_timeCorrespondenceLog.empty() || (SecondsElapsed(std::get<2>(m_timeCorrespondenceLog.back())) >= 5.0))
+						m_timeCorrespondenceLog.push_back(std::make_tuple(m_time_GPSWeek, m_time_GPSTOW, currentSol.timestamp));
+				}
+				
 				m_lastSolution_Timestamp = currentSol.timestamp;
 				m_validSolutionReceived = true;
 			}

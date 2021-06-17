@@ -218,11 +218,8 @@ namespace Maps {
 	// ******************************************************************************************************************************************
 	// **************************************************   DataTileProvider Implementation   ***************************************************
 	// ******************************************************************************************************************************************
-	DataTileProvider::DataTileProvider(Journal & LogRef) :
-		Log(LogRef),
-		m_FRFFileStore(new FRFTileStore(this, LogRef)),
-		m_abort(false),
-		m_threads_VisEval(NumberOfVizEvaluationThreads) {
+	DataTileProvider::DataTileProvider(Journal & LogRef) : Log(LogRef), m_FRFFileStore(new FRFTileStore(this, LogRef)), m_abort(false),
+	                                                       m_threads_VisEval(NumberOfVizEvaluationThreads) {
 		m_garbageCollectionThread = std::thread(&DataTileProvider::GarbageCollectionThreadMain, this);
 		m_DataEditThread = std::thread(&DataTileProvider::DataEditThreadMain, this);
 	}

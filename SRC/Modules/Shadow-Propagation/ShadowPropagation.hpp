@@ -63,7 +63,9 @@ namespace ShadowPropagation {
 			static ShadowPropagationEngine & Instance() { static ShadowPropagationEngine Obj; return Obj; }
 			
 			//Constructors and Destructors
-			ShadowPropagationEngine() : m_engineThread(&ShadowPropagationEngine::ModuleMain, this), m_running(false), m_abort(false) { }
+			ShadowPropagationEngine() : m_running(false), m_abort(false) {
+				m_engineThread = std::thread(&ShadowPropagationEngine::ModuleMain, this);
+			}
 			~ShadowPropagationEngine() {
 				m_abort = true;
 				if (m_engineThread.joinable())

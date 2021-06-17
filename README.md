@@ -33,6 +33,7 @@ Recon is designed and developed with a goal of maintaining platform independence
 **Core Dependencies:**
  * [Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page)
  * [Dear ImGui (Malamanteau fork - "docking" branch)](https://github.com/malamanteau/imgui)
+ * [implot](https://github.com/epezent/implot)
  * [HandyCPP](https://github.com/malamanteau/handycpp)
  * [RestClient-CPP](https://github.com/malamanteau/restclient-cpp)
  * [Native File Dialog](https://github.com/mlabbe/nativefiledialog)
@@ -48,7 +49,7 @@ Recon is designed and developed with a goal of maintaining platform independence
  * [LibTorch](https://pytorch.org/)
 
 # Building On Linux
-You need GCC version 8 or newer to build Recon. Create a directory somewhere, let's call it "Repos". Clone the Recon repository into this directory (so this file has path "Repos/Recon/README.md"). Similarly clone the following dependencies into the Repos folder: Eigen, Dear ImGUI, HandyCPP, RestClient-CPP, Native File Dialog, Flexible Raster Format, Cereal, GLFW, and serial. These dependencies are all referenced using relative paths in the Recon project. Next, GLFW needs to be compiled as follows:
+You need GCC version 8 or newer to build Recon. Create a directory somewhere, let's call it "Repos". Clone the Recon repository into this directory (so this file has path "Repos/Recon/README.md"). Similarly clone the following dependencies into the Repos folder: Eigen, Dear ImGUI, implot, HandyCPP, RestClient-CPP, Native File Dialog, Flexible Raster Format, Cereal, GLFW, and serial. These dependencies are all referenced using relative paths in the Recon project. Next, GLFW needs to be compiled as follows:
  * Open a terminal to the GLFW directory
  * mkdir Release
  * cd Release
