@@ -132,9 +132,10 @@ namespace DroneInterface {
 	}
 	inline std::vector<std::string> DroneManager::GetConnectedDroneSerialNumbers(void) const {
 		std::vector<std::string> droneSerialVector;
-		for (int i = 0; i < m_droneRealVector.size(); i++) {
+		for (int i = 0; i < (int) m_droneRealVector.size(); i++) {
 			droneSerialVector.push_back(m_droneRealVector.at(i)->GetDroneSerial());
 		}
+		droneSerialVector.push_back("Simulation"s); //Comment this out to hide the simulated drone
 		return droneSerialVector;
 	}
 	
