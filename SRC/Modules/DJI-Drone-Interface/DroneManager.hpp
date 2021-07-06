@@ -42,24 +42,19 @@ namespace DroneInterface {
 	// Deconstructor: sets m_abort to true, waits for ModuleMain to close and cleans up the thread
 	class DroneManager {
 		private:
-			std::thread       m_DroneManagerThread;
-			bool              m_running;
-			std::atomic<bool> m_abort;
-			std::mutex        m_mutex;
+			std::mutex m_mutex;
 
 			std::unique_ptr<SimulatedDrone> m_droneSim;
-			std::vector<RealDrone*> m_droneRealVector; // For storing the handles for the tcp_client, one unique client per drone
+			std::vector<RealDrone *> m_droneRealVector; // For storing the handles for the tcp_client, one unique client per drone
 			tacopie::tcp_server m_server;
-		
-			inline void ModuleMain(void);
+			
 			int m_port;
 			
 		public:
 			static DroneManager & Instance() { static DroneManager Obj; return Obj; }
 			
-
-			DroneManager() : m_running(false), m_abort(false){
-				
+			//Constructor
+			DroneManager() {
 				std::scoped_lock lock(m_mutex);
 				
 				// If Recon was shutdown and then restarted quickly, port 3001 may not be released yet
@@ -73,86 +68,67 @@ namespace DroneInterface {
 				m_server.start("0.0.0.0", m_port, [this](const std::shared_ptr<tacopie::tcp_client>& client) -> bool {
 					std::string hostname = client->get_host();
 					std::uint32_t port = client->get_port();
-
+					
 					RealDrone* droneReal = new RealDrone(*client);
-					m_droneRealVector.push_back(droneReal);
+					{
+						std::scoped_lock lock(m_mutex);
+						m_droneRealVector.push_back(droneReal);
+					}
 
 					std::cout << "New client from " + hostname + " on port " + std::to_string(port) << std::endl;
 					client->async_read({ 1024, bind(&RealDrone::DataReceivedHandler, droneReal, client, std::placeholders::_1) });
 
 					return true;
 				});
-				std::cout << std::endl;
-				std::cout << "Starting Drone Manager Server on port " << m_port << std::endl;
-				
+				std::cerr << std::endl;
+				std::cerr << "Starting Drone Manager Server on port " << m_port << std::endl;
 			}
 
-			// Main shutdowns of Drone Manager here
+			// Destructor - Main shutdowns of Drone Manager here
 			~DroneManager() {
-					
-				Stop();
+				std::scoped_lock lock(m_mutex);
 				
-				// Grab finished threads
-				if (m_DroneManagerThread.joinable())
-					m_DroneManagerThread.join();
-
-				// Close tcp clients
-				std::cout << "Removing " << m_droneRealVector.size() << " active client drones ... ... ... ";
-				while (!m_droneRealVector.empty()){
-					
-					m_droneRealVector.back()->DisconnectClient();
-					m_droneRealVector.pop_back();
-				}
-				std::cout<< "Done" << std::endl;
+				// Destroy RealDrone objects (and close TCP client sockets)
+				std::cerr << "Removing " << m_droneRealVector.size() << " active client drones ... ... ... ";
+				while (! m_droneRealVector.empty())
+					delete m_droneRealVector.back(); //Destroy drone objects (their destructors will disconnect their respective sockets)
+				std::cerr<< "Done" << std::endl;
+				
+				// Shutdown TCP server
 				m_server.stop(true, true);
-				std::cout << "Closed Drone Manager Server. Please wait until port " << m_port <<" released to start Recon again" << std::endl;
+				std::cerr << "Closed Drone Manager Server. Please wait until port " << m_port <<" released to start Recon again" << std::endl;
 				
 			}
-			
-			inline void Start(void);	//Start or restart continuous monitoring of drones
-			inline void Stop(void);		//Stop managing drones
-			inline bool IsRunning(void);	//Returns true if running, false if stopped
 
-			inline std::vector<std::string> GetConnectedDroneSerialNumbers(void) const;
-			inline Drone * GetDrone(std::string const & Serial);
+			inline std::vector<std::string> GetConnectedDroneSerialNumbers(void) {
+				std::scoped_lock lock(m_mutex);
+				
+				std::vector<std::string> droneSerialVector;
+				for (int i = 0; i < (int) m_droneRealVector.size(); i++)
+					droneSerialVector.push_back(m_droneRealVector.at(i)->GetDroneSerial());
+				droneSerialVector.push_back("Simulation"s); //Comment this out to hide the simulated drone
+				return droneSerialVector;
+			}
 			
-
+			inline Drone * GetDrone(std::string const & Serial) {
+				std::scoped_lock lock(m_mutex);
+				
+				if (Serial == "Simulation"s) {
+					//Lazily  create simulated drone so we don't make one unless it's requested
+					if (m_droneSim == nullptr)
+						m_droneSim.reset(new SimulatedDrone);
+					return m_droneSim.get(); //Upcast to Drone and return
+				}
+				else {
+					//Search for the provided serial in our real drone vector
+					for (RealDrone * drone : m_droneRealVector) {
+						if (drone->GetDroneSerial() == Serial)
+							return drone; //Upcast to Drone and return
+					}
+				}
+				return nullptr; //Default if not "Simulation" and we can't find the requested drone
+			}
 	};
-	inline void DroneManager::Start(void){
-		std::scoped_lock lock(m_mutex);
-		m_running = true;
-	}
-	inline void DroneManager::Stop(void){
-		std::scoped_lock lock(m_mutex);
-		m_running = false;
-	}
-	inline bool DroneManager::IsRunning(void) {
-		std::scoped_lock lock(m_mutex);
-		return m_running;
-	}
-	inline std::vector<std::string> DroneManager::GetConnectedDroneSerialNumbers(void) const {
-		std::vector<std::string> droneSerialVector;
-		for (int i = 0; i < (int) m_droneRealVector.size(); i++) {
-			droneSerialVector.push_back(m_droneRealVector.at(i)->GetDroneSerial());
-		}
-		droneSerialVector.push_back("Simulation"s); //Comment this out to hide the simulated drone
-		return droneSerialVector;
-	}
-	
-	inline Drone * DroneManager::GetDrone(std::string const & Serial) {
-		if (Serial == "Simulation"s) {
-			//Lazily  create simulated drone so we don't make one unless it's requested
-			if (m_droneSim == nullptr)
-				m_droneSim.reset(new SimulatedDrone);
-			return m_droneSim.get(); //Upcast to Drone and return
-		}
-		else
-			return nullptr;
-	}
-	
-	inline void DroneManager::ModuleMain(void){
-		return;
-	}
 }
 
 

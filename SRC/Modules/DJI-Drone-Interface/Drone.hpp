@@ -84,15 +84,6 @@ namespace DroneInterface {
 			~RealDrone();
 			
 			std::string GetDroneSerial(void) override;
-			
-			void DisconnectClient(void);			
-			
-			void DataReceivedHandler(const std::shared_ptr<tacopie::tcp_client>& client, const tacopie::tcp_client::read_result& res);
-			void SendPacket(Packet & packet);
-			void SendPacket_EmergencyCommand(uint8_t Action);
-			void SendPacket_CameraControl(uint8_t Action, double TargetFPS);
-			void SendPacket_ExecuteWaypointMission(uint8_t LandAtEnd, uint8_t CurvedFlight, std::vector<Waypoint> Waypoints);
-			void SendPacket_VirtualStickCommand(uint8_t Mode, float Yaw, float V_x, float V_y, float HAG, float timeout);
 
 			bool GetPosition(double & Latitude, double & Longitude, double & Altitude, TimePoint & Timestamp) override;
 			bool GetVelocity(double & V_North, double & V_East, double & V_Down, TimePoint & Timestamp)       override;
@@ -120,23 +111,29 @@ namespace DroneInterface {
 			void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command)       override;
 			void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command)       override;
 			
-			
 			void Hover(void)         override;
 			void LandNow(void)       override;
 			void GoHomeAndLand(void) override;
-		
+			
+			//RealDrone-specific methods
+			void DataReceivedHandler(const std::shared_ptr<tacopie::tcp_client>& client, const tacopie::tcp_client::read_result& res);
+			
 		private:
 			//Some modules that use imagery can't handle missing frames gracefully. Thus, we use provide a callback mechanism to ensure that such a module
 			//can have a guarantee that each frame received by the drone interface module will be provided downstream.
 			std::unordered_map<int, std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)>> m_ImageryCallbacks;
-
-			std::thread       m_thread;
-			std::atomic<bool> m_abort;
+			
 			std::mutex        m_mutex; //Lock in each public method for thread safety
 
 			tacopie::tcp_client* m_client;
 			std::string m_serial;
-
+			
+			void SendPacket(Packet & packet);
+			void SendPacket_EmergencyCommand(uint8_t Action);
+			void SendPacket_CameraControl(uint8_t Action, double TargetFPS);
+			void SendPacket_ExecuteWaypointMission(uint8_t LandAtEnd, uint8_t CurvedFlight, std::vector<Waypoint> Waypoints);
+			void SendPacket_VirtualStickCommand(uint8_t Mode, float Yaw, float V_x, float V_y, float HAG, float timeout);
+			
 			unsigned int m_frame_num = 0;
 
 			bool m_packet_ct_received = false;
@@ -152,8 +149,6 @@ namespace DroneInterface {
 			Packet_Image m_packet_img;
 			Packet_Acknowledgment m_packet_ack;
 			Packet_MessageString m_packet_ms;
-
-			void DroneMain(void);
 	};
 	
 	//The SimulatedDrone class provides an interface to interact with a single virtual/simulated drone
@@ -167,8 +162,6 @@ namespace DroneInterface {
 			SimulatedDrone();
 			~SimulatedDrone();
 			
-
-
 			std::string GetDroneSerial(void) override;
 			
 			bool GetPosition(double & Latitude, double & Longitude, double & Altitude, TimePoint & Timestamp) override;

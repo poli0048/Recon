@@ -15,28 +15,21 @@
 
 namespace DroneInterface {
 
-	RealDrone::RealDrone() : m_abort(false) {
-		if (m_packet_et_received) {
+	RealDrone::RealDrone() {
+		std::scoped_lock lock(m_mutex);
+		if (m_packet_et_received)
 			m_serial = m_packet_et.DroneSerial;
-		}
-		m_thread = std::thread(&RealDrone::DroneMain, this);
 	}
 
-	RealDrone::RealDrone(tacopie::tcp_client &client) : m_abort(false) {
-		if (m_packet_et_received) {
+	RealDrone::RealDrone(tacopie::tcp_client & client) {
+		std::scoped_lock lock(m_mutex);
+		if (m_packet_et_received)
 			m_serial = m_packet_et.DroneSerial;
-		}
 		m_client = &client;
-		m_thread = std::thread(&RealDrone::DroneMain, this);
 	}
 	
 	RealDrone::~RealDrone() {
-		m_abort = true;
-		if (m_thread.joinable())
-			m_thread.join();
-	}
-
-	void RealDrone:: DisconnectClient(void){
+		std::scoped_lock lock(m_mutex);
 		m_client->disconnect(true);
 	}
 
@@ -224,71 +217,21 @@ namespace DroneInterface {
 	}
 
 	//True if receiving imagery from drone, false otherwise (valid on construction... initially returns false)
-	bool RealDrone::IsCamImageFeedOn(void) { return false; }
-
-	void RealDrone::SendPacket(DroneInterface::Packet &packet) {
-		//std::scoped_lock lock(m_mutex);
-		std::vector<char> ch_data(packet.m_data.begin(), packet.m_data.end());
-		m_client->async_write({ ch_data, nullptr });
+	bool RealDrone::IsCamImageFeedOn(void) {
+		//TODO: 
+		std::scoped_lock lock(m_mutex);
+		return false;
 	}
-	void RealDrone::SendPacket_EmergencyCommand(uint8_t Action) {
-		DroneInterface::Packet packet;
-		DroneInterface::Packet_EmergencyCommand packet_ec;
-
-		packet_ec.Action = Action;
-
-		packet_ec.Serialize(packet);
-
-		this->SendPacket(packet);
-	}
-	void RealDrone::SendPacket_CameraControl(uint8_t Action, double TargetFPS) {
-		DroneInterface::Packet packet;
-		DroneInterface::Packet_CameraControl packet_cc;
-
-		packet_cc.Action = Action;
-		packet_cc.TargetFPS = TargetFPS;
-
-		packet_cc.Serialize(packet);
-
-		this->SendPacket(packet);
-	}
-	void RealDrone::SendPacket_ExecuteWaypointMission(uint8_t LandAtEnd, uint8_t CurvedFlight, std::vector<Waypoint> Waypoints) {
-		DroneInterface::Packet packet;
-		DroneInterface::Packet_ExecuteWaypointMission packet_ewm;
-
-		packet_ewm.LandAtEnd = LandAtEnd;
-		packet_ewm.CurvedFlight = CurvedFlight;
-		packet_ewm.Waypoints = Waypoints;
-
-		packet_ewm.Serialize(packet);
-
-		this->SendPacket(packet);
-
-	}
-	void RealDrone::SendPacket_VirtualStickCommand(uint8_t Mode, float Yaw, float V_x, float V_y, float HAG, float timeout) {
-		DroneInterface::Packet packet;
-		DroneInterface::Packet_VirtualStickCommand packet_vsc;
-
-		packet_vsc.Mode = Mode;
-		packet_vsc.Yaw = Yaw;
-		packet_vsc.V_x = V_x;
-		packet_vsc.V_y = V_y;
-		packet_vsc.HAG = HAG;
-		packet_vsc.timeout = timeout;
-
-		packet_vsc.Serialize(packet);
-
-		this->SendPacket(packet);
-	}
-
 
 	//Start sending frames of live video (as close as possible to the given framerate (frame / s))
 	void RealDrone::StartDJICamImageFeed(double TargetFPS) { 
+		std::scoped_lock lock(m_mutex);
 		this->SendPacket_CameraControl(1, TargetFPS);
 	}
 	
 	//Stop sending frames of live video
 	void RealDrone::StopDJICamImageFeed(void) { 
+		std::scoped_lock lock(m_mutex);
 		this->SendPacket_CameraControl(0, 0);
 	}
 	
@@ -317,7 +260,11 @@ namespace DroneInterface {
 	}
 	
 	//Populate Result with whether or not the drone is currently flying (in any mode)
-	bool RealDrone::IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) { return false; }
+	bool RealDrone::IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) {
+		//TODO
+		std::scoped_lock lock(m_mutex);
+		return false;
+	}
 
 	//Get flight mode as a human-readable string
 	bool RealDrone::GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp) {
@@ -329,6 +276,7 @@ namespace DroneInterface {
 	
 	//Stop current mission, if running. Then load, verify, and start new waypoint mission.
 	void RealDrone::ExecuteWaypointMission(WaypointMission & Mission) {
+		std::scoped_lock lock(m_mutex);
 		bool isExecuting;
 		TimePoint timestamp;
 		this->IsCurrentlyExecutingWaypointMission(isExecuting, timestamp);
@@ -340,39 +288,104 @@ namespace DroneInterface {
 	}
 	
 	//Populate Result with whether or not a waypoint mission is currently being executed
-	bool RealDrone::IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) { return false; }
+	bool RealDrone::IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) {
+		std::scoped_lock lock(m_mutex);
+		return false;
+	}
 
 	//Populate arg with current mission (returns false if not flying waypoint mission)
-	bool RealDrone::GetCurrentWaypointMission(WaypointMission & Mission) { return false; }
+	bool RealDrone::GetCurrentWaypointMission(WaypointMission & Mission) {
+		std::scoped_lock lock(m_mutex);
+		return false;
+	}
 
 
 	//Put in virtualStick Mode and send command (stop mission if running)
 	void RealDrone::IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command) { 
+		std::scoped_lock lock(m_mutex);
 		this->SendPacket_VirtualStickCommand(0, Command.Yaw, Command.V_North, Command.V_East, Command.HAG, Command.timeout);
 	}
 	
 	//Put in virtualStick Mode and send command (stop mission if running)
 	void RealDrone::IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command) { 
+		std::scoped_lock lock(m_mutex);
 		this->SendPacket_VirtualStickCommand(1, Command.Yaw, Command.V_Forward, Command.V_Right, Command.HAG, Command.timeout);
 	}
 	
 	//Stop any running missions an leave virtualStick mode (if in it) and hover in place (P mode)
 	void RealDrone::Hover(void) {
+		std::scoped_lock lock(m_mutex);
 		this->SendPacket_EmergencyCommand(0);
 	}
 	
 	//Initiate landing sequence immediately at current vehicle location
 	void RealDrone::LandNow(void) {
+		std::scoped_lock lock(m_mutex);
 		this->SendPacket_EmergencyCommand(1);
 	}
 	
 	//Initiate a Return-To-Home sequence that lands the vehicle at it's take-off location
 	void RealDrone::GoHomeAndLand(void) {
+		std::scoped_lock lock(m_mutex);
 		this->SendPacket_EmergencyCommand(2);
 	}
 	
-	//Function for internal thread managing drone object
-	void RealDrone::DroneMain(void) {
+	void RealDrone::SendPacket(DroneInterface::Packet &packet) {
+		std::vector<char> ch_data(packet.m_data.begin(), packet.m_data.end());
+		m_client->async_write({ ch_data, nullptr });
+	}
+	
+	void RealDrone::SendPacket_EmergencyCommand(uint8_t Action) {
+		DroneInterface::Packet packet;
+		DroneInterface::Packet_EmergencyCommand packet_ec;
+
+		packet_ec.Action = Action;
+
+		packet_ec.Serialize(packet);
+
+		this->SendPacket(packet);
+	}
+	
+	void RealDrone::SendPacket_CameraControl(uint8_t Action, double TargetFPS) {
+		DroneInterface::Packet packet;
+		DroneInterface::Packet_CameraControl packet_cc;
+
+		packet_cc.Action = Action;
+		packet_cc.TargetFPS = TargetFPS;
+
+		packet_cc.Serialize(packet);
+
+		this->SendPacket(packet);
+	}
+	
+	void RealDrone::SendPacket_ExecuteWaypointMission(uint8_t LandAtEnd, uint8_t CurvedFlight, std::vector<Waypoint> Waypoints) {
+		DroneInterface::Packet packet;
+		DroneInterface::Packet_ExecuteWaypointMission packet_ewm;
+
+		packet_ewm.LandAtEnd = LandAtEnd;
+		packet_ewm.CurvedFlight = CurvedFlight;
+		packet_ewm.Waypoints = Waypoints;
+
+		packet_ewm.Serialize(packet);
+
+		this->SendPacket(packet);
+
+	}
+	
+	void RealDrone::SendPacket_VirtualStickCommand(uint8_t Mode, float Yaw, float V_x, float V_y, float HAG, float timeout) {
+		DroneInterface::Packet packet;
+		DroneInterface::Packet_VirtualStickCommand packet_vsc;
+
+		packet_vsc.Mode = Mode;
+		packet_vsc.Yaw = Yaw;
+		packet_vsc.V_x = V_x;
+		packet_vsc.V_y = V_y;
+		packet_vsc.HAG = HAG;
+		packet_vsc.timeout = timeout;
+
+		packet_vsc.Serialize(packet);
+
+		this->SendPacket(packet);
 	}
 }
 
