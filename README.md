@@ -67,6 +67,7 @@ Next, tacopie needs to be built as follows:
  * cd build
  * cmake ..
  * make
+ 
 This will create an archive that will be linked into Recon as part of the build process - note that you do not need to "make install" anything.
 
 Next, use your package manager to ensure that you have the following libraries installed on your system (when available also install the "-dev" version): OpenGL, FreeType, LibCURL, GLEW, and OpenCV (4.x). In Debian, you can get the needed dependencies (except currently OpenCV4) by installing the following packages: libglu1-mesa-dev, libglew-dev, freeglut3-dev mesa-common-dev, libfreetype6, libfreetype6-dev, libcurl4, libcurl4-openssl-dev.
@@ -78,6 +79,7 @@ If you are using a new enough distribution that OpenCV4 is available in your rep
  * cmake -D CMAKE_BUILD_TYPE=RELEASE -D CMAKE_INSTALL_PREFIX=/usr/local -D OPENCV_GENERATE_PKGCONFIG=ON ..
  * make
  * sudo make install
+ 
  Note that if you build manually **you do need to "sudo make install" this dependency**.
 
 We use a pre-built version of LibTorch (From the PyTorch project). Download the pre-built from here: [LibTorch 1.8.1](https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.8.1%2Bcpu.zip). Unzip this in your Repos directory to a folder of the same name as the zip file (without the .zip extension). If you have done this correctly you should have a folder with path Repos/libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/ that contains "bin", "include", "lib", and "share" sub-directories. You do not need to install anything; Recon will find the API headers and the Recon binary will know to load the dynamically linked libraries from the appropriate sub-directories at compile-time and at run-time, respectively.
