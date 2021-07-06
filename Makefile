@@ -51,7 +51,7 @@ ELF_FLAGS             = -fdata-sections -ffunction-sections
 COMPILE_FLAGS         = -c -fdiagnostics-color=auto -pthread $(COMPILE_WARNING_FLAGS) $(RECON_INCLUDE_FLAGS) $(COMPILE_DEPGEN_FLAGS) \
                         $(DEBUGFLAGS) $(PROFILEFLAGS) $(LINKER_TRIM_FLAGS) $(DEFINE_FLAGS) $(STANDARDFLAGS) $(OPTFLAGS) $(ELF_FLAGS) `pkg-config --cflags opencv4`
 LINK_FLAGS            = -fdiagnostics-color=auto -static-libstdc++ -static-libgcc -lstdc++ -lstdc++fs \
-                        -Wl,-Bdynamic -lpthread -lm -ldl -luuid -lGL -fopenmp \
+                        -Wl,-Bdynamic -lpthread -ltacopie -lm -ldl -luuid -lGL -fopenmp \
                         `pkg-config --static --libs freetype2 libcurl gtk+-3.0` ../glfw/Release/src/libglfw3.a `pkg-config --libs opencv4` \
                         -L ../libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/lib/ -ltorch -ltorch_cpu -lc10 \
                         '-Wl,-rpath,$$ORIGIN/../../libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/lib'
