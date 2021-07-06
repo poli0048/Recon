@@ -12,8 +12,8 @@
 #include <opencv2/opencv.hpp>
 
 //Project Includes
-#include "Drone.hpp"
-
+//#include "Drone.hpp"
+#include "DroneDataStructures.h"
 namespace DroneInterface {
 	//Packet for holding binary, serialized packet data
 	class Packet {
