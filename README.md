@@ -44,6 +44,7 @@ Recon is designed and developed with a goal of maintaining platform independence
  * [LibCurl](https://curl.se/libcurl/)
  * [OpenCV4](https://opencv.org/)
  * [serial](https://github.com/wjwwood/serial)
+ * [tacopie](https://github.com/Cylix/tacopie)
 
 **Shadow Propagation Module Dependencies:**
  * [LibTorch](https://pytorch.org/)
@@ -55,6 +56,13 @@ You need GCC version 8 or newer to build Recon. Create a directory somewhere, le
  * cd Release
  * cmake -DCMAKE_BUILD_TYPE=Release -DGLFW_BUILD_DOCS=false -DGLFW_BUILD_EXAMPLES=false -DGLFW_BUILD_TESTS=false -S ../ -B .
  * make
+ 
+tacopie needs to be built as follows:
+ * mkdir build
+ * cd build
+ * cmake ..
+ * make
+ * make install
  
 This will create an archive that will be linked into Recon as part of the build process - note that you do not need to "make install" anything. **Important Note:** The given instructions for building GLFW may not work with versions of CMake prior to 3.13.4. If you run into problems you can build on top of the source directory and manually copy the file "libglfw3.a" to path Repos/glfw/Release/src/libglfw3.a.
 
