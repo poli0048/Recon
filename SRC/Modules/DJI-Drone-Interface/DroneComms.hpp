@@ -101,6 +101,19 @@ namespace DroneInterface {
 			void Serialize(Packet & TargetPacket) const; //Populate Packet from fields
 			bool Deserialize(Packet const & SourcePacket); //Populate fields from Packet
 	};
+	
+	class Packet_CompressedImage {
+		public:
+			float   TargetFPS;
+			cv::Mat Frame;
+			
+			Packet_CompressedImage()  = default;
+			~Packet_CompressedImage() = default;
+			bool operator==(Packet_CompressedImage const & Other) const; //If switching to C++20, default this
+			
+			void Serialize(Packet & TargetPacket) const; //Populate Packet from fields
+			bool Deserialize(Packet const & SourcePacket); //Populate fields from Packet
+	};
 
 	class Packet_Acknowledgment {
 		public:

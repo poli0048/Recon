@@ -134,11 +134,11 @@ namespace DroneInterface {
 			void SendPacket_ExecuteWaypointMission(uint8_t LandAtEnd, uint8_t CurvedFlight, std::vector<Waypoint> Waypoints);
 			void SendPacket_VirtualStickCommand(uint8_t Mode, float Yaw, float V_x, float V_y, float HAG, float timeout);
 			
-			unsigned int m_frame_num = 0;
+			int m_frame_num = -1;
+			cv::Mat m_MostRecentFrame;
 
 			bool m_packet_ct_received = false;
 			bool m_packet_et_received = false;
-			bool m_packet_img_received = false;
 			bool m_packet_ack_received = false;
 			bool m_packet_ms_received = false;
 
@@ -147,8 +147,15 @@ namespace DroneInterface {
 			Packet_CoreTelemetry m_packet_ct;
 			Packet_ExtendedTelemetry m_packet_et;
 			Packet_Image m_packet_img;
+			Packet_CompressedImage m_packet_compressedImg;
 			Packet_Acknowledgment m_packet_ack;
 			Packet_MessageString m_packet_ms;
+			
+			TimePoint m_PacketTimestamp_ct;
+			TimePoint m_PacketTimestamp_et;
+			TimePoint m_PacketTimestamp_imagery;
+			TimePoint m_PacketTimestamp_ack;
+			TimePoint m_PacketTimestamp_ms;
 	};
 	
 	//The SimulatedDrone class provides an interface to interact with a single virtual/simulated drone

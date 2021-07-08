@@ -979,8 +979,41 @@ static bool TestBench23(std::string const & Arg) {
 	return true;
 }
 
+//DJI Drone Interface: Compressed Image Test
+static bool TestBench24(std::string const & Arg) {
+	std::filesystem::path datasetPath = SimDatasetStringArgToDatasetPath(Arg);
+	std::cerr << "Loading ref frame from dataset path: " << datasetPath.string() << "\r\n";
+	
+	DroneInterface::Packet_CompressedImage PacketA;
+	PacketA.TargetFPS = 1.0f;
+	PacketA.Frame = GetRefFrame(datasetPath);
+	
+	cv::imshow("Source", PacketA.Frame);
+	cv::waitKey(1);
+	
+	DroneInterface::Packet pkt;
+	PacketA.Serialize(pkt);
+	
+	DroneInterface::Packet_CompressedImage PacketB;
+	PacketB.Deserialize(pkt);
+	
+	size_t rawPacketBytes = 9U + 4U + 4U + 3*PacketA.Frame.rows*PacketA.Frame.cols;
+	size_t compressedPacketBytes = pkt.m_data.size();
+	double reductionPercent = 100.0*(1.0 - double(compressedPacketBytes)/double(rawPacketBytes));
+	double compressionRatio = double(rawPacketBytes) / double(compressedPacketBytes);
+	std::cerr << "Size of full image packet: " << double(rawPacketBytes)/1048576.0 << " MiB\r\n";
+	std::cerr << "Size of full compressed image packet: " << double(compressedPacketBytes)/1048576.0 << " MiB\r\n";
+	std::cerr << "Size Reduction: " << reductionPercent << " %\r\n";
+	std::cerr << "Compression Ratio: " << compressionRatio << " X\r\n";
+	std::cerr << "Press key in 'Decoded' window to end test bench.\r\n";
+	
+	cv::imshow("Decoded", PacketB.Frame);
+	cv::waitKey(-1);
+	
+	return true;
+}
 
-static bool TestBench24(std::string const & Arg) { return false; }
+
 static bool TestBench25(std::string const & Arg) { return false; }
 
 

@@ -2,7 +2,8 @@
 //Author: Bryan Poling
 //Copyright (c) 2021 Sentek Systems, LLC. All rights reserved. 
 
-//System Includes
+//External Includes
+#include <opencv2/imgcodecs.hpp>
 
 //Project Includes
 #include "DroneComms.hpp"
@@ -73,6 +74,20 @@ static void encodeField_Image (std::vector<uint8_t> & Buffer, cv::Mat const & x)
 			encodeField_uint8(Buffer, (uint8_t) pixel(0)); //Blue
 		}
 	}
+}
+
+static void encodeField_CompressedImage (std::vector<uint8_t> & Buffer, cv::Mat const & x) {
+	if (x.type() != CV_8UC3) {
+		std::cerr << "Internal Error in encodeField_CompressedImage(): Only 3-channel (RGB) 8-bit depth images supported.\r\n";
+		return;
+	}
+	
+	std::vector<uint8_t> buff;
+	std::vector<int> param(2);
+	param[0] = cv::IMWRITE_JPEG_QUALITY;
+	param[1] = 95; //Quality parameter: default(95) 0-100
+	cv::imencode(".jpg", x, buff, param);
+	Buffer.insert(Buffer.end(), buff.begin(), buff.end());
 }
 
 
@@ -192,6 +207,17 @@ static cv::Mat decodeField_Image (std::vector<uint8_t>::const_iterator & Iter, u
 		}
 	}
 	return Image;
+}
+
+static cv::Mat decodeField_CompressedImage (std::vector<uint8_t>::const_iterator & Iter, unsigned int & NumBytes) {
+	std::vector<uint8_t> buffer(Iter, Iter + NumBytes); //Copy from source to local buffer
+	
+	cv::Mat image = cv::imdecode(buffer, cv::IMREAD_COLOR);
+	if (image.type() != CV_8UC3) {
+		std::cerr << "Internal Error in decodeField_CompressedImage(): imdecode yielded something other than a 3-channel (RGB) 8-bit depth image.\r\n";
+		return cv::Mat();
+	}
+	return image;
 }
 
 
@@ -436,6 +462,59 @@ namespace DroneInterface {
 		
 		unsigned int MaxBytesForImage = (unsigned int) SourcePacket.m_data.size() - 9U - 4U;
 		Frame = decodeField_Image(iter, MaxBytesForImage);
+		return true;
+	}
+	
+	
+	// ****************************************************************************************************************************************
+	// ***********************************************   Packet_CompressedImage Implementation   **********************************************
+	// ****************************************************************************************************************************************
+	bool Packet_CompressedImage::operator==(Packet_CompressedImage const & Other) const {
+		if (this->TargetFPS != Other.TargetFPS)
+			return false;
+		if ((this->Frame.rows != Other.Frame.rows) || (this->Frame.cols != Other.Frame.cols))
+			return false;
+		if (this->Frame.type() != Other.Frame.type())
+			return false;
+		for (int row = 0; row < this->Frame.rows; row++) {
+			for (int col = 0; col < this->Frame.cols; col++) {
+				cv::Vec3b A = this->Frame.at<cv::Vec3b>(row, col);
+				cv::Vec3b B = Other.Frame.at<cv::Vec3b>(row, col);
+				if ((A(0) != B(0)) || (A(1) != B(1)) || (A(2) != B(2)))
+					return false;
+			}
+		}
+		return true;
+	}
+	
+	void Packet_CompressedImage::Serialize(Packet & TargetPacket) const {
+		TargetPacket.Clear();
+		TargetPacket.AddHeader(uint32_t(0U), uint8_t(5U)); //Use a dummy value (0) for size since we only know it after compression
+		encodeField_float32(TargetPacket.m_data, TargetFPS);
+		encodeField_CompressedImage(TargetPacket.m_data, Frame);
+		
+		//Update the header with the correct packet size
+		uint32_t packetSize = (uint32_t) TargetPacket.m_data.size() + 2U; //Don't forget the hash field, which hasn't been added yet
+		TargetPacket.m_data[2] = (uint8_t) (packetSize >> 24);
+		TargetPacket.m_data[3] = (uint8_t) (packetSize >> 16);
+		TargetPacket.m_data[4] = (uint8_t) (packetSize >> 8 );
+		TargetPacket.m_data[5] = (uint8_t) (packetSize      );
+		
+		//Add hash after updating the packet size field
+		TargetPacket.AddHash();
+	}
+	
+	bool Packet_CompressedImage::Deserialize(Packet const & SourcePacket) {
+		if (! SourcePacket.CheckHashSizeAndPID((uint8_t) 5U))
+			return false;
+		if (SourcePacket.m_data.size() < 9U + 4U)
+			return false;
+		
+		auto iter = SourcePacket.m_data.cbegin() + 7U; //Const iterater to begining of payload
+		TargetFPS = decodeField_float32(iter);
+		
+		unsigned int JPEGNumBytes = (unsigned int) SourcePacket.m_data.size() - 9U - 4U;
+		Frame = decodeField_CompressedImage(iter, JPEGNumBytes);
 		return true;
 	}
 

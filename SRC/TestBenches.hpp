@@ -34,7 +34,7 @@ namespace TestBenches {
 		/* 21 */ "DJI Drone Interface: Simulated Drone Imagery (Non-Realtime)",
 		/* 22 */ "DJI Drone Interface: Simulated Drone Imagery (Realtime)",
 		/* 23 */ "DJI Drone Interface: Serialization/Deserialization",
-		/* 24 */ "DJI Drone Interface: ",
+		/* 24 */ "DJI Drone Interface: Compressed Image Test",
 		/* 25 */ "DJI Drone Interface: ",
 		/* 26 */ "TorchLib basic testbench"
 	};
