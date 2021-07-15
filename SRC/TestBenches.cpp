@@ -513,7 +513,7 @@ static bool TestBench11(std::string const & Arg) {
 	std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> GCPs = LoadFiducialsFromFile(datasetPath);
 	
 	//Set up drone sim
-	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation"s);
+	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation A"s);
 	if (myDrone == nullptr) {
 		std::cerr << "Error: Unable to get simulated drone from drone manager.\r\n";
 		return false;
@@ -543,7 +543,7 @@ static bool TestBench11(std::string const & Arg) {
 	}
 	
 	//Start the shadow detection engine, using imagery from the sim drone
-	ShadowDetection::ShadowDetectionEngine::Instance().Start("Simulation"s);
+	ShadowDetection::ShadowDetectionEngine::Instance().Start("Simulation A"s);
 	
 	//Start the sim drone video feed
 	myDrone->StartDJICamImageFeed(1.0);
@@ -570,7 +570,7 @@ static bool TestBench12(std::string const & Arg) {
 	std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> GCPs = LoadFiducialsFromFile(datasetPath);
 	
 	//Set up drone sim
-	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation"s);
+	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation A"s);
 	if (myDrone == nullptr) {
 		std::cerr << "Error: Unable to get simulated drone from drone manager.\r\n";
 		return false;
@@ -600,7 +600,7 @@ static bool TestBench12(std::string const & Arg) {
 	}
 	
 	//Start the shadow detection engine, using imagery from the sim drone
-	ShadowDetection::ShadowDetectionEngine::Instance().Start("Simulation"s);
+	ShadowDetection::ShadowDetectionEngine::Instance().Start("Simulation A"s);
 	
 	//Start the sim drone video feed
 	myDrone->StartDJICamImageFeed(1.0);
@@ -633,7 +633,7 @@ static bool TestBench21(std::string const & Arg) {
 	std::cerr << "Simulation dataset path: " << datasetPath.string() << "\r\n";
 	std::filesystem::path sourceVideoPath = GetSimVideoFilePath(datasetPath);
 	
-	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation"s);
+	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation A"s);
 	if (myDrone == nullptr) {
 		std::cerr << "Error: Unable to get simulated drone from drone manager.\r\n";
 		return false;
@@ -672,7 +672,7 @@ static bool TestBench22(std::string const & Arg) {
 	std::cerr << "Simulation dataset path: " << datasetPath.string() << "\r\n";
 	std::filesystem::path sourceVideoPath = GetSimVideoFilePath(datasetPath);
 	
-	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation"s);
+	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation A"s);
 	if (myDrone == nullptr) {
 		std::cerr << "Error: Unable to get simulated drone from drone manager.\r\n";
 		return false;

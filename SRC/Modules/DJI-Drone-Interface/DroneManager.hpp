@@ -44,7 +44,9 @@ namespace DroneInterface {
 		private:
 			std::mutex m_mutex;
 
-			std::unique_ptr<SimulatedDrone> m_droneSim;
+			std::unique_ptr<SimulatedDrone> m_droneSim_A;
+			std::unique_ptr<SimulatedDrone> m_droneSim_B;
+			std::unique_ptr<SimulatedDrone> m_droneSim_C;
 			std::vector<RealDrone *> m_droneRealVector; // For storing the handles for the tcp_client, one unique client per drone
 			tacopie::tcp_server m_server;
 			
@@ -106,18 +108,32 @@ namespace DroneInterface {
 				std::vector<std::string> droneSerialVector;
 				for (int i = 0; i < (int) m_droneRealVector.size(); i++)
 					droneSerialVector.push_back(m_droneRealVector.at(i)->GetDroneSerial());
-				droneSerialVector.push_back("Simulation"s); //Comment this out to hide the simulated drone
+				droneSerialVector.push_back("Simulation A"s); //Comment this out to hide this simulated drone
+				//droneSerialVector.push_back("Simulation B"s); //Comment this out to hide this simulated drone
+				//droneSerialVector.push_back("Simulation C"s); //Comment this out to hide this simulated drone
 				return droneSerialVector;
 			}
 			
 			inline Drone * GetDrone(std::string const & Serial) {
 				std::scoped_lock lock(m_mutex);
 				
-				if (Serial == "Simulation"s) {
+				if (Serial == "Simulation A"s) {
 					//Lazily  create simulated drone so we don't make one unless it's requested
-					if (m_droneSim == nullptr)
-						m_droneSim.reset(new SimulatedDrone);
-					return m_droneSim.get(); //Upcast to Drone and return
+					if (m_droneSim_A == nullptr)
+						m_droneSim_A.reset(new SimulatedDrone(Serial));
+					return m_droneSim_A.get(); //Upcast to Drone and return
+				}
+				else if (Serial == "Simulation B"s) {
+					//Lazily  create simulated drone so we don't make one unless it's requested
+					if (m_droneSim_B == nullptr)
+						m_droneSim_B.reset(new SimulatedDrone(Serial));
+					return m_droneSim_B.get(); //Upcast to Drone and return
+				}
+				else if (Serial == "Simulation C"s) {
+					//Lazily  create simulated drone so we don't make one unless it's requested
+					if (m_droneSim_C == nullptr)
+						m_droneSim_C.reset(new SimulatedDrone(Serial));
+					return m_droneSim_C.get(); //Upcast to Drone and return
 				}
 				else {
 					//Search for the provided serial in our real drone vector
@@ -126,7 +142,7 @@ namespace DroneInterface {
 							return drone; //Upcast to Drone and return
 					}
 				}
-				return nullptr; //Default if not "Simulation" and we can't find the requested drone
+				return nullptr; //Default if not a recognized simulated drone serial and we can't find the requested drone
 			}
 	};
 }

@@ -15,7 +15,20 @@
 //DroneInterface::Drone::TimePoint InitTimepoint = std::chrono::steady_clock::now(); //Used for testing message age warnings
 
 namespace DroneInterface {
-	SimulatedDrone::SimulatedDrone() : m_MainThread(&SimulatedDrone::DroneMain, this), m_abort(false) {
+	SimulatedDrone::SimulatedDrone() : m_abort(false) {
+		m_MainThread = std::thread(&SimulatedDrone::DroneMain, this); //Launch private thread
+	}
+	
+	SimulatedDrone::SimulatedDrone(std::string Serial) : SimulatedDrone() {
+		std::scoped_lock lock(m_mutex);
+		
+		m_serial = Serial; //Save Serial String
+		
+		//Set position
+		m_Lat = 0.7720877065630863;
+		m_Lon = -1.663401472323783;
+		m_Alt = 466.0;
+		
 		//Set up a waypoint mission that we can pretend to be flying
 		m_LastMission.Waypoints.clear();
 		m_LastMission.Waypoints.emplace_back();
@@ -76,6 +89,18 @@ namespace DroneInterface {
 		m_LastMission.CurvedTrajectory = false;
 		
 		m_flightMode = 1;
+		
+		//For drones B and C, shift position and waypoint mission so the drones aren't all piled up on each other
+		if (Serial == "Simulation B"s) {
+			m_Lat += 0.00001;
+			for (auto & waypoint : m_LastMission.Waypoints)
+				waypoint.Longitude += 0.0001;
+		}
+		else if (Serial == "Simulation C"s) {
+			m_Lat -= 0.00001;
+			for (auto & waypoint : m_LastMission.Waypoints)
+				waypoint.Latitude -= 0.00005;
+		}
 	}
 	
 	SimulatedDrone::~SimulatedDrone() {
@@ -91,16 +116,16 @@ namespace DroneInterface {
 	//Get drone serial number as a string (should be available on construction)
 	std::string SimulatedDrone::GetDroneSerial(void) {
 		std::scoped_lock lock(m_mutex);
-		return "Simulation"s;
+		return m_serial;
 	}
 	
 	//Lat & Lon (radians) and WGS84 Altitude (m)
 	bool SimulatedDrone::GetPosition(double & Latitude, double & Longitude, double & Altitude, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
 		//Return a fixed position about 400 feet above ground in Lamberton, MN
-		Latitude  = 0.7720877065630863;
-		Longitude = -1.663401472323783;
-		Altitude  = 466.0;
+		Latitude  = m_Lat;
+		Longitude = m_Lon;
+		Altitude  = m_Alt;
 		Timestamp = std::chrono::steady_clock::now();
 		//Timestamp = InitTimepoint;
 		return true;

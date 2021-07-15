@@ -167,6 +167,7 @@ namespace DroneInterface {
 	class SimulatedDrone : public Drone {
 		public:
 			SimulatedDrone();
+			SimulatedDrone(std::string Serial);
 			~SimulatedDrone();
 			
 			std::string GetDroneSerial(void) override;
@@ -226,6 +227,9 @@ namespace DroneInterface {
 			bool              m_VideoFileReadFinished = false; //Protected by m_NextFrameMutex
 			
 			//Additional State Data
+			std::string m_serial = "Simulation"s;
+			double m_Lat, m_Lon, m_Alt; //Lat (rad), Lon (rad), alt (m)
+			
 			bool m_realtime = false;
 			std::filesystem::path m_videoPath;
 			double m_targetFPS = -1.0;
