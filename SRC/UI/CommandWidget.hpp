@@ -22,8 +22,10 @@
 //#include "MyGui.hpp"
 #include "EmbeddedIcons.hpp"
 #include "../Modules/DJI-Drone-Interface/DroneManager.hpp"
-#include "../Utilities.hpp"
+#include "../Modules/Shadow-Detection/ShadowDetection.hpp"
+#include "../Modules/Shadow-Propagation/ShadowPropagation.hpp"
 #include "../Modules/Guidance/Guidance.hpp"
+#include "../Utilities.hpp"
 
 class CommandWidget {
 	public:
@@ -77,6 +79,8 @@ class CommandWidget {
 		
 		//An avoidance zone violation occurs when a drone is in an avoidance zone
 		bool  m_CheckAvoidanceZones = true;
+		
+		std::vector<bool> m_useDroneFlags;
 		
 		float ContentHeight; //Height of widget content from last draw pass
 		float RecommendedHeight; //Recommended height for widget
@@ -215,15 +219,8 @@ inline void CommandWidget::Draw() {
 	float button3Start = ImGui::GetCursorPos().x + widgetWidth - buttonSize.x;
 	
 	//Mission Button
-	SurveyRegion * surveyRegion = SurveyRegionManager::Instance().GetActiveSurveyRegion();
-	if (surveyRegion == nullptr) {
-		MyGui::DummyButtonStyle styleSitter;
-		ImGui::ImageButton(m_IconTexture_Mission, iconSize, ImVec2(0, 0), ImVec2(1,1), -1, ImVec4(0,0,0,0), ImVec4(1,1,1,1));
-	}
-	else {
-		if (ImGui::ImageButton(m_IconTexture_Mission, iconSize, ImVec2(0, 0), ImVec2(1,1), -1, ImVec4(0,0,0,0), ImVec4(1,1,1,1)))
-			ImGui::OpenPopup("Mission Popup");
-	}
+	if (ImGui::ImageButton(m_IconTexture_Mission, iconSize, ImVec2(0, 0), ImVec2(1,1), -1, ImVec4(0,0,0,0), ImVec4(1,1,1,1)))
+		ImGui::OpenPopup("Mission Popup");
 	
 	//Watchdog Button
 	ImGui::SameLine(button2Start);
@@ -239,18 +236,101 @@ inline void CommandWidget::Draw() {
 	{
 		ImExt::Style styleSitter(StyleVar::WindowPadding, ImVec2(4.0f, 4.0f));
 		if (ImGui::BeginPopup("Mission Popup", ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize)) {
-			//Indicate whether the shadow detection and propagation modules are active.
-			//Don't try to start them here since this in non-trivial, but clearly indicate whether starting a mission
-			//now will use or not use shadow detection and propogation capabilities.
+			{
+				ImExt::Font fnt(Fonts::NormalBold);
+				float col2start = ImGui::CalcTextSize("Shadow Avoidance::  ").x;
+				
+				ImGui::TextUnformatted("Mission Status:");
+				ImGui::SameLine(col2start);
+				ImGui::TextUnformatted(Guidance::GuidanceEngine::Instance().GetMissionStatusStr().c_str());
+				
+				if (Guidance::GuidanceEngine::Instance().IsRunning()) {
+					ImGui::TextUnformatted("Mission Progress:");
+					ImGui::SameLine(col2start);
+					ImGui::TextUnformatted(Guidance::GuidanceEngine::Instance().GetMissionProgressStr().c_str());
+				}
+				
+				ImGui::TextUnformatted("Shadow Avoidance:");
+				ImGui::SameLine(col2start);
+				bool shadowDetectionRunning = ShadowDetection::ShadowDetectionEngine::Instance().IsRunning();
+				bool shadowPropagationRunning = ShadowPropagation::ShadowPropagationEngine::Instance().IsRunning();
+				if (shadowDetectionRunning && shadowPropagationRunning)
+					ImGui::TextColored(ImVec4(0,0.9,0,1), "Enabled");
+				else
+					ImGui::TextColored(ImVec4(0.9,0,0,1), "Disabled");
+			}
 			
-			//List all connected drones with checkboxes to pick the drones to be used as low-fliers. If a drone is being used
-			//by the shadow detection module, don't let it be selected here.
-			
-			
-			if (ImGui::BeginMenu("Start Mission Over Active Survey Region")) {
-				if (ImGui::MenuItem("Confirm Command", NULL, false, true))
-					std::cerr << "Start Mission!\r\n";
-				ImGui::EndMenu();
+			if (! Guidance::GuidanceEngine::Instance().IsRunning()) {
+				//UI for starting a mission
+				//Indicate whether the shadow detection and propagation modules are active.
+				//Don't try to start them here since this in non-trivial, but clearly indicate whether starting a mission
+				//now will use or not use shadow detection and propogation capabilities.
+				
+				ImGui::NewLine();
+				SurveyRegion * activeSurveyRegion = SurveyRegionManager::Instance().GetActiveSurveyRegion();
+				if (activeSurveyRegion == nullptr)
+					ImGui::TextUnformatted("Set active survey region to enable mission controls.");
+				else {
+					//List all connected drones with checkboxes to pick the drones to be used as low-fliers. If a drone is being used
+					//by the shadow detection module, don't let it be selected here.
+					std::vector<std::string> connectedDroneSerials = DroneInterface::DroneManager::Instance().GetConnectedDroneSerialNumbers();
+					std::vector<std::string> availableDroneSerials;
+					if (ShadowDetection::ShadowDetectionEngine::Instance().IsRunning()) {
+						std::string usedDroneSerial = ShadowDetection::ShadowDetectionEngine::Instance().GetProviderDroneSerial();
+						availableDroneSerials.reserve(connectedDroneSerials.size() - 1U);
+						for (std::string serial : connectedDroneSerials) {
+							if (serial != usedDroneSerial)
+								availableDroneSerials.push_back(serial);
+						}
+					}
+					else
+						availableDroneSerials = connectedDroneSerials;
+					
+					if (m_useDroneFlags.size() != availableDroneSerials.size())
+						m_useDroneFlags = std::vector<bool>(availableDroneSerials.size(), true); //Re-initialize flag vector
+					
+					if (availableDroneSerials.empty())
+						ImGui::TextUnformatted("No available drones for new mission.");
+					else {
+						{
+							ImExt::Style m_style(StyleCol::Header,  Math::Vector4(0.2f, 0.75f, 0.2f, 1.0f));
+							MyGui::HeaderLabel("New Mission");
+						}
+						ImGui::Text("Survey Region: %s", activeSurveyRegion->m_Name.c_str());
+						
+						//TODO: What happens if a drone is under manual control and we try to start a mission using it?
+						//Right now we will hapily tell the guidance module to start commanding the drone, while the vehicle
+						//control widget is also commanding the drone... That is bad. Options:
+						//1: Check to see if a drone is being commanded by the vehicle control widget and show it as unavailable if it is
+						//2: Add the ability to tell the vehicle command widget to stop commanding a given drone and steal control away from it
+						
+						//I tend to like option 2 better. The vehicle control widget steals control from the guidance module when the user interacts
+						//with a drone, so why not have consistent behavior and let the guidance module steal from vehicle control?
+						
+						for (size_t n = 0U; n < availableDroneSerials.size(); n++) {
+							bool flag = m_useDroneFlags[n];
+							std::string label = "Use drone: "s + availableDroneSerials[n];
+							//std::string label = availableDroneSerials[n];
+							ImGui::Checkbox(label.c_str(), &flag);
+							m_useDroneFlags[n] = flag;
+						}
+						
+						if (ImGui::BeginMenu("Start Mission")) {
+							if (ImGui::MenuItem("Confirm Command", NULL, false, true)) {
+								std::cerr << "Starting Mission!\r\n";
+								
+								std::vector<std::string> serialsToCommand;
+								serialsToCommand.reserve(availableDroneSerials.size());
+								for (size_t n = 0U; n < availableDroneSerials.size(); n++) {
+									if (m_useDroneFlags[n])
+										serialsToCommand.push_back(availableDroneSerials[n]);
+								}
+								Guidance::GuidanceEngine::Instance().StartSurvey(serialsToCommand);
+							}
+							ImGui::EndMenu();
+						}
+					}
+				}
 			}
 			
 			

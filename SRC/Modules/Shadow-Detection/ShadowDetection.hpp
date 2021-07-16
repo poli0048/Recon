@@ -106,11 +106,12 @@ namespace ShadowDetection {
 					m_engineThread.join();
 			}
 			
-			inline void Start(std::string const & DroneSerial); //Start or restart continuous processing of fisheye imagery from the given drone
-			inline void Stop(void);                             //Stop processing
-			inline bool IsRunning(void);                        //Returns true if running, false if stopped
-			inline int  RegisterCallback(std::function<void(InstantaneousShadowMap const & ShadowMap)> Callback); //Regester callback for new shadow maps
-			inline void UnRegisterCallback(int Handle); //Unregister callback for new shadow maps (input is token returned by RegisterCallback()
+			inline void        Start(std::string const & DroneSerial); //Start or restart continuous processing of fisheye imagery from the given drone
+			inline void        Stop(void);                             //Stop processing
+			inline bool        IsRunning(void);                        //Returns true if running, false if stopped
+			inline std::string GetProviderDroneSerial(void);           //Returns serial of drone we are getting imagery from (empty string if not running)
+			inline int         RegisterCallback(std::function<void(InstantaneousShadowMap const & ShadowMap)> Callback); //Regester callback for new shadow maps
+			inline void        UnRegisterCallback(int Handle); //Unregister callback for new shadow maps (input is token returned by RegisterCallback()
 			
 			//Set the reference frame to be used for registration and stabilization (all other frames are aligned to the reference frame)
 			void SetReferenceFrame(cv::Mat const & RefFrame);
@@ -164,6 +165,11 @@ namespace ShadowDetection {
 	inline bool ShadowDetectionEngine::IsRunning(void) {
 		std::scoped_lock lock(m_mutex);
 		return m_running;
+	}
+	
+	inline std::string ShadowDetectionEngine::GetProviderDroneSerial(void) {
+		std::scoped_lock lock(m_mutex);
+		return m_ImageProviderDroneSerial;
 	}
 	
 	//Regester callback for new shadow maps (returns handle)

@@ -67,6 +67,11 @@ namespace Guidance {
 			inline bool StartSurvey(std::vector<std::string> const & LowFlierSerials); //Start a survey mission (currently active region) using the given drones
 			inline bool AddLowFlier(std::string const & Serial); //Add a drone to the collection of low fliers and start commanding it
 			inline bool RemoveLowFlier(std::string const & Serial); //Stop commanding the drone with the given serial
+			inline bool IsRunning(void); //Returns true if currently commanding a mission, false otherwise
+			
+			inline std::vector<std::string> GetSerialsOfDronesUnderCommand(void);
+			inline std::string GetMissionStatusStr(void); //Get status string for current mission
+			inline std::string GetMissionProgressStr(void); //Get progress string for current mission
 			
 			//Abort mission methods - after any of these are called the guidance module will stop issuing commands to drones.
 			//We have 3 abort methods, each corresponding to a different state to put the drones in when aborting the mission.
@@ -210,10 +215,50 @@ namespace Guidance {
 			if (m_dronesUnderCommand[n]->GetDroneSerial() == Serial) {
 				m_currentDroneMissions.erase(Serial);
 				m_dronesUnderCommand.erase(m_dronesUnderCommand.begin() + n);
+				
+				//If we just removed the last drone, abort the mission - this makes it unnecessary to have an extra UI control
+				//to cancel a mission that has effectively already been canceled through the removal of all drones.
+				if (m_dronesUnderCommand.empty()) {
+					m_running = false;
+					m_currentDroneMissions.clear();
+					m_surveyRegion.Clear();
+				}
+				
 				return true;
 			}
 		}
 		return false;
+	}
+	
+	//Returns true if currently commanding a mission, false otherwise
+	inline bool GuidanceEngine::IsRunning(void) {
+		std::scoped_lock lock(m_mutex);
+		return m_running;
+	}
+	
+	inline std::vector<std::string> GuidanceEngine::GetSerialsOfDronesUnderCommand(void) {
+		std::scoped_lock lock(m_mutex);
+		std::vector<std::string> serials;
+		serials.reserve(m_dronesUnderCommand.size());
+		for (auto drone : m_dronesUnderCommand)
+			serials.push_back(drone->GetDroneSerial());
+		return serials;
+	}
+	
+	//Get status string for current mission
+	inline std::string GuidanceEngine::GetMissionStatusStr(void) {
+		std::scoped_lock lock(m_mutex);
+		if (! m_running)
+			return "No mission in progress"s;
+		else if (m_dronesUnderCommand.size() == 1U)
+			return "Executing mission - Commanding 1 drone"s;
+		else
+			return "Executing mission - Commanding "s + std::to_string((unsigned int) m_dronesUnderCommand.size()) + " drones"s;
+	}
+	
+	//Get progress string for current mission
+	inline std::string GuidanceEngine::GetMissionProgressStr(void) {
+		return "Progress info not available"s;
 	}
 	
 	//Abort and put all commanded drones into Hover (P mode)

@@ -16,7 +16,10 @@
 #include "../Journal.h"
 #include "MyGui.hpp"
 #include "SimFiducialsWidget.hpp"
+#include "../Modules/DJI-Drone-Interface/DroneManager.hpp"
 #include "../Modules/GNSS-Receiver/GNSSReceiver.hpp"
+#include "../Modules/Shadow-Detection/ShadowDetection.hpp"
+#include "../Modules/Shadow-Propagation/ShadowPropagation.hpp"
 #include "GNSSReceiverWindow.hpp"
 
 class MainMenu {
@@ -26,6 +29,9 @@ class MainMenu {
 		static MainMenu & Instance() { static MainMenu menu; return menu; }
 		
 		void Draw();
+	
+	private:
+		float m_shadowDetectionModuleVidFeedFPS = 1.0f;
 };
 
 inline void MainMenu::Draw() {
@@ -113,6 +119,83 @@ inline void MainMenu::Draw() {
 			}
 			if (ImGui::MenuItem("Navigate To GPS Coords"))
 				ZoomToCoordsDialog::Instance().Show();
+			
+			ImGui::EndMenu();
+		}
+		
+		if (ImGui::BeginMenu("Modules")) {
+			bool shadowDetectionRunning = ShadowDetection::ShadowDetectionEngine::Instance().IsRunning();
+			bool shadowPropagationRunning = ShadowPropagation::ShadowPropagationEngine::Instance().IsRunning();
+			float col2start = ImGui::CalcTextSize("Shadow Propagation  ").x;
+			
+			std::string   statusStr = shadowDetectionRunning ? "(Running)"s : "(Not Running)"s;
+			Math::Vector4 statusCol = shadowDetectionRunning ? ImVec4(0,0.9,0,1) : ImVec4(0.9,0,0,1);
+			if (MyGui::BeginMenuWithStatus("Shadow Detection", col2start, statusStr.c_str(), statusCol)) {
+				if (shadowDetectionRunning) {
+					if (ImGui::MenuItem("Stop Module")) {
+						std::string serial = ShadowDetection::ShadowDetectionEngine::Instance().GetProviderDroneSerial();
+						ShadowDetection::ShadowDetectionEngine::Instance().Stop();
+						
+						DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(serial);
+						if (drone != nullptr)
+							drone->StopDJICamImageFeed();
+					}
+				}
+				else {
+					//Get a vector of serials of drones that could be used to serve imagery to the shadow detection module
+					std::vector<std::string> connectedDroneSerials = DroneInterface::DroneManager::Instance().GetConnectedDroneSerialNumbers();
+					std::vector<std::string> DroneSerialsWithDJICams;
+					for (std::string serial : connectedDroneSerials) {
+						DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(serial);
+						if ((drone != nullptr) && (drone->IsDJICamConnected()))
+							DroneSerialsWithDJICams.push_back(serial);
+					}
+					
+					if (DroneSerialsWithDJICams.empty())
+						ImGui::TextUnformatted("No connected drones with DJI cams");
+					else {
+						ImGui::DragFloat("Target FPS", &(m_shadowDetectionModuleVidFeedFPS), 0.02f, 0.1f, 15.0f, "%.1f");
+						
+						for (std::string serial : DroneSerialsWithDJICams) {
+							//std::string menuItemText = "Start using drone: "s + serial;
+							if (ImGui::MenuItem(("Start using drone: "s + serial).c_str())) {
+								//Start (or restart) the cam feed with the specified frame rate
+								DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(serial);
+								if (drone->IsCamImageFeedOn())
+									drone->StopDJICamImageFeed();
+								drone->StartDJICamImageFeed(m_shadowDetectionModuleVidFeedFPS);
+								
+								//Instruct the shadow detection module to start (using this drone serial)
+								ShadowDetection::ShadowDetectionEngine::Instance().Start(serial);
+								
+								//TODO: Open a new tool for selecting a reference frame and maring fiducials
+								//This tool needs to call SetReferenceFrame() and SetFiducials() on the shadow detection engine
+								//in order to actually start that module processing.
+							}
+						}
+					}
+				}
+				
+				ImGui::EndMenu();
+			}
+			statusStr = shadowPropagationRunning ? "(Running)"s : "(Not Running)"s;
+			statusCol = shadowPropagationRunning ? ImVec4(0,0.9,0,1) : ImVec4(0.9,0,0,1);
+			if (MyGui::BeginMenuWithStatus("Shadow Propagation", col2start, statusStr.c_str(), statusCol)) {
+				if (shadowPropagationRunning) {
+					if (ImGui::MenuItem("Stop Module"))
+						ShadowPropagation::ShadowPropagationEngine::Instance().Stop();
+				}
+				else {
+					if (shadowDetectionRunning) {
+						if (ImGui::MenuItem("Start Module"))
+							ShadowPropagation::ShadowPropagationEngine::Instance().Start();
+					}
+					else
+						ImGui::TextUnformatted("Shadow Detection module must be running to start");
+				}
+				
+				ImGui::EndMenu();
+			}
 			
 			ImGui::EndMenu();
 		}

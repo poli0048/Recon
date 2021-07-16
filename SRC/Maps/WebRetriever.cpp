@@ -100,8 +100,8 @@ namespace Maps {
 				m_receiver->OnReceivedWeb(tile, source, std::shared_ptr<std::vector<uint8_t>>(data));
 			}
 			else {
-				if (m_failedRequests.count(key) == 0U)
-					Log.printf("Failed to download file (RESPONSE = %d)\r\nURL: %s", code, url.c_str());
+				//if (m_failedRequests.count(key) == 0U)
+				//	Log.printf("Failed to download file (RESPONSE = %d)\r\nURL: %s", code, url.c_str());
 			
 				std::lock_guard<std::mutex> lock(this->m_mutex);
 				m_failedRequests[key] = std::chrono::steady_clock::now();

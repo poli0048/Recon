@@ -68,6 +68,25 @@ namespace MyGui {
 		return ret;
 	}
 	
+	//Version of BeginMenu() that has two columns of text with the second column bold and rendered in the given color
+	inline bool BeginMenuWithStatus(const char* col1Text, float col1Width, const char* col2Text, Math::Vector4 col2Color, bool enabled = true) {
+		Math::Vector2 curPos = ImGui::GetCursorScreenPos();
+		
+		ImGui::PushFont(Fonts::NormalBold);
+		float lineWidth = col1Width + ImGui::CalcTextSize(col2Text).x;
+		ImGui::PopFont();
+		
+		std::string menuText(col1Text);
+		menuText += std::string((size_t) std::ceil((lineWidth - ImGui::CalcTextSize(col1Text).x) / ImGui::CalcTextSize(" ").x), ' ');
+		
+		ImDrawList * winDrawList = ImGui::GetWindowDrawList();
+		bool ret = ImGui::BeginMenu(menuText.c_str(), enabled);
+		ImGui::PushFont(Fonts::NormalBold);
+		winDrawList->AddText(curPos + Math::Vector2(col1Width, 0), ImGui::ColorConvertFloat4ToU32(col2Color), col2Text);
+		ImGui::PopFont();
+		return ret;
+	}
+	
 	//Version of MenuItem() that has a column for icons
 	inline bool MenuItem(const char* txticon, float XMargin, const char* label, const char* shortcut = NULL, bool selected = false, bool enabled = true) {
 		Math::Vector2 curPos = ImGui::GetCursorScreenPos();
