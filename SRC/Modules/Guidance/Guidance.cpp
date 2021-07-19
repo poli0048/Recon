@@ -17,6 +17,7 @@
 
 //Project Includes
 #include "Guidance.hpp"
+#include "../../UI/VehicleControlWidget.hpp"
 //#include "../../EigenAliases.h"
 //#include "../../SurveyRegionManager.hpp"
 //#include "../../Polygon.hpp"
@@ -25,6 +26,93 @@
 
 
 namespace Guidance {
+	// *********************************************************************************************************************************
+	// **************************************   GuidanceEngine Non-Inline Functions Definitions   **************************************
+	// *********************************************************************************************************************************
+	//Start a survey mission (currently active region) using the given drones
+	bool GuidanceEngine::StartSurvey(std::vector<std::string> const & LowFlierSerials) {
+		std::scoped_lock lock(m_mutex);
+		if (m_running)
+			return false; //Require stopping the previous mission first
+		if (LowFlierSerials.empty())
+			return false; //Require at least 1 drone to start a mission
+		if (! SurveyRegionManager::Instance().GetCopyOfActiveRegionData(nullptr, &m_surveyRegion, nullptr))
+			return false; //No active survey region
+		m_dronesUnderCommand.clear();
+		for (std::string serial : LowFlierSerials) {
+			DroneInterface::Drone * ptr = DroneInterface::DroneManager::Instance().GetDrone(serial);
+			if (ptr != nullptr) {
+				m_dronesUnderCommand.push_back(ptr);
+				VehicleControlWidget::Instance().StopCommandingDrone(serial);
+			}
+		}
+		if (m_dronesUnderCommand.size() == LowFlierSerials.size()) {
+			m_running = true;
+			m_missionPrepDone = false; //This will trigger the pre-planning work that needs to happen for a new mission
+			return true;
+		}
+		else
+			return false;
+	}
+	
+	//Add a drone to the collection of low fliers and start commanding it
+	bool GuidanceEngine::AddLowFlier(std::string const & Serial) {
+		std::scoped_lock lock(m_mutex);
+		if (! m_running)
+			return false;
+		else {
+			for (auto drone : m_dronesUnderCommand) {
+				if (drone->GetDroneSerial() == Serial) {
+					VehicleControlWidget::Instance().StopCommandingDrone(Serial);
+					return true;
+				}
+			}
+			DroneInterface::Drone * ptr = DroneInterface::DroneManager::Instance().GetDrone(Serial);
+			if (ptr != nullptr) {
+				m_dronesUnderCommand.push_back(ptr);
+				VehicleControlWidget::Instance().StopCommandingDrone(Serial);
+				return true;
+			}
+			else
+				return false;
+		}
+	}
+	
+	//Stop commanding the drone with the given serial
+	bool GuidanceEngine::RemoveLowFlier(std::string const & Serial) {
+		std::scoped_lock lock(m_mutex);
+		if (! m_running)
+			return false;
+		for (size_t n = 0U; n < m_dronesUnderCommand.size(); n++) {
+			if (m_dronesUnderCommand[n]->GetDroneSerial() == Serial) {
+				m_currentDroneMissions.erase(Serial);
+				m_dronesUnderCommand.erase(m_dronesUnderCommand.begin() + n);
+				
+				//If we just removed the last drone, abort the mission - this makes it unnecessary to have an extra UI control
+				//to cancel a mission that has effectively already been canceled through the removal of all drones.
+				if (m_dronesUnderCommand.empty()) {
+					m_running = false;
+					m_currentDroneMissions.clear();
+					m_surveyRegion.Clear();
+				}
+				
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	//Returns true if currently commanding a mission, false otherwise
+	bool GuidanceEngine::IsRunning(void) {
+		std::scoped_lock lock(m_mutex);
+		return m_running;
+	}
+	
+	
+	// *********************************************************************************************************************************
+	// *******************************************   Guidance Algorithm Function Definitions   *****************************************
+	// *********************************************************************************************************************************
+	
 	//1 - Take two points and estimate the time (s) it would take a drone to fly from one to the other (stopped at start and end), assuming a max flight speed (m/s)
 	double EstimateMissionTime(DroneInterface::Waypoint const & A, DroneInterface::Waypoint const & B, double TargetSpeed) {
 		//TODO

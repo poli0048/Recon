@@ -64,10 +64,11 @@ namespace Guidance {
 					m_engineThread.join();
 			}
 			
-			inline bool StartSurvey(std::vector<std::string> const & LowFlierSerials); //Start a survey mission (currently active region) using the given drones
-			inline bool AddLowFlier(std::string const & Serial); //Add a drone to the collection of low fliers and start commanding it
-			inline bool RemoveLowFlier(std::string const & Serial); //Stop commanding the drone with the given serial
-			inline bool IsRunning(void); //Returns true if currently commanding a mission, false otherwise
+			//Starting a survey mission and adding a drone will automatically instruct the vehicle control to stop commanding the relavent drones
+			bool StartSurvey(std::vector<std::string> const & LowFlierSerials); //Start a survey mission (currently active region) using the given drones
+			bool AddLowFlier(std::string const & Serial); //Add a drone to the collection of low fliers and start commanding it
+			bool RemoveLowFlier(std::string const & Serial); //Stop commanding the drone with the given serial
+			bool IsRunning(void); //Returns true if currently commanding a mission, false otherwise
 			
 			inline std::vector<std::string> GetSerialsOfDronesUnderCommand(void);
 			inline std::string GetMissionStatusStr(void); //Get status string for current mission
@@ -158,84 +159,9 @@ namespace Guidance {
 	                             std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::vector<std::vector<int>> & Sequences);
 	
 	
-	
 	// *********************************************************************************************************************************
 	// ****************************************   GuidanceEngine Inline Functions Definitions   ****************************************
 	// *********************************************************************************************************************************
-	//Start a survey mission (currently active region) using the given drones
-	inline bool GuidanceEngine::StartSurvey(std::vector<std::string> const & LowFlierSerials) {
-		std::scoped_lock lock(m_mutex);
-		if (m_running)
-			return false; //Require stopping the previous mission first
-		if (LowFlierSerials.empty())
-			return false; //Require at least 1 drone to start a mission
-		if (! SurveyRegionManager::Instance().GetCopyOfActiveRegionData(nullptr, &m_surveyRegion, nullptr))
-			return false; //No active survey region
-		m_dronesUnderCommand.clear();
-		for (std::string serial : LowFlierSerials) {
-			DroneInterface::Drone * ptr = DroneInterface::DroneManager::Instance().GetDrone(serial);
-			if (ptr != nullptr)
-				m_dronesUnderCommand.push_back(ptr);
-		}
-		if (m_dronesUnderCommand.size() == LowFlierSerials.size()) {
-			m_running = true;
-			m_missionPrepDone = false; //This will trigger the pre-planning work that needs to happen for a new mission
-			return true;
-		}
-		else
-			return false;
-	}
-	
-	//Add a drone to the collection of low fliers and start commanding it
-	inline bool GuidanceEngine::AddLowFlier(std::string const & Serial) {
-		std::scoped_lock lock(m_mutex);
-		if (! m_running)
-			return false;
-		else {
-			for (auto drone : m_dronesUnderCommand) {
-				if (drone->GetDroneSerial() == Serial)
-					return true;
-			}
-			DroneInterface::Drone * ptr = DroneInterface::DroneManager::Instance().GetDrone(Serial);
-			if (ptr != nullptr) {
-				m_dronesUnderCommand.push_back(ptr);
-				return true;
-			}
-			else
-				return false;
-		}
-	}
-	
-	//Stop commanding the drone with the given serial
-	inline bool GuidanceEngine::RemoveLowFlier(std::string const & Serial) {
-		std::scoped_lock lock(m_mutex);
-		if (! m_running)
-			return false;
-		for (size_t n = 0U; n < m_dronesUnderCommand.size(); n++) {
-			if (m_dronesUnderCommand[n]->GetDroneSerial() == Serial) {
-				m_currentDroneMissions.erase(Serial);
-				m_dronesUnderCommand.erase(m_dronesUnderCommand.begin() + n);
-				
-				//If we just removed the last drone, abort the mission - this makes it unnecessary to have an extra UI control
-				//to cancel a mission that has effectively already been canceled through the removal of all drones.
-				if (m_dronesUnderCommand.empty()) {
-					m_running = false;
-					m_currentDroneMissions.clear();
-					m_surveyRegion.Clear();
-				}
-				
-				return true;
-			}
-		}
-		return false;
-	}
-	
-	//Returns true if currently commanding a mission, false otherwise
-	inline bool GuidanceEngine::IsRunning(void) {
-		std::scoped_lock lock(m_mutex);
-		return m_running;
-	}
-	
 	inline std::vector<std::string> GuidanceEngine::GetSerialsOfDronesUnderCommand(void) {
 		std::scoped_lock lock(m_mutex);
 		std::vector<std::string> serials;

@@ -95,6 +95,7 @@ class VehicleControlWidget {
 		//These methods take care of instructing the guidance module to start/stop commanding drones when necessary
 		inline void AllDronesStopAndHover(void);
 		inline void AllDronesHitTheDeck(void);
+		inline void StopCommandingDrone(std::string const & Serial); //Stop manual control of drone... does nothing if this module was already not commanding the drone
 		
 		//Set/Clear Hazard lets the vehicle control widget decide on how to respond to a hazard instead of requiring the command module to make the call.
 		//This is needed so that the vehicle control widget can react by stopping the vehicle only if it isn't already in a hazardous state. If already in a
@@ -904,6 +905,13 @@ inline void VehicleControlWidget::AllDronesHitTheDeck(void) {
 			continue;
 		StartManualControl(*drone, m_vehicleStates.at(m_currentDroneSerials[n]), true);
 	}
+}
+
+//Stop manual control of drone... does nothing if this module was already not commanding the drone
+inline void VehicleControlWidget::StopCommandingDrone(std::string const & Serial) {
+	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
+	if (m_vehicleStates.count(Serial) > 0U)
+		m_vehicleStates.at(Serial).m_userControlEnabled = false;
 }
 
 //Set/Clear Hazard lets the vehicle control widget decide on how to respond to a hazard instead of requiring the command module to make the call.

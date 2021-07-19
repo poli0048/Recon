@@ -298,15 +298,6 @@ inline void CommandWidget::Draw() {
 						}
 						ImGui::Text("Survey Region: %s", activeSurveyRegion->m_Name.c_str());
 						
-						//TODO: What happens if a drone is under manual control and we try to start a mission using it?
-						//Right now we will hapily tell the guidance module to start commanding the drone, while the vehicle
-						//control widget is also commanding the drone... That is bad. Options:
-						//1: Check to see if a drone is being commanded by the vehicle control widget and show it as unavailable if it is
-						//2: Add the ability to tell the vehicle command widget to stop commanding a given drone and steal control away from it
-						
-						//I tend to like option 2 better. The vehicle control widget steals control from the guidance module when the user interacts
-						//with a drone, so why not have consistent behavior and let the guidance module steal from vehicle control?
-						
 						for (size_t n = 0U; n < availableDroneSerials.size(); n++) {
 							bool flag = m_useDroneFlags[n];
 							std::string label = "Use drone: "s + availableDroneSerials[n];
