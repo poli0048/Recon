@@ -180,18 +180,14 @@ inline void MainMenu::Draw() {
 			}
 			statusStr = shadowPropagationRunning ? "(Running)"s : "(Not Running)"s;
 			statusCol = shadowPropagationRunning ? ImVec4(0,0.9,0,1) : ImVec4(0.9,0,0,1);
-			if (MyGui::BeginMenuWithStatus("Shadow Propagation", col2start, statusStr.c_str(), statusCol)) {
+			if (MyGui::BeginMenuWithStatus("Shadow Propagation", col2start, statusStr.c_str(), statusCol, shadowDetectionRunning || shadowPropagationRunning)) {
 				if (shadowPropagationRunning) {
 					if (ImGui::MenuItem("Stop Module"))
 						ShadowPropagation::ShadowPropagationEngine::Instance().Stop();
 				}
 				else {
-					if (shadowDetectionRunning) {
-						if (ImGui::MenuItem("Start Module"))
-							ShadowPropagation::ShadowPropagationEngine::Instance().Start();
-					}
-					else
-						ImGui::TextUnformatted("Shadow Detection module must be running to start");
+					if (ImGui::MenuItem("Start Module"))
+						ShadowPropagation::ShadowPropagationEngine::Instance().Start();
 				}
 				
 				ImGui::EndMenu();

@@ -135,8 +135,8 @@ inline void SettingsWindow::Draw() {
 			                       "If a receiver is present, your location will appear on the map and in the Locations menu. This also enables "
 			                       "absolute timestamps on certain collected data (such as generated shadow map files).\n\n"
 			                       "Currently, only UBLOX receivers (Gen 6 and later) are supported. If you are looking for a good, supported receiver, " 
-			                       "we recommend the GPS-17285 NEO-M9N breakout board from SparkFun, coupled with a Taoglas Titan AA.108.301111 "
-			                       "antenna (DigiKey Part # 931-1135-ND). Connect using the boards USB-C interface.");
+			                       "we recommend the GPS-17285 NEO-M9N breakout board from SparkFun, coupled with a Taoglas Magma AA.170.301111 "
+			                       "antenna (DigiKey Part # 931-1388-ND). Connect using the boards USB-C interface.");
 			ImGui::PopTextWrapPos();
 			ImGui::EndTooltip();
 		}

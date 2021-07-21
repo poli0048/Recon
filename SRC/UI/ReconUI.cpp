@@ -49,7 +49,7 @@ void ReconUI::Draw() {
 	mainWinOpts.Flags = WindowFlags::NoTitleBar | WindowFlags::NoResize | WindowFlags::NoMove | WindowFlags::NoCollapse | WindowFlags::NoSavedSettings |
 	                    WindowFlags::MenuBar | WindowFlags::NoDocking;
 	mainWinOpts.POpen = &DrawLoopEnabled;
-	mainWinOpts.Size(ImVec2(1300,750), Condition::Once);
+	mainWinOpts.Size(ImVec2(1400,850), Condition::Once);
 	if (ImExt::Window window("Recon## Main Window", mainWinOpts); window.ShouldDrawContents()) {	
 		DrawModalDialogs();
 		
@@ -57,7 +57,7 @@ void ReconUI::Draw() {
 		
 		ImGui::Columns(2, "Main Win H Columns");
 		if (firstDrawPass)
-			ImGui::SetColumnWidth(0, ImGui::GetWindowWidth()/4.0f);
+			ImGui::SetColumnWidth(0, 21.0f*ImGui::GetFontSize());
 		
 		float childSpacing        = ImGui::GetStyle().ItemSpacing.y;
 		float statusBarHeight     = ImGui::GetFontSize();
