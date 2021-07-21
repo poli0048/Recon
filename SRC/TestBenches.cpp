@@ -23,6 +23,7 @@
 #include "Modules/Guidance/Guidance.hpp"
 #include "Modules/DJI-Drone-Interface/DroneManager.hpp"
 #include "Modules/DJI-Drone-Interface/DroneComms.hpp"
+#include <torch/script.h>
 
 #define PI 3.14159265358979
 
@@ -40,7 +41,7 @@ static bool TestBench18(std::string const & Arg);  static bool TestBench19(std::
 static bool TestBench20(std::string const & Arg);  static bool TestBench21(std::string const & Arg);
 static bool TestBench22(std::string const & Arg);  static bool TestBench23(std::string const & Arg);
 static bool TestBench24(std::string const & Arg);  static bool TestBench25(std::string const & Arg);
-static bool TestBench26(std::string const & Arg);
+static bool TestBench26(std::string const & Arg);  static bool TestBench27(std::string const & Arg);
 
 // ************************************************************************************************************************************************
 // *********************************************************   Public Function Definitions   ******************************************************
@@ -83,6 +84,7 @@ namespace TestBenches {
 			case 24: result = TestBench24(TestBenchArg); break;
 			case 25: result = TestBench25(TestBenchArg); break;
 			case 26: result = TestBench26(TestBenchArg); break;
+			case 27: result = TestBench27(TestBenchArg); break;
 			default: break;
 		}
 		if (result)
@@ -1022,6 +1024,55 @@ static bool TestBench26(std::string const & Arg) {
 	std::cerr << tensor << std::endl;
 	
 	return true;
+}
+
+// Argument passed in is the absolute path to the Shadow-Propagation Folder
+static bool TestBench27(std::string const & Arg) {
+    std::cerr << "Starting!" << std::endl;
+    torch::jit::script::Module module = torch::jit::load(Arg + "/model.pt");
+    torch::jit::script::Module dataTensor = torch::jit::load(Arg + "/data.pt");
+    torch::Tensor data = dataTensor.attr("data").toTensor();
+    int length = data.size(1);
+    const int INPUT_LENGTH = 10;
+    const int TARGET_LENGTH = 10;
+    std::vector<torch::Tensor> prediction;
+    std::vector<torch::Tensor> input;
+    std::vector<torch::Tensor> target;
+    for (int k = 0; k < length - (INPUT_LENGTH + TARGET_LENGTH) + 1; k++) {
+        torch::NoGradGuard no_grad;
+        // Narrow slices across dimension 1 from index k to k+INPUT_LENGTH (INPUT_LENGTH many elements)
+        torch::Tensor inputTensor = data.narrow(1, k, INPUT_LENGTH);
+        torch::Tensor targetTensor = data.narrow(1, k+INPUT_LENGTH, TARGET_LENGTH);
+        for (int ei = 0; ei < INPUT_LENGTH - 1; ei++) {
+            std::vector<torch::jit::IValue> inputs;
+            inputs.push_back(inputTensor.narrow(1, ei, 1)[0]);
+            inputs.push_back((ei == 0));
+            module.forward(inputs);
+        }
+        torch::Tensor decoderInput = inputTensor.narrow(1, inputTensor.size(1)-1, 1)[0];
+        for (int di = 0; di < TARGET_LENGTH; di++) {
+            std::vector<torch::jit::IValue> inputs;
+            inputs.push_back(decoderInput);
+            auto result = module.forward(inputs).toTuple();
+            // decoder_input, decoder_hidden, output_image, _, _
+            decoderInput = result->elements()[2].toTensor();
+        }
+        // Decoder_input now is the output_image
+        prediction.push_back(decoderInput[0]);
+        input.push_back(inputTensor[0][inputTensor.size(1)-1]);
+        target.push_back(targetTensor[0][targetTensor.size(1)-1]);
+    }
+    cv::namedWindow("Output", cv::WINDOW_NORMAL);
+    cv::resizeWindow("Output", 576, 192);
+    for (int i = 0; i < prediction.size(); i++) {
+        torch::Tensor combined = torch::cat({input[i], target[i], prediction[i]}, 2)[0];
+        cv::Mat output(combined.size(0),combined.size(1),CV_32FC1,combined.data_ptr());
+        cv::Mat thresholded;
+        cv::threshold(output, thresholded, 0.5, 1, cv::THRESH_BINARY);
+        cv::imshow("Output", thresholded);
+        cv::waitKey(0);
+    }
+    return true;
 }
 
 

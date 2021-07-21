@@ -36,7 +36,8 @@ namespace TestBenches {
 		/* 23 */ "DJI Drone Interface: Serialization/Deserialization",
 		/* 24 */ "DJI Drone Interface: Compressed Image Test",
 		/* 25 */ "DJI Drone Interface: ",
-		/* 26 */ "TorchLib basic testbench"
+		/* 26 */ "TorchLib basic testbench",
+		/* 27 */ "Torchlib loading file"
 	};
 	
 	void RunTestBench(int TestNum, std::string const & TestBenchArg);
