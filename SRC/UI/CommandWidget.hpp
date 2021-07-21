@@ -298,15 +298,17 @@ inline void CommandWidget::Draw() {
 						}
 						ImGui::Text("Survey Region: %s", activeSurveyRegion->m_Name.c_str());
 						
+						bool atLeast1DroneSelected = false;
 						for (size_t n = 0U; n < availableDroneSerials.size(); n++) {
 							bool flag = m_useDroneFlags[n];
 							std::string label = "Use drone: "s + availableDroneSerials[n];
 							//std::string label = availableDroneSerials[n];
 							ImGui::Checkbox(label.c_str(), &flag);
 							m_useDroneFlags[n] = flag;
+							atLeast1DroneSelected = atLeast1DroneSelected || flag;
 						}
 						
-						if (ImGui::BeginMenu("Start Mission")) {
+						if (ImGui::BeginMenu("Start Mission", atLeast1DroneSelected)) {
 							if (ImGui::MenuItem("Confirm Command", NULL, false, true)) {
 								//std::cerr << "Starting Mission!\r\n";
 								

@@ -317,7 +317,7 @@ inline void VisWidget::Draw() {
 			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
 			ImGui::SliderFloat("##Opacity_GuidanceOverlay", &Opacity_GuidanceOverlay, 0.0f, 100.0f, "%.0f");
 			
-			ImGui::TextUnformatted("Show Message Box");
+			ImGui::TextUnformatted("Show Message Box ");
 			ImGui::SameLine();
 			ImGui::Checkbox("##Show Message Box", &GuidanceOverlay_ShowMessageBox);
 			

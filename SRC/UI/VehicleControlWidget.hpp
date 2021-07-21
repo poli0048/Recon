@@ -1060,7 +1060,7 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 		if (drone.IsDJICamConnected()) {
 			if (MyGui::BeginMenu(u8"\uf03d", labelMargin, "Video Feed")) {
 				if (drone.IsCamImageFeedOn()) {
-					if (MyGui::MenuItem(u8"\uf03d", labelMargin, "Stop Feed", NULL, false, true))
+					if (ImGui::MenuItem("Stop Feed", NULL, false, true))
 						drone.StopDJICamImageFeed();
 				}
 				else {
