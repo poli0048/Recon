@@ -241,6 +241,12 @@ namespace DroneInterface {
 			int m_flightMode = 0;                //0 = P, 1 = Waypoint, 2 = VirtualStick, -1 = Other
 			WaypointMission m_LastMission;       //A copy of the last waypoint mission uploaded to the drone
 			
+			bool m_virtualStickWarningIssued = false;  //Issue warning once per object to avoid terminal spamming
+			bool m_waypointWarningIssued = false;      //Issue warning once per object to avoid terminal spamming
+			bool m_HoverWarningIssued = false;         //Issue warning once per object to avoid terminal spamming
+			bool m_LandNowWarningIssued = false;       //Issue warning once per object to avoid terminal spamming
+			bool m_GoHomeAndLandWarningIssued = false; //Issue warning once per object to avoid terminal spamming
+			
 			void DroneMain(void);
 	};
 	

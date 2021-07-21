@@ -463,6 +463,7 @@ void MapWidget::Draw(void) {
 			m_MSATool.Draw_Overlay(mousePosNM, draw_list, mouseInBounds);
 		}
 		m_SurveyRegionsTool.Draw_Overlay(mousePosScreenSpace, mousePosNM, draw_list, mouseInBounds);
+		m_guidanceOverlay.Draw_Overlay(mousePosNM, draw_list, mouseInBounds);
 	}
 	
 	//Draw pass for vehicle widget
@@ -483,6 +484,12 @@ void MapWidget::Draw(void) {
 		Eigen::Vector2d TextPos_SS = GCS_Pos_SS + Eigen::Vector2d(0.0, 0.5*75.0/96.0*IconWidth_pixels + ImGui::GetStyle().ItemSpacing.y);
 		MyGui::AddText(draw_list, TextPos_SS, IM_COL32_WHITE, "GCS", NULL, true, false);
 	}
+	
+	//TODO: Break out the message box from the m_SurveyRegionsTool like we did with the guidance overlay. Then call the method to draw the message box down here
+	//so it shows up on top of things instead of potentially under things like the vehicle icons.
+	
+	//Draw message boxes
+	m_guidanceOverlay.Draw_MessageBox(mousePosNM, draw_list, mouseInBounds);
 	
 	ImGui::EndChild();
 	mouseInBounds = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
@@ -521,6 +528,19 @@ void MapWidget::Draw(void) {
 		//We keep track of the drag state ourselves so we can allow dragging to work even if the mouse leaves the widget
 		bool toolActive = m_AvoidanceZonesTool.toolActive || m_LandingZonesTool.toolActive || m_MSATool.toolActive || m_SurveyRegionsTool.toolActive;
 		bool startDrag = (mouseInBounds && processMouseInputs && ((ImGui::IsMouseClicked(1)) || (ImGui::IsMouseClicked(0) && (! toolActive))));
+		
+		//On ctrl-click, copy mouse lat/lon to clipboard
+		if (ImGui::IsMouseClicked(0) && mouseInBounds && (ImGui::GetIO().KeyCtrl)) {
+			Eigen::Vector2d mousePos_NM = ScreenCoordsToNormalizedMercator(ImGui::GetMousePos());
+			Eigen::Vector2d mousePos_LatLon = NMToLatLon(mousePos_NM);
+			
+			std::ostringstream out;
+			out << std::fixed << std::setprecision(6) << mousePos_LatLon(0)*180.0/PI << ", " << mousePos_LatLon(1)*180.0/PI;
+			std::string clipboardText = out.str();
+			ImGui::SetClipboardText(clipboardText.c_str());
+			startDrag = false;
+		}
+		
 		if (startDrag) {
 			dragging = true;
 			MousePos_NormalizedMercator_OnLastClick = ScreenCoordsToNormalizedMercator(ImGui::GetMousePos());

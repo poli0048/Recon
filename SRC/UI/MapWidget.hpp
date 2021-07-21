@@ -23,6 +23,7 @@
 #include "LandingZonesTool.hpp"
 #include "MSATool.hpp"
 #include "SurveyRegionTool.hpp"
+#include "GuidanceOverlay.hpp"
 
 class MapWidget {
 		using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
@@ -85,6 +86,10 @@ class MapWidget {
 		friend class MSATool;
 		friend class SurveyRegionsTool;
 		friend class VehicleControlWidget;
+		friend class GuidanceOverlay;
+		
+		//Public overlays
+		GuidanceOverlay m_guidanceOverlay;
 		
 		static MapWidget & Instance() { static MapWidget widget; return widget; }
 		

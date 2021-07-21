@@ -30,12 +30,14 @@ class VisWidget {
 		bool LayerVisible_AvoidanceZones = false;
 		bool LayerVisible_SafeLandingZones = false;
 		bool LayerVisible_SurveyRegion = false;
+		bool LayerVisible_GuidanceOverlay = false;
 		
 		//All opacities are in the range 0 to 100
 		float Opacity_MSA = 100.0f;
 		float Opacity_AvoidanceZones = 100.0f;
 		float Opacity_SafeLandingZones = 100.0f;
 		float Opacity_SurveyRegion = 100.0f;
+		float Opacity_GuidanceOverlay = 100.0f;
 		
 		float MSA_CmapMinVal = 0.0f;   //MSA corresponding to low end of colormap (m)
 		float MSA_CmapMaxVal = 400.0f; //MSA corresponding to high end of colormap (m)
@@ -44,6 +46,8 @@ class VisWidget {
 		std::array<float, 3> SurveyRegionColor = {0.0f, 0.0f, 0.8f}; //RGB in range 0 to 1
 		float SurveyRegionVertexRadius = 5.0f;  //Vertex radius (in pixels) when editing.
 		float SurveyRegionEdgeThickness = 3.0f; //Edge thickness (in pixels) when editing.
+		
+		bool GuidanceOverlay_ShowMessageBox = true;
 		
 		//Constructors and Destructors
 		VisWidget() : Log(*(ReconUI::Instance().Log)) { LoadDefaults(); LoadFromDisk(); }
@@ -57,16 +61,19 @@ class VisWidget {
 			        CEREAL_NVP(LayerVisible_AvoidanceZones),
 			        CEREAL_NVP(LayerVisible_SafeLandingZones),
 			        CEREAL_NVP(LayerVisible_SurveyRegion),
+			        CEREAL_NVP(LayerVisible_GuidanceOverlay),
 			        CEREAL_NVP(Opacity_MSA),
 			        CEREAL_NVP(Opacity_AvoidanceZones),
 			        CEREAL_NVP(Opacity_SafeLandingZones),
 			        CEREAL_NVP(Opacity_SurveyRegion),
+			        CEREAL_NVP(Opacity_GuidanceOverlay),
 			        CEREAL_NVP(MSA_CmapMinVal),
 			        CEREAL_NVP(MSA_CmapMaxVal),
 			        CEREAL_NVP(MSA_NoFlyDrawMode),
 			        CEREAL_NVP(SurveyRegionColor),
 			        CEREAL_NVP(SurveyRegionVertexRadius),
-			        CEREAL_NVP(SurveyRegionEdgeThickness));
+			        CEREAL_NVP(SurveyRegionEdgeThickness),
+			        CEREAL_NVP(GuidanceOverlay_ShowMessageBox));
 		}
 	
 	private:
@@ -120,11 +127,13 @@ inline void VisWidget::LoadDefaults(void) {
 	LayerVisible_AvoidanceZones = false;
 	LayerVisible_SafeLandingZones = false;
 	LayerVisible_SurveyRegion = false;
+	LayerVisible_GuidanceOverlay = false;
 	
 	Opacity_MSA = 100.0f;
 	Opacity_AvoidanceZones = 100.0f;
 	Opacity_SafeLandingZones = 100.0f;
 	Opacity_SurveyRegion = 100.0f;
+	Opacity_GuidanceOverlay = 100.0f;
 	
 	MSA_CmapMinVal = 0.0f;
 	MSA_CmapMaxVal = 400.0f;
@@ -133,14 +142,17 @@ inline void VisWidget::LoadDefaults(void) {
 	SurveyRegionColor = {0.0f, 0.0f, 0.8f};
 	SurveyRegionVertexRadius = 5.0f;
 	SurveyRegionEdgeThickness = 3.0f;
+	
+	GuidanceOverlay_ShowMessageBox = true;
 }
 
 //Make sure all vis parameters are reasonable
 inline void VisWidget::SanitizeState(void) {
-	Opacity_MSA = std::max(std::min(Opacity_MSA, 100.0f), 0.0f);
-	Opacity_AvoidanceZones = std::max(std::min(Opacity_AvoidanceZones, 100.0f), 0.0f);
+	Opacity_MSA              = std::max(std::min(Opacity_MSA,              100.0f), 0.0f);
+	Opacity_AvoidanceZones   = std::max(std::min(Opacity_AvoidanceZones,   100.0f), 0.0f);
 	Opacity_SafeLandingZones = std::max(std::min(Opacity_SafeLandingZones, 100.0f), 0.0f);
-	Opacity_SurveyRegion = std::max(std::min(Opacity_SurveyRegion, 100.0f), 0.0f);
+	Opacity_SurveyRegion     = std::max(std::min(Opacity_SurveyRegion,     100.0f), 0.0f);
+	Opacity_GuidanceOverlay  = std::max(std::min(Opacity_GuidanceOverlay,  100.0f), 0.0f);
 	
 	MSA_CmapMinVal = std::max(std::min(MSA_CmapMinVal, 10000.0f), -1000.0f);
 	MSA_CmapMaxVal = std::max(std::min(MSA_CmapMaxVal, 10000.0f), -1000.0f);
@@ -287,6 +299,34 @@ inline void VisWidget::Draw() {
 			ImGui::EndPopup();
 		}
 	}
+	
+	ImGui::TextUnformatted("Guidance Overlay");
+	ImGui::SameLine(checkBoxXPos);
+	ImGui::Checkbox("##Guidance Overlay", &LayerVisible_GuidanceOverlay);
+	ImGui::SameLine(settingsButtonXPos);
+	if (ImGui::Button("\uf013##Guidance Overlay Settings"))
+		ImGui::OpenPopup("Guidance Overlay Settings");
+	{
+		ImExt::Style styleSitter(StyleVar::WindowPadding, Math::Vector2(4.0f));
+		if (ImGui::BeginPopup("Guidance Overlay Settings", ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize)) {
+			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Opacity  ").x;
+			std::string label = "Opacity  "s;
+			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
+			ImGui::Text(label.c_str());
+			ImGui::SameLine(col2Start);
+			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
+			ImGui::SliderFloat("##Opacity_GuidanceOverlay", &Opacity_GuidanceOverlay, 0.0f, 100.0f, "%.0f");
+			
+			ImGui::TextUnformatted("Show Message Box");
+			ImGui::SameLine();
+			ImGui::Checkbox("##Show Message Box", &GuidanceOverlay_ShowMessageBox);
+			
+			ImGui::EndPopup();
+		}
+	}
 }
+
+
+
 
 

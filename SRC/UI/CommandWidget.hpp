@@ -262,8 +262,8 @@ inline void CommandWidget::Draw() {
 			
 			if (! Guidance::GuidanceEngine::Instance().IsRunning()) {
 				//UI for starting a mission
-				//Indicate whether the shadow detection and propagation modules are active.
-				//Don't try to start them here since this in non-trivial, but clearly indicate whether starting a mission
+				
+				//Don't try to start shadow modules here since this in non-trivial, but clearly indicate whether starting a mission
 				//now will use or not use shadow detection and propogation capabilities.
 				
 				ImGui::NewLine();
@@ -308,7 +308,7 @@ inline void CommandWidget::Draw() {
 						
 						if (ImGui::BeginMenu("Start Mission")) {
 							if (ImGui::MenuItem("Confirm Command", NULL, false, true)) {
-								std::cerr << "Starting Mission!\r\n";
+								//std::cerr << "Starting Mission!\r\n";
 								
 								std::vector<std::string> serialsToCommand;
 								serialsToCommand.reserve(availableDroneSerials.size());
@@ -321,6 +321,15 @@ inline void CommandWidget::Draw() {
 							ImGui::EndMenu();
 						}
 					}
+				}
+			}
+			else {
+				//UI for a mission in progress
+				ImGui::NewLine();
+				if (ImGui::BeginMenu("Stop Mission (Drones Hover)")) {
+					if (ImGui::MenuItem("Confirm Command", NULL, false, true))
+						VehicleControlWidget::Instance().AllDronesStopAndHover();
+					ImGui::EndMenu();
 				}
 			}
 			

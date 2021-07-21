@@ -195,7 +195,6 @@ void SurveyRegionsTool::Draw_Instructions(std::string const & Text, ImDrawList *
 	DrawList->AddText(TextMin, IM_COL32(255, 255, 255, 255), Text.c_str());
 }
 
-
 void SurveyRegionsTool::Draw_Overlay(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds) {
 	//If the survey region layer isn't supposed to be visible just return now
 	if (! VisWidget::Instance().LayerVisible_SurveyRegion)

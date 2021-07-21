@@ -24,6 +24,9 @@
 #include "../../Polygon.hpp"
 #include "../Shadow-Propagation/ShadowPropagation.hpp"
 #include "../DJI-Drone-Interface/DroneManager.hpp"
+#include "../../UI/MapWidget.hpp"
+#include "../../UI/GuidanceOverlay.hpp"
+#include "../../Maps/MapUtils.hpp"
 
 //Much like the other modules, we have a singleton class with a private thread for running guidance algorithms. When active, this
 //thread will grab time available functions directly from the shadow propagation module and will send drone commands directly to the
@@ -239,6 +242,52 @@ namespace Guidance {
 			if (! m_missionPrepDone) {
 				//A - Partition the survey region
 				//B - Compute pre-planned waypoint missions for each sub-region
+				
+				//TEMP - Just for testing the Guidance overlay
+				MapWidget::Instance().m_guidanceOverlay.SetGuidanceMessage1("This is a message from the guidance module!");
+				MapWidget::Instance().m_guidanceOverlay.SetGuidanceMessage2("Wow - Another message from the guidance module!");
+				MapWidget::Instance().m_guidanceOverlay.SetGuidanceMessage3("Wow - A third message from the guidance module!");
+				
+				std::Evector<PolygonCollection> Partition;
+				
+				double PI = 3.14159265358979;
+				std::Evector<Eigen::Vector2d> vertices_NM;
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239506, -95.314901)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239493, -95.310003)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.242162, -95.309846)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.242162, -95.314849)*PI/180.0));
+				Partition.emplace_back(); //Create a new element in the partition
+				Partition.back().m_components.emplace_back(); //Add a component to the new element
+				Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
+				
+				vertices_NM.clear();
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.242162, -95.309899)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.242162, -95.314831)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245044, -95.314761)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245019, -95.309846)*PI/180.0));
+				Partition.emplace_back(); //Create a new element in the partition
+				Partition.back().m_components.emplace_back(); //Add a component to the new element
+				Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
+				
+				vertices_NM.clear();
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244970, -95.309858)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244988, -95.314735)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246652, -95.314735)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246634, -95.309884)*PI/180.0));
+				Partition.emplace_back(); //Create a new element in the partition
+				Partition.back().m_components.emplace_back(); //Add a component to the new element
+				Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
+				
+				vertices_NM.clear();
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244194, -95.308155)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245155, -95.306839)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241236, -95.301317)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.240349, -95.302530)*PI/180.0));
+				Partition.emplace_back(); //Create a new element in the partition
+				Partition.back().m_components.emplace_back(); //Add a component to the new element
+				Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
+				
+				MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
 				
 				m_missionPrepDone = true; //Mark the prep work as done
 			}

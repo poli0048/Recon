@@ -374,7 +374,10 @@ namespace DroneInterface {
 		std::scoped_lock lock(m_mutex);
 		m_LastMission = Mission;
 		m_flightMode = 1;
-		std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute waypoint missions.\r\n";
+		if (! m_waypointWarningIssued) {
+			std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute waypoint missions.\r\n";
+			m_waypointWarningIssued = true;
+		}
 	}
 	
 	//Populate Result with whether or not a waypoint mission is currently being executed
@@ -400,35 +403,50 @@ namespace DroneInterface {
 	void SimulatedDrone::IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command) {
 		std::scoped_lock lock(m_mutex);
 		m_flightMode = 2;
-		std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute VirtualStick command.\r\n";
+		if (! m_virtualStickWarningIssued) {
+			std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute VirtualStick command.\r\n";
+			m_virtualStickWarningIssued = true;
+		}
 	}
 	
 	//Put in virtualStick Mode and send command (stop mission if running)
 	void SimulatedDrone::IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command) {
 		std::scoped_lock lock(m_mutex);
 		m_flightMode = 2;
-		std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute VirtualStick command.\r\n";
+		if (! m_virtualStickWarningIssued) {
+			std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute VirtualStick command.\r\n";
+			m_virtualStickWarningIssued = true;
+		}
 	}
 	
 	//Stop any running missions an leave virtualStick mode (if in it) and hover in place (P mode)
 	void SimulatedDrone::Hover(void) {
 		std::scoped_lock lock(m_mutex);
 		m_flightMode = 0;
-		std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute Hover() command.\r\n";
+		if (! m_HoverWarningIssued) {
+			std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute Hover() command.\r\n";
+			m_HoverWarningIssued = true;
+		}
 	}
 	
 	//Initiate landing sequence immediately at current vehicle location
 	void SimulatedDrone::LandNow(void) {
 		std::scoped_lock lock(m_mutex);
 		m_flightMode = -1;
-		std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute LandNow() command.\r\n";
+		if (! m_LandNowWarningIssued) {
+			std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute LandNow() command.\r\n";
+			m_LandNowWarningIssued = true;
+		}
 	}
 	
 	//Initiate a Return-To-Home sequence that lands the vehicle at it's take-off location
 	void SimulatedDrone::GoHomeAndLand(void) {
 		std::scoped_lock lock(m_mutex);
 		m_flightMode = -1;
-		std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute GoHomeAndLand() command.\r\n";
+		if (! m_GoHomeAndLandWarningIssued) {
+			std::cerr << "Warning: SimulatedDrone doesn't currently support simulated flight. Can't execute GoHomeAndLand() command.\r\n";
+			m_GoHomeAndLandWarningIssued = true;
+		}
 	}
 	
 	//True: Imagery will be provided at close-to-real-time rate. False: Imagery is provided as fast as possible
