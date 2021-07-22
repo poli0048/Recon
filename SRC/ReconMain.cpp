@@ -279,10 +279,14 @@ int main(int argc, const char * argv[]) {
 		std::cerr << "Available Test Benches:\r\n";
 		for (size_t index = 0U; index < TestBenches::AvailableTestBenches.size(); index++)
 			std::cerr << index << ": " << TestBenches::AvailableTestBenches[index] << "\r\n";
+		Handy::Console::Release(std::cout);
+		Handy::Console::Release(std::cerr);
 		return 0;
 	}
 	else if (Arguments::TestBenchNum >= 0) {
 		TestBenches::RunTestBench(Arguments::TestBenchNum, Arguments::TestBenchArg);
+		Handy::Console::Release(std::cout);
+		Handy::Console::Release(std::cerr);
 		return 0;
 	}
 	
