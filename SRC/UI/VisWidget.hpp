@@ -48,7 +48,7 @@ class VisWidget {
 		float SurveyRegionEdgeThickness = 3.0f; //Edge thickness (in pixels) when editing.
 		
 		bool GuidanceOverlay_ShowMessageBox = true;
-		bool GuidanceOverlay_ShowTriangulation = false;
+		bool GuidanceOverlay_ShowTrianglesInsteadOfPartition = false;
 		
 		//Constructors and Destructors
 		VisWidget() : Log(*(ReconUI::Instance().Log)) { LoadDefaults(); LoadFromDisk(); }
@@ -75,7 +75,7 @@ class VisWidget {
 			        CEREAL_NVP(SurveyRegionVertexRadius),
 			        CEREAL_NVP(SurveyRegionEdgeThickness),
 			        CEREAL_NVP(GuidanceOverlay_ShowMessageBox),
-			        CEREAL_NVP(GuidanceOverlay_ShowTriangulation));
+			        CEREAL_NVP(GuidanceOverlay_ShowTrianglesInsteadOfPartition));
 		}
 	
 	private:
@@ -146,7 +146,7 @@ inline void VisWidget::LoadDefaults(void) {
 	SurveyRegionEdgeThickness = 3.0f;
 	
 	GuidanceOverlay_ShowMessageBox = true;
-	GuidanceOverlay_ShowTriangulation = false;
+	GuidanceOverlay_ShowTrianglesInsteadOfPartition = false;
 }
 
 //Make sure all vis parameters are reasonable
@@ -317,14 +317,26 @@ inline void VisWidget::Draw() {
 			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
 			ImGui::SliderFloat("##Opacity_GuidanceOverlay", &Opacity_GuidanceOverlay, 0.0f, 100.0f, "%.0f");
 			
-			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Show Triangulation  ").x;
+			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Show Region Decomposition  ").x;
 			ImGui::TextUnformatted("Show Message Box ");
 			ImGui::SameLine(col2Start);
 			ImGui::Checkbox("##Show Message Box", &GuidanceOverlay_ShowMessageBox);
 			
-			ImGui::TextUnformatted("Show Triangulation ");
+			ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
+			
+			ImGui::TextUnformatted("Show Region Partition ");
 			ImGui::SameLine(col2Start);
-			ImGui::Checkbox("##Show Triangulation", &GuidanceOverlay_ShowTriangulation);
+			if (ImGui::RadioButton("##Show Partition ", !GuidanceOverlay_ShowTrianglesInsteadOfPartition))
+				GuidanceOverlay_ShowTrianglesInsteadOfPartition = false;
+			
+			ImGui::TextUnformatted("Show Region Decomposition ");
+			ImGui::SameLine(col2Start);
+			if (ImGui::RadioButton("##Show Decomposition ", GuidanceOverlay_ShowTrianglesInsteadOfPartition))
+				GuidanceOverlay_ShowTrianglesInsteadOfPartition = true;
+			
+			//ImGui::TextUnformatted("Show Triangles ");
+			//ImGui::SameLine(col2Start);
+			//ImGui::Checkbox("##Show Triangulation", &GuidanceOverlay_ShowTrianglesInsteadOfPartition);
 			
 			ImGui::EndPopup();
 		}

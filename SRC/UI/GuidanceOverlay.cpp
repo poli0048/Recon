@@ -7,7 +7,32 @@
 #include "MapWidget.hpp"
 #include "VisWidget.hpp"
 #include "../Modules/Guidance/Guidance.hpp"
-//#include "../Maps/MapUtils.hpp"
+
+//Select a color based on an items index in a container of size N. This is for selecting colors to render objects in that will generally
+//result in high visual distinction between objects with nearby indices. Opacity is on a [0,1] scale
+ImU32 GuidanceOverlay::IndexToColor(size_t Index, size_t N, float Opacity) {
+	float R = 0.0f, G = 0.0f, B = 0.0f;
+	
+	//Give each triangle a unique'ish hue, evenly divided in angle-space
+	//float H = float(Index) / float(N);
+	
+	//Cycle between manually chosen, highly distinctive colors
+	float H = 0.0f;
+	switch (((unsigned int) Index) % 7U) {
+		case 0U: H = 0.0f;          break;
+		case 1U: H = 120.0f/360.0f; break;
+		case 2U: H = 180.0f/360.0f; break;
+		case 3U: H = 300.0f/360.0f; break;
+		case 4U: H = 60.0f/360.0f;  break;
+		case 5U: H = 225.0f/360.0f; break;
+		case 6U: H = 30.0f/360.0f;  break;
+		default: H = 0.0f; break;
+	}
+	
+	float S = 1.0f, V = 1.0f;
+	ImGui::ColorConvertHSVtoRGB(H, S, V, R, G, B);
+	return ImGui::GetColorU32(ImVec4(R, G, B, Opacity));
+}
 
 //Called in the draw loop for the map widget
 void GuidanceOverlay::Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds) {
@@ -20,32 +45,17 @@ void GuidanceOverlay::Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDrawL
 		return;
 	
 	std::scoped_lock lock(m_mutex);
-	
-	//Draw the survey region partition
-	if ((! m_SurveyRegionPartitionTriangulation.empty()) && (VisWidget::Instance().Opacity_GuidanceOverlay > 0.0f)) {
-		//Render triangles (the interiors of each component)
-		for (size_t compIndex = 0U; compIndex < m_SurveyRegionPartitionTriangulation.size(); compIndex++) {
-			std::Evector<Triangle> const & compTriangulation(m_SurveyRegionPartitionTriangulation[compIndex]);
-			
-			//Get a good color to render this component in
-			float R = 0.0f, G = 0.0f, B = 0.0f;
-			float H = float(compIndex) / float(m_SurveyRegionPartitionTriangulation.size());
-			float S = 1.0f, V = 1.0f;
-			ImGui::ColorConvertHSVtoRGB(H, S, V, R, G, B);
-			ImU32 compColor = ImGui::GetColorU32(ImVec4(R, G, B, VisWidget::Instance().Opacity_GuidanceOverlay/100.0f));
-			
+	if (VisWidget::Instance().GuidanceOverlay_ShowTrianglesInsteadOfPartition) {
+		//Draw the triangle collection
+		if ((! m_Triangles.empty()) && (VisWidget::Instance().Opacity_GuidanceOverlay > 0.0f)) {
+			//Draw the triangle interiors
 			auto prevFlags = DrawList->Flags;
 			DrawList->Flags = (DrawList->Flags & (~ImDrawListFlags_AntiAliasedFill)); //Disable anti-aliasing to prevent seams along triangle edges
-			for (size_t triangleIndex = 0U; triangleIndex < compTriangulation.size(); triangleIndex++) {
-				Triangle const & triangle(compTriangulation[triangleIndex]);
+			for (size_t triangleIndex = 0U; triangleIndex < m_Triangles.size(); triangleIndex++) {
+				Triangle const & triangle(m_Triangles[triangleIndex]);
 				
-				//Set the triangle color... normally use the component color, but if "Show Triangulation" is checked use different colors for each triangle
-				ImU32 triangleColor = compColor;
-				if (VisWidget::Instance().GuidanceOverlay_ShowTriangulation) {
-					H = float(triangleIndex) / float(compTriangulation.size());
-					ImGui::ColorConvertHSVtoRGB(H, S, V, R, G, B);
-					triangleColor = ImGui::GetColorU32(ImVec4(R, G, B, VisWidget::Instance().Opacity_GuidanceOverlay/100.0f));
-				}
+				//Get a good color to render this triangle in
+				ImU32 triangleColor = IndexToColor(triangleIndex, m_Triangles.size(), VisWidget::Instance().Opacity_GuidanceOverlay/100.0f);
 				
 				Eigen::Vector2d pointA_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointA);
 				Eigen::Vector2d pointB_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointB);
@@ -53,31 +63,66 @@ void GuidanceOverlay::Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDrawL
 				DrawList->AddTriangleFilled(pointA_ScreenSpace, pointB_ScreenSpace, pointC_ScreenSpace, triangleColor);
 			}
 			DrawList->Flags = prevFlags; //Restore previous flags (restore previous anti-aliasing state)
-		}
-		
-		//After rendering the interiors of all components, render their boundaries
-		float edgeThickness_pixels = VisWidget::Instance().SurveyRegionEdgeThickness; //Just use the edge thickness for survey regions for now
-		for (PolygonCollection const & polyCollection : m_SurveyRegionPartition) {
-			for (Polygon const & poly : polyCollection.m_components) {
-				std::vector<SimplePolygon const *> simplePolys;
-				simplePolys.reserve(1U + poly.m_holes.size());
-				simplePolys.push_back(&(poly.m_boundary));
-				for (SimplePolygon const & simplePoly : poly.m_holes)
-					simplePolys.push_back(& simplePoly);
+			
+			//Draw the triangle boundaries
+			float edgeThickness_pixels = VisWidget::Instance().SurveyRegionEdgeThickness; //Just use the edge thickness for survey regions for now
+			for (size_t triangleIndex = 0U; triangleIndex < m_Triangles.size(); triangleIndex++) {
+				Triangle const & triangle(m_Triangles[triangleIndex]);
+				Eigen::Vector2d PA_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointA);
+				Eigen::Vector2d PB_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointB);
+				Eigen::Vector2d PC_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointC);
 				
-				//Draw each simple poly
-				for (SimplePolygon const * simplePoly : simplePolys) {
-					std::Evector<Eigen::Vector2d> const & Vertices_NM(simplePoly->GetVertices());
-					std::Evector<Eigen::Vector2d> Vertices_SS;
-					Vertices_SS.reserve(Vertices_NM.size());
+				DrawList->AddLine(PA_SS, PB_SS, IM_COL32(0, 0, 0, 255.0f*VisWidget::Instance().Opacity_GuidanceOverlay/100.0f), edgeThickness_pixels);
+				DrawList->AddLine(PB_SS, PC_SS, IM_COL32(0, 0, 0, 255.0f*VisWidget::Instance().Opacity_GuidanceOverlay/100.0f), edgeThickness_pixels);
+				DrawList->AddLine(PC_SS, PA_SS, IM_COL32(0, 0, 0, 255.0f*VisWidget::Instance().Opacity_GuidanceOverlay/100.0f), edgeThickness_pixels);
+			}
+		}
+	}
+	else {
+		//Draw the survey region partition
+		if ((! m_SurveyRegionPartitionTriangulation.empty()) && (VisWidget::Instance().Opacity_GuidanceOverlay > 0.0f)) {
+			//Render triangles (the interiors of each component)
+			for (size_t compIndex = 0U; compIndex < m_SurveyRegionPartitionTriangulation.size(); compIndex++) {
+				std::Evector<Triangle> const & compTriangulation(m_SurveyRegionPartitionTriangulation[compIndex]);
+				
+				//Get a good color to render this component in
+				ImU32 compColor = IndexToColor(compIndex, m_SurveyRegionPartitionTriangulation.size(), VisWidget::Instance().Opacity_GuidanceOverlay/100.0f);
+				
+				auto prevFlags = DrawList->Flags;
+				DrawList->Flags = (DrawList->Flags & (~ImDrawListFlags_AntiAliasedFill)); //Disable anti-aliasing to prevent seams along triangle edges
+				for (Triangle const & triangle : compTriangulation) {
+					Eigen::Vector2d pointA_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointA);
+					Eigen::Vector2d pointB_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointB);
+					Eigen::Vector2d pointC_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointC);
+					DrawList->AddTriangleFilled(pointA_ScreenSpace, pointB_ScreenSpace, pointC_ScreenSpace, compColor);
+				}
+				DrawList->Flags = prevFlags; //Restore previous flags (restore previous anti-aliasing state)
+			}
+			
+			//After rendering the interiors of all components, render their boundaries
+			float edgeThickness_pixels = VisWidget::Instance().SurveyRegionEdgeThickness; //Just use the edge thickness for survey regions for now
+			for (PolygonCollection const & polyCollection : m_SurveyRegionPartition) {
+				for (Polygon const & poly : polyCollection.m_components) {
+					std::vector<SimplePolygon const *> simplePolys;
+					simplePolys.reserve(1U + poly.m_holes.size());
+					simplePolys.push_back(&(poly.m_boundary));
+					for (SimplePolygon const & simplePoly : poly.m_holes)
+						simplePolys.push_back(& simplePoly);
 					
-					for (auto const & Vertex_NM : Vertices_NM)
-						Vertices_SS.push_back(MapWidget::Instance().NormalizedMercatorToScreenCoords(Vertex_NM));
-					
-					for (int index = 0; index < int(Vertices_SS.size()); index++) {
-						Eigen::Vector2d p1 = Vertices_SS[index];
-						Eigen::Vector2d p2 = (index + 1 == int(Vertices_SS.size())) ? Vertices_SS[0] : Vertices_SS[index + 1];
-						DrawList->AddLine(p1, p2, IM_COL32(0, 0, 0, 255.0f*VisWidget::Instance().Opacity_GuidanceOverlay/100.0f), edgeThickness_pixels);
+					//Draw each simple poly
+					for (SimplePolygon const * simplePoly : simplePolys) {
+						std::Evector<Eigen::Vector2d> const & Vertices_NM(simplePoly->GetVertices());
+						std::Evector<Eigen::Vector2d> Vertices_SS;
+						Vertices_SS.reserve(Vertices_NM.size());
+						
+						for (auto const & Vertex_NM : Vertices_NM)
+							Vertices_SS.push_back(MapWidget::Instance().NormalizedMercatorToScreenCoords(Vertex_NM));
+						
+						for (int index = 0; index < int(Vertices_SS.size()); index++) {
+							Eigen::Vector2d p1 = Vertices_SS[index];
+							Eigen::Vector2d p2 = (index + 1 == int(Vertices_SS.size())) ? Vertices_SS[0] : Vertices_SS[index + 1];
+							DrawList->AddLine(p1, p2, IM_COL32(0, 0, 0, 255.0f*VisWidget::Instance().Opacity_GuidanceOverlay/100.0f), edgeThickness_pixels);
+						}
 					}
 				}
 			}
@@ -133,6 +178,7 @@ void GuidanceOverlay::Reset() {
 	std::scoped_lock lock(m_mutex);
 	m_SurveyRegionPartition.clear();
 	m_SurveyRegionPartitionTriangulation.clear();
+	m_Triangles.clear();
 	m_GuidanceMessage_1.clear();
 	m_GuidanceMessage_2.clear();
 	m_GuidanceMessage_3.clear();
@@ -156,6 +202,18 @@ void GuidanceOverlay::ClearSurveyRegionPartition() {
 	std::scoped_lock lock(m_mutex);
 	m_SurveyRegionPartition.clear();
 	m_SurveyRegionPartitionTriangulation.clear();
+}
+
+//Set the collection of triangles
+void GuidanceOverlay::SetTriangles(std::Evector<Triangle> const & Triangles) {
+	std::scoped_lock lock(m_mutex);
+	m_Triangles = Triangles;
+}
+
+//Clear/delete the collection of triangles
+void GuidanceOverlay::ClearTriangles(void) {
+	std::scoped_lock lock(m_mutex);
+	m_Triangles.clear();
 }
 
 //Display optional message in box on map (give empty string to disable)

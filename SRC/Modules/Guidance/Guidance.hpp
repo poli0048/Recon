@@ -248,6 +248,7 @@ namespace Guidance {
 				MapWidget::Instance().m_guidanceOverlay.SetGuidanceMessage2("Wow - Another message from the guidance module!");
 				MapWidget::Instance().m_guidanceOverlay.SetGuidanceMessage3("Wow - A third message from the guidance module!");
 				
+				//Create a sample survey region partition to give to the guidance overlay
 				std::Evector<PolygonCollection> Partition;
 				
 				double PI = 3.14159265358979;
@@ -288,6 +289,32 @@ namespace Guidance {
 				Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
 				
 				MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
+				
+				//Create a sample vector of triangles to give to the guidance overlay
+				PolygonCollection tempPolyCollection;
+				vertices_NM.clear();
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239494, -95.310018)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246525, -95.309825)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246628, -95.309994)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246645, -95.314757)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243130, -95.314805)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239528, -95.314901)*PI/180.0));
+				tempPolyCollection.m_components.emplace_back();
+				tempPolyCollection.m_components.back().m_boundary.SetBoundary(vertices_NM);
+				
+				vertices_NM.clear();
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244209, -95.308160)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245130, -95.306817)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243331, -95.304286)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241267, -95.301327)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.240332, -95.302515)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241886, -95.304733)*PI/180.0));
+				tempPolyCollection.m_components.emplace_back();
+				tempPolyCollection.m_components.back().m_boundary.SetBoundary(vertices_NM);
+				
+				std::Evector<Triangle> triangles;
+				tempPolyCollection.Triangulate(triangles);
+				MapWidget::Instance().m_guidanceOverlay.SetTriangles(triangles);
 				
 				m_missionPrepDone = true; //Mark the prep work as done
 			}
