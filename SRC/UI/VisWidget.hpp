@@ -48,6 +48,7 @@ class VisWidget {
 		float SurveyRegionEdgeThickness = 3.0f; //Edge thickness (in pixels) when editing.
 		
 		bool GuidanceOverlay_ShowMessageBox = true;
+		bool GuidanceOverlay_ShowTriangulation = false;
 		
 		//Constructors and Destructors
 		VisWidget() : Log(*(ReconUI::Instance().Log)) { LoadDefaults(); LoadFromDisk(); }
@@ -73,7 +74,8 @@ class VisWidget {
 			        CEREAL_NVP(SurveyRegionColor),
 			        CEREAL_NVP(SurveyRegionVertexRadius),
 			        CEREAL_NVP(SurveyRegionEdgeThickness),
-			        CEREAL_NVP(GuidanceOverlay_ShowMessageBox));
+			        CEREAL_NVP(GuidanceOverlay_ShowMessageBox),
+			        CEREAL_NVP(GuidanceOverlay_ShowTriangulation));
 		}
 	
 	private:
@@ -144,6 +146,7 @@ inline void VisWidget::LoadDefaults(void) {
 	SurveyRegionEdgeThickness = 3.0f;
 	
 	GuidanceOverlay_ShowMessageBox = true;
+	GuidanceOverlay_ShowTriangulation = false;
 }
 
 //Make sure all vis parameters are reasonable
@@ -309,17 +312,19 @@ inline void VisWidget::Draw() {
 	{
 		ImExt::Style styleSitter(StyleVar::WindowPadding, Math::Vector2(4.0f));
 		if (ImGui::BeginPopup("Guidance Overlay Settings", ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize)) {
-			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Opacity  ").x;
-			std::string label = "Opacity  "s;
-			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
-			ImGui::Text(label.c_str());
-			ImGui::SameLine(col2Start);
+			ImGui::TextUnformatted("Opacity  ");
+			ImGui::SameLine();
 			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
 			ImGui::SliderFloat("##Opacity_GuidanceOverlay", &Opacity_GuidanceOverlay, 0.0f, 100.0f, "%.0f");
 			
+			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Show Triangulation  ").x;
 			ImGui::TextUnformatted("Show Message Box ");
-			ImGui::SameLine();
+			ImGui::SameLine(col2Start);
 			ImGui::Checkbox("##Show Message Box", &GuidanceOverlay_ShowMessageBox);
+			
+			ImGui::TextUnformatted("Show Triangulation ");
+			ImGui::SameLine(col2Start);
+			ImGui::Checkbox("##Show Triangulation", &GuidanceOverlay_ShowTriangulation);
 			
 			ImGui::EndPopup();
 		}

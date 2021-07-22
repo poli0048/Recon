@@ -36,11 +36,21 @@ void GuidanceOverlay::Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDrawL
 			
 			auto prevFlags = DrawList->Flags;
 			DrawList->Flags = (DrawList->Flags & (~ImDrawListFlags_AntiAliasedFill)); //Disable anti-aliasing to prevent seams along triangle edges
-			for (Triangle const & triangle : compTriangulation) {
+			for (size_t triangleIndex = 0U; triangleIndex < compTriangulation.size(); triangleIndex++) {
+				Triangle const & triangle(compTriangulation[triangleIndex]);
+				
+				//Set the triangle color... normally use the component color, but if "Show Triangulation" is checked use different colors for each triangle
+				ImU32 triangleColor = compColor;
+				if (VisWidget::Instance().GuidanceOverlay_ShowTriangulation) {
+					H = float(triangleIndex) / float(compTriangulation.size());
+					ImGui::ColorConvertHSVtoRGB(H, S, V, R, G, B);
+					triangleColor = ImGui::GetColorU32(ImVec4(R, G, B, VisWidget::Instance().Opacity_GuidanceOverlay/100.0f));
+				}
+				
 				Eigen::Vector2d pointA_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointA);
 				Eigen::Vector2d pointB_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointB);
 				Eigen::Vector2d pointC_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointC);
-				DrawList->AddTriangleFilled(pointA_ScreenSpace, pointB_ScreenSpace, pointC_ScreenSpace, compColor);
+				DrawList->AddTriangleFilled(pointA_ScreenSpace, pointB_ScreenSpace, pointC_ScreenSpace, triangleColor);
 			}
 			DrawList->Flags = prevFlags; //Restore previous flags (restore previous anti-aliasing state)
 		}
