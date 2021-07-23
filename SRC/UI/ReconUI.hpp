@@ -4,6 +4,7 @@
 
 //External Includes
 #include "../HandyImGuiInclude.hpp"
+#include "soloud.h"
 
 //Project Includes
 #include "Drawable.hpp"
@@ -21,8 +22,11 @@ class ReconUI : public AppUI, public DrawableHost {
 		
 		Journal * Log = nullptr;
 		bool show_demo_window = false;
-
-		virtual ~ReconUI() = default;
+		
+		std::mutex soLoudMutex; //Mutex for gSoloud object. Lock when accessing since library is not explicit about thread-safety
+		SoLoud::Soloud gSoloud; //SoLoud engine
+		
+		virtual ~ReconUI();
 		
 		void Preframe()  override;
 		void Draw()      override;

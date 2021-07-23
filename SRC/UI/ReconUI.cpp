@@ -21,7 +21,14 @@
 #include "SimFiducialsWidget.hpp"
 #include "GNSSReceiverWindow.hpp"
 
-ReconUI::ReconUI() { }
+ReconUI::ReconUI() {
+	gSoloud.init(); //Initialize the SoLoud engine
+}
+
+ReconUI::~ReconUI() {
+	gSoloud.deinit(); //De-initialize the SoLoud engine
+}
+
 void ReconUI::Preframe() { }
 void ReconUI::Postframe() {
 	TextureUploadFlowRestrictor::Instance().Reset();

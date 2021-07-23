@@ -13,6 +13,8 @@
 
 //External Includes
 #include "../HandyImGuiInclude.hpp"
+#include "soloud.h"
+#include "soloud_wav.h"
 
 //Project Includes
 #include "../EigenAliases.h"
@@ -37,6 +39,8 @@ class CommandWidget {
 			m_IconTexture_Mission   = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_Play_84x84[0],           84, 84);
 			m_IconTexture_Watchdog  = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_Watchdog_Light_84x84[0], 84, 84);
 			m_IconTexture_Emergency = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_Warning_84x84[0],        84, 84);
+			
+			m_warningSoundWav.load((Handy::Paths::ThisExecutableDirectory() / "Sounds" / "TF046.WAV").string().c_str());
 		}
 		~CommandWidget() {
 			ImGuiApp::Instance().DeleteImage(m_IconTexture_Mission);
@@ -65,8 +69,11 @@ class CommandWidget {
 		std::thread       m_watchdogThread;
 		std::atomic<bool> m_watchdogThreadAbort = false;
 		
-		std::mutex m_watchdowMutex;
-		bool       m_playSoundOnViolation = true;
+		std::mutex  m_watchdowMutex;
+		
+		bool           m_playSoundOnViolation = true;
+		SoLoud::Wav    m_warningSoundWav;
+		SoLoud::handle m_warningSoundPlayHandle = 0U;
 		
 		//An MSA violation occurs when a drone is below the MSA and not in a landing zone
 		bool  m_CheckMSA = true;
@@ -201,8 +208,21 @@ inline void CommandWidget::WatchdogThreadMain(void) {
 					VehicleControlWidget::Instance().ClearHazardCondition(drones[n]->GetDroneSerial());
 			}
 			
+			//If any drones are in a hazardous state, play hazard sound (if enabled)
+			if (m_playSoundOnViolation) {
+				for (bool hazardState : hazardStates) {
+					if (hazardState) {
+						std::scoped_lock lock(ReconUI::Instance().soLoudMutex);
+						if (! ReconUI::Instance().gSoloud.isValidVoiceHandle(m_warningSoundPlayHandle))
+							m_warningSoundPlayHandle = ReconUI::Instance().gSoloud.play(m_warningSoundWav);
+						break;
+					}
+				}
+			}
+			
 			lastCheckTimepoint = std::chrono::steady_clock::now();
 		}
+		
 		std::this_thread::sleep_for(std::chrono::milliseconds(250));
 	}
 }

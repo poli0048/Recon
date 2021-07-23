@@ -45,12 +45,13 @@ Recon is designed and developed with a goal of maintaining platform independence
  * [OpenCV4](https://opencv.org/)
  * [serial](https://github.com/wjwwood/serial)
  * [tacopie](https://github.com/Cylix/tacopie)
+ * [SoLoud](https://github.com/jarikomppa/soloud/tree/master)
 
 **Shadow Propagation Module Dependencies:**
  * [LibTorch](https://pytorch.org/)
 
 # Building On Linux
-You need GCC version 8 or newer to build Recon. Create a directory somewhere, let's call it "Repos". Clone the Recon repository into this directory (so this file has path "Repos/Recon/README.md"). Similarly clone the following dependencies into the Repos folder: Eigen, Dear ImGUI, implot, HandyCPP, RestClient-CPP, Native File Dialog, Flexible Raster Format, Cereal, GLFW, serial, and tacopie. These dependencies are all referenced using relative paths in the Recon project.
+You need GCC version 8 or newer to build Recon. Create a directory somewhere, let's call it "Repos". Clone the Recon repository into this directory (so this file has path "Repos/Recon/README.md"). Similarly clone the following dependencies into the Repos folder: Eigen, Dear ImGUI, implot, HandyCPP, RestClient-CPP, Native File Dialog, Flexible Raster Format, Cereal, GLFW, serial, tacopie, and SoLoud. These dependencies are all referenced using relative paths in the Recon project.
 
 Next, GLFW needs to be compiled as follows:
  * Open a terminal to the GLFW directory
@@ -70,7 +71,7 @@ Next, tacopie needs to be built as follows:
  
 This will create an archive that will be linked into Recon as part of the build process - note that you do not need to "make install" anything.
 
-Next, use your package manager to ensure that you have the following libraries installed on your system (when available also install the "-dev" version): OpenGL, FreeType, LibCURL, GLEW, and OpenCV (4.x). In Debian, you can get the needed dependencies (except currently OpenCV4) by installing the following packages: libglu1-mesa-dev, libglew-dev, freeglut3-dev mesa-common-dev, libfreetype6, libfreetype6-dev, libcurl4, libcurl4-openssl-dev.
+Next, use your package manager to ensure that you have the following libraries installed on your system (when available also install the "-dev" version): OpenGL, FreeType, LibCURL, GLEW, ALSA, and OpenCV (4.x). In Debian, you can get the needed dependencies (except currently OpenCV4) by installing the following packages: libglu1-mesa-dev, libglew-dev, freeglut3-dev mesa-common-dev, libfreetype6, libfreetype6-dev, libcurl4, libcurl4-openssl-dev, libasound2-dev.
 
 If you are using a new enough distribution that OpenCV4 is available in your repos, you can use that (you will need the -dev version of all OpenCV packages). Otherwise, you need to build from source as follows. Download the latest stable version from Github. Then:
  * Open a terminal to the opencv directory
