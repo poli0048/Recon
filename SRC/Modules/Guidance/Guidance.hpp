@@ -288,7 +288,30 @@ namespace Guidance {
 				Partition.back().m_components.emplace_back(); //Add a component to the new element
 				Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
 				
+				//Make the last item in the partition more interesting by adding a second poly component with a hole
+				vertices_NM.clear();
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245247, -95.306569)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243489, -95.304134)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244269, -95.303076)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245913, -95.305528)*PI/180.0));
+				Partition.back().m_components.emplace_back(); //Add a second component to the previous element
+				Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
+				
+				vertices_NM.clear();
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245087, -95.305907)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244714, -95.305375)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245036, -95.304892)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245449, -95.305398)*PI/180.0));
+				Partition.back().m_components.back().m_holes.emplace_back();
+				Partition.back().m_components.back().m_holes.back().SetBoundary(vertices_NM);
+				
 				MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
+				
+				//Create partition labels to give the guidance overlay
+				std::vector<std::string> partitionLabels;
+				for (int n = 0; n < (int) Partition.size(); n++)
+					partitionLabels.push_back(std::to_string(n));
+				MapWidget::Instance().m_guidanceOverlay.SetPartitionLabels(partitionLabels);
 				
 				//Create a sample vector of triangles to give to the guidance overlay
 				PolygonCollection tempPolyCollection;
@@ -315,6 +338,12 @@ namespace Guidance {
 				std::Evector<Triangle> triangles;
 				tempPolyCollection.Triangulate(triangles);
 				MapWidget::Instance().m_guidanceOverlay.SetTriangles(triangles);
+				
+				//Create triangle labels to give the guidance overlay
+				std::vector<std::string> triangleLabels;
+				for (int n = 0; n < (int) triangles.size(); n++)
+					triangleLabels.push_back(std::to_string(n));
+				MapWidget::Instance().m_guidanceOverlay.SetTriangleLabels(triangleLabels);
 				
 				m_missionPrepDone = true; //Mark the prep work as done
 			}
