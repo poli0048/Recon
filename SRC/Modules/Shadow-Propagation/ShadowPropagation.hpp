@@ -9,6 +9,7 @@
 #include <thread>
 #include <mutex>
 #include <iostream>
+#include <deque>
 
 //External Includes
 #include <opencv2/opencv.hpp>
@@ -16,6 +17,7 @@
 //Project Includes
 #include "../../EigenAliases.h"
 #include "../Shadow-Detection/ShadowDetection.hpp"
+#include <torch/script.h>
 
 namespace ShadowPropagation {
 	//Class for a time-stamped, geo-registered time available function - each pixel corresponds to a patch of ground. We use type uint16_t and
@@ -50,21 +52,28 @@ namespace ShadowPropagation {
 			std::atomic<bool> m_abort;
 			std::mutex        m_mutex;
 			int               m_callbackHandle;
-			
-			std::Evector<ShadowDetection::InstantaneousShadowMap> m_unprocessedShadowMaps;
+			static const int  TARGET_INPUT_LENGTH = 10;
+			static const int  TIME_HORIZON = 10;
+			static constexpr double OUTPUT_THRESHOLD = 0.4;
+
+//			std::Evector<ShadowDetection::InstantaneousShadowMap> m_unprocessedShadowMaps;
 			TimeAvailableFunction m_TimeAvail; //Most recent time available function
+            torch::jit::script::Module m_module; // TorchScript Model
+            std::deque<torch::Tensor> m_prevInputs;
 			
 			inline void ModuleMain(void);
 			
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 			using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
-			
-			static ShadowPropagationEngine & Instance() { static ShadowPropagationEngine Obj; return Obj; }
+			std::Evector<ShadowDetection::InstantaneousShadowMap> m_unprocessedShadowMaps;
+
+        static ShadowPropagationEngine & Instance() { static ShadowPropagationEngine Obj; return Obj; }
 			
 			//Constructors and Destructors
-			ShadowPropagationEngine() : m_running(false), m_abort(false) {
+			ShadowPropagationEngine() : m_running(false), m_abort(false), m_prevInputs() {
 				m_engineThread = std::thread(&ShadowPropagationEngine::ModuleMain, this);
+				m_module = torch::jit::load(Handy::Paths::ThisExecutableDirectory().parent_path().string().append("/SRC/Modules/Shadow-Propagation/model.pt"));
 			}
 			~ShadowPropagationEngine() {
 				m_abort = true;
@@ -142,8 +151,51 @@ namespace ShadowPropagation {
 			//try to have a plan for this since if we fall behind real time our TA functions become worthless. Can we reset the model
 			//and only process every other shadow map? This doubling the time step would be like shadows are moving twice as fast, but
 			//a model trained for one time step may fork for another... just an idea.
-			
-			
+            torch::NoGradGuard no_grad;
+            m_TimeAvail.UL_LL = map.UL_LL;
+			m_TimeAvail.UR_LL = map.UR_LL;
+            m_TimeAvail.LL_LL = map.LL_LL;
+            m_TimeAvail.LR_LL = map.LR_LL;
+
+            // Resize 512 x 512 Mat from InstantaneousShadowMap into 64 x 64 for module input
+            cv::Mat downsizedMap;
+            cv::resize(map.Map, downsizedMap, cv::Size(64, 64), cv::INTER_AREA);
+            // Model was trained using 0-1 float values instead of 0-255
+            cv::Mat cvInput;
+
+            downsizedMap.convertTo(cvInput, CV_32FC1, 1.f/255.0);
+            torch::Tensor inputTensorCompressed = torch::from_blob(cvInput.data, {64, 64}, torch::kFloat);
+            torch::Tensor inputTensor = inputTensorCompressed.unsqueeze(0).unsqueeze(0);
+            m_prevInputs.push_back(inputTensor);
+            if (m_prevInputs.size() > TARGET_INPUT_LENGTH) {
+                m_prevInputs.pop_front();
+            }
+            for (int i = 0; i < m_prevInputs.size(); i++) {
+                std::vector<torch::jit::IValue> inputs;
+                inputs.push_back(m_prevInputs[i]);
+                inputs.push_back((i == 0));
+                m_module.forward(inputs);
+            }
+            cv::Mat localTimeAvailable(cv::Size(64, 64), CV_16UC1, cv::Scalar(std::numeric_limits<uint16_t>::max()));
+            for (int t = 1; t <= TIME_HORIZON; t++) {
+                std::vector<torch::jit::IValue> inputs;
+                inputs.push_back(inputTensor);
+                auto result = m_module.forward(inputs).toTuple();
+                // decoder_input, decoder_hidden, output_image, _, _
+                torch::Tensor outputTensor = result->elements()[2].toTensor();
+                // Iterates over output tensor and then updates localTimeAvailable accordingly
+                for (int i = 0; i < 64; i++) {
+                    for (int j = 0; j < 64; j++) {
+                        if (outputTensor[0][0][i][j].item<float>() > OUTPUT_THRESHOLD && localTimeAvailable.at<uint16_t>(i, j) > t) {
+                            localTimeAvailable.at<uint16_t>(i, j) = t;
+                        }
+                    }
+                }
+                inputTensor = outputTensor;
+            }
+            // Scales up localTimeAvailable
+            cv::resize(localTimeAvailable, m_TimeAvail.TimeAvailable, cv::Size(512, 512), cv::INTER_LINEAR);
+            m_TimeAvail.Timestamp = map.Timestamp;
 			m_unprocessedShadowMaps.erase(m_unprocessedShadowMaps.begin()); //Will cause re-allocation but the buffer is small so don't worry about it
 			//TODO: *********************************************************************************
 			//TODO: *********************************************************************************
