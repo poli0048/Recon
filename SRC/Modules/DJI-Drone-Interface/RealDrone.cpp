@@ -197,7 +197,7 @@ namespace DroneInterface {
 	//Drone Battery level (0 = Empty, 1 = Full)
 	bool RealDrone::GetVehicleBatteryLevel(double & BattLevel, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
-		BattLevel = this->m_packet_et.BatLevel / 100;
+		BattLevel = double(this->m_packet_et.BatLevel) / 100.0;
 		Timestamp = this->m_PacketTimestamp_et;
 		return this->m_packet_et_received;
 	}
