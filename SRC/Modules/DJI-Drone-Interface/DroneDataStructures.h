@@ -20,11 +20,14 @@ namespace DroneInterface {
 	//In this mode, yaw is specified in an absolute sense, relative to North. Height is commanded in an absolute sense, relative to ground,
 	//2D position is controlled by commanding vehicle velocity in the North and East directions
 	struct VirtualStickCommand_ModeA {
-		float Yaw;       //Radians: 0 corresponds to North, positive is clockwise rotation
-		float V_North;   //m/s: North component of vehicle velocity (Acceptable range -15 to 15)
-		float V_East;    //m/s: East component of vehicle velocity (Acceptable range -15 to 15)
-		float HAG;       //m: Height above ground (vehicle altitude - takeoff altitude)
-		float timeout;   //s: If a new command isn't received within this time, the drone should hover
+		float Yaw     = 0.0f;   //Radians: 0 corresponds to North, positive is clockwise rotation
+		float V_North = 0.0f;   //m/s: North component of vehicle velocity (Acceptable range -15 to 15)
+		float V_East  = 0.0f;   //m/s: East component of vehicle velocity (Acceptable range -15 to 15)
+		float HAG     = 10.0f;  //m: Height above ground (vehicle altitude - takeoff altitude)
+		float timeout = 2.0f;   //s: If a new command isn't received within this time, the drone should hover
+		
+		VirtualStickCommand_ModeA() = default;
+		~VirtualStickCommand_ModeA() = default;
 		
 		//If switching to C++20, default this
 		bool operator==(VirtualStickCommand_ModeA const & Other) const {
@@ -44,11 +47,14 @@ namespace DroneInterface {
 	//In this mode, yaw is specified in an absolute sense, relative to North. Height is commanded in an absolute sense, relative to ground,
 	//2D position is controlled by commanding vehicle velocity in vehicle body frame (forward and vehicle right).
 	struct VirtualStickCommand_ModeB {
-		float Yaw;       //Radians: 0 corresponds to North, positive is clockwise rotation
-		float V_Forward; //m/s: Forward component of vehicle velocity (Acceptable range -15 to 15)
-		float V_Right;   //m/s: Vehicle-Right component of vehicle velocity (Acceptable range -15 to 15)
-		float HAG;       //m: Height above ground (vehicle altitude - takeoff altitude)
-		float timeout;   //s: If a new command isn't received within this time, the drone should hover
+		float Yaw       = 0.0f;  //Radians: 0 corresponds to North, positive is clockwise rotation
+		float V_Forward = 0.0f;  //m/s: Forward component of vehicle velocity (Acceptable range -15 to 15)
+		float V_Right   = 0.0f;  //m/s: Vehicle-Right component of vehicle velocity (Acceptable range -15 to 15)
+		float HAG       = 10.0f; //m: Height above ground (vehicle altitude - takeoff altitude)
+		float timeout   = 2.0f;  //s: If a new command isn't received within this time, the drone should hover
+		
+		VirtualStickCommand_ModeB() = default;
+		~VirtualStickCommand_ModeB() = default;
 		
 		//If switching to C++20, default this
 		bool operator==(VirtualStickCommand_ModeB const & Other) const {
@@ -64,12 +70,12 @@ namespace DroneInterface {
 	//it needs to be adjusted upwards to a default min value. If 0 is put in a DJIWaypoint speed field, the behavior changes and the speed gets overwritten by
 	//another value set at the mission level. We don't want this ridiculous behavior so we should make sure this is never actually 0.
 	struct Waypoint {
-		double Latitude;  //WGS84 Latitude of waypoint (Radians)
-		double Longitude; //WGS84 Longitude of waypoint (Radians)
-		double Altitude;  //WGS84 Altitude of waypoint (meters) - Note that this is actual altitude and not height above ground
+		double Latitude  = 0.0; //WGS84 Latitude of waypoint (Radians)
+		double Longitude = 0.0; //WGS84 Longitude of waypoint (Radians)
+		double Altitude  = 0.0; //WGS84 Altitude of waypoint (meters) - Note that this is actual altitude and not height above ground
 		
-		float CornerRadius; //Radius of arc (m) to make when cutting corner at this waypoint. Only used when CurvedTrajectory = true in the parent mission.
-		float Speed;        //Vehicle speed (m/s) between this waypoint and the next waypoint (0 < Speed <= 15)
+		float CornerRadius = 0.2f; //Radius of arc (m) to make when cutting corner at this waypoint. Only used when CurvedTrajectory = true in the parent mission.
+		float Speed = 1.0f;        //Vehicle speed (m/s) between this waypoint and the next waypoint (0 < Speed <= 15)
 		
 		//Waypoint Actions: The drone can be told to execute certain actions once reaching a waypoint. Actions are not mutually exclusive (according to the
 		//docs anyways) so none, one, or multiple can be used in a waypoint. Important Note: Actions are only executed if CurvedTrajectory = false in the parent mission.
@@ -77,8 +83,11 @@ namespace DroneInterface {
 		//to the waypoint to accomplish the given goal. These fields correspond to the following waypoint actions:
 		//LoiterTime:  DJIWaypointActionTypeStay
 		//GimbalPitch: DJIWaypointActionTypeRotateGimbalPitch
-		float LoiterTime;   //Time (s) to hover at this waypoint (0 is equivilent to NaN and should result in the action not being included).
-		float GimbalPitch;  //Pitch of Gimbal, if connected (DJI Definition) in radians at waypoint.
+		float LoiterTime  = std::nanf("");  //Time (s) to hover at this waypoint (0 is equivilent to NaN and should result in the action not being included).
+		float GimbalPitch = std::nanf("");  //Pitch of Gimbal, if connected (DJI Definition) in radians at waypoint.
+		
+		Waypoint() = default;
+		~Waypoint() = default();
 		
 		//If switching to C++20, default this
 		bool operator==(Waypoint const & Other) const {
@@ -112,8 +121,11 @@ namespace DroneInterface {
 	//add a waypoint above or below another.
 	struct WaypointMission {
 		std::vector<Waypoint> Waypoints; //Waypoints to fly to, in order from the vehicle starting position (which is not included as a waypoint)
-		bool LandAtLastWaypoint; //If true, the vehicle lands after hitting the final waypoint. If false, the mission ends with the vehicle hovering in P flight mode.
-		bool CurvedTrajectory; //If true, cut corners when hitting waypoints, resulting in curved trajectory. If false, fly point-to-point, stopping at each waypoint.
+		bool LandAtLastWaypoint = false; //If true, the vehicle lands after the final waypoint. If false, the vehicle hovers in P flight mode after last waypoint.
+		bool CurvedTrajectory   = false; //If true, cut corners near waypoints, giving curved trajectory. If false, fly point-to-point, stopping at each waypoint.
+		
+		WaypointMission() = default;
+		~WaypointMission() = default;
 		
 		//If switching to C++20, default this
 		bool operator==(WaypointMission const & Other) const {
@@ -129,3 +141,4 @@ namespace DroneInterface {
 		}
 	};
 }
+
