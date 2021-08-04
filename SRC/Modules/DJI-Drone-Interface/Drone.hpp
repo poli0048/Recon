@@ -31,7 +31,11 @@ namespace DroneInterface {
 			Drone() = default;
 			virtual ~Drone() = default;
 			
-			//Basic hardware info (should be available on construction)
+			//The drone should not be advertised until this returns true and other methods may give incorrect results if called before the drone is ready.
+			//Once a drone advertises that is is ready, it will stay ready, so this doesn't need to be checked constantly.
+			virtual bool Ready(void) = 0;
+			
+			//Basic hardware info (available when Ready() returns true)
 			virtual std::string GetDroneSerial(void) = 0;
 			
 			//Telemetry - all methods return true if at least one valid reading has been received (regardless of age) and false otherwise
@@ -49,8 +53,8 @@ namespace DroneInterface {
 			//Drone live video access - The mobile client should decode the live video feed and extract every N'th frame and send it to the server.
 			//N should be detirmined when StartDJICamImageFeed() is called in order to achieve the given frame rate as closely as possible.
 			//There is a frame counter that starts at 0 and increments each time a new frame is received by the server.
-			virtual bool IsDJICamConnected(void) = 0; //Should be available on construction
-			virtual bool IsCamImageFeedOn(void) = 0; //True if receiving imagery from drone, false otherwise (valid on construction... initially returns false)
+			virtual bool IsDJICamConnected(void) = 0; //Should be available when drone is ready
+			virtual bool IsCamImageFeedOn(void) = 0; //True if receiving imagery from drone, false otherwise (valid when drone is ready)
 			virtual void StartDJICamImageFeed(double TargetFPS) = 0; //Start sending frames of live video (as close as possible to the given framerate (frame / s))
 			virtual void StopDJICamImageFeed(void) = 0; //Stop sending frames of live video
 			virtual bool GetMostRecentFrame(cv::Mat & Frame, unsigned int & FrameNumber, TimePoint & Timestamp) = 0;
@@ -79,9 +83,11 @@ namespace DroneInterface {
 	//The RealDrone class provides an interface to interact with a single real drone
 	class RealDrone : public Drone {
 		public:
-			RealDrone();
+			RealDrone() = delete;
 			RealDrone(tacopie::tcp_client & client);
 			~RealDrone();
+			
+			bool Ready(void) override;
 			
 			std::string GetDroneSerial(void) override;
 
@@ -120,42 +126,38 @@ namespace DroneInterface {
 			
 		private:
 			//Some modules that use imagery can't handle missing frames gracefully. Thus, we use provide a callback mechanism to ensure that such a module
-			//can have a guarantee that each frame received by the drone interface module will be provided downstream.
-			std::unordered_map<int, std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)>> m_ImageryCallbacks;
+			//can have a guarantee that each frame received by the drone interface module will be provided downstream. See field m_ImageryCallbacks
 			
-			std::mutex        m_mutex; //Lock in each public method for thread safety
-
 			tacopie::tcp_client* m_client;
-			std::string m_serial;
+			std::vector<uint8_t> m_buffer; //Only used in DataReceivedHandler
 			
 			void SendPacket(Packet & packet);
 			void SendPacket_EmergencyCommand(uint8_t Action);
 			void SendPacket_CameraControl(uint8_t Action, double TargetFPS);
 			void SendPacket_ExecuteWaypointMission(uint8_t LandAtEnd, uint8_t CurvedFlight, std::vector<Waypoint> Waypoints);
 			void SendPacket_VirtualStickCommand(uint8_t Mode, float Yaw, float V_x, float V_y, float HAG, float timeout);
-			
-			int m_frame_num = -1;
-			cv::Mat m_MostRecentFrame;
 
-			bool m_packet_ct_received = false;
-			bool m_packet_et_received = false;
-			bool m_packet_ack_received = false;
-			bool m_packet_ms_received = false;
-
-			Packet* m_packet_fragment = new Packet();
+			Packet* m_packet_fragment = new Packet();      //Only used in DataReceivedHandler and ProcessFullReceivedPacket
+			bool ProcessFullReceivedPacket(void);          //Process a full packet. Returns true on success and false on failure (likily hash check fail)
 			
-			Packet_CoreTelemetry m_packet_ct;
-			Packet_ExtendedTelemetry m_packet_et;
-			Packet_Image m_packet_img;
-			Packet_CompressedImage m_packet_compressedImg;
-			Packet_Acknowledgment m_packet_ack;
-			Packet_MessageString m_packet_ms;
+			std::mutex               m_mutex;               //All fields in this block are protected by this mutex
+			Packet_CoreTelemetry     m_packet_ct;           //Data is retrieved from this packet in access methods
+			Packet_ExtendedTelemetry m_packet_et;           //Data is retrieved from this packet in access methods
+			TimePoint                m_PacketTimestamp_ct;
+			TimePoint                m_PacketTimestamp_et;
+			TimePoint                m_PacketTimestamp_imagery;
+			bool                     m_packet_ct_received = false;
+			bool                     m_packet_et_received = false;
+			int                      m_frame_num = -1;
+			cv::Mat                  m_MostRecentFrame;
+			std::unordered_map<int, std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)>> m_ImageryCallbacks;
 			
-			TimePoint m_PacketTimestamp_ct;
-			TimePoint m_PacketTimestamp_et;
-			TimePoint m_PacketTimestamp_imagery;
-			TimePoint m_PacketTimestamp_ack;
-			TimePoint m_PacketTimestamp_ms;
+			Packet_Image m_packet_img;                     //Only used in ProcessFullReceivedPacket
+			Packet_CompressedImage m_packet_compressedImg; //Only used in ProcessFullReceivedPacket
+			Packet_Acknowledgment m_packet_ack;            //Only used in ProcessFullReceivedPacket
+			Packet_MessageString m_packet_ms;              //Only used in ProcessFullReceivedPacket
+			
+			WaypointMission m_currentWaypointMission;
 	};
 	
 	//The SimulatedDrone class provides an interface to interact with a single virtual/simulated drone
@@ -169,6 +171,8 @@ namespace DroneInterface {
 			SimulatedDrone();
 			SimulatedDrone(std::string Serial);
 			~SimulatedDrone();
+			
+			bool Ready(void) override;
 			
 			std::string GetDroneSerial(void) override;
 			
@@ -227,7 +231,7 @@ namespace DroneInterface {
 			bool              m_VideoFileReadFinished = false; //Protected by m_NextFrameMutex
 			
 			//Additional State Data
-			std::string m_serial = "Simulation"s;
+			std::string m_serial;
 			double m_Lat, m_Lon, m_Alt; //Lat (rad), Lon (rad), alt (m)
 			
 			bool m_realtime = false;

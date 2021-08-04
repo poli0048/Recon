@@ -27,6 +27,7 @@ namespace DroneInterface {
 			//Utilities for stream parsing
 			bool IsFinished(void);
 			bool BytesNeeded(uint32_t & ByteCount); //Get num bytes needed to finish packet (returns false if more bytes needed before we can answer)
+			void ForwardScanForSync(void); //Search the buffer for the sync field - if we find it, throw out everything before it from m_data
 			
 			//Packet construction utilities
 			void AddHeader(uint32_t Size, uint8_t PID); //Take total packet size and PID and add sync, size, and PID fields to m_data

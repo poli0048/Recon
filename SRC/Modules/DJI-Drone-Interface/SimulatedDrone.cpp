@@ -113,6 +113,11 @@ namespace DroneInterface {
 			m_MainThread.join();
 	}
 	
+	//Simulated drones can do all there initialization in the constructor, so they are ready immediately on construction
+	bool SimulatedDrone::Ready(void) {
+		return true;
+	}
+	
 	//Get drone serial number as a string (should be available on construction)
 	std::string SimulatedDrone::GetDroneSerial(void) {
 		std::scoped_lock lock(m_mutex);

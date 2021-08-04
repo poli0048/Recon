@@ -106,8 +106,10 @@ namespace DroneInterface {
 				std::scoped_lock lock(m_mutex);
 				
 				std::vector<std::string> droneSerialVector;
-				for (int i = 0; i < (int) m_droneRealVector.size(); i++)
-					droneSerialVector.push_back(m_droneRealVector.at(i)->GetDroneSerial());
+				for (int i = 0; i < (int) m_droneRealVector.size(); i++) {
+					if (m_droneRealVector[i]->Ready())
+						droneSerialVector.push_back(m_droneRealVector[i]->GetDroneSerial());
+				}
 				droneSerialVector.push_back("Simulation A"s); //Comment this out to hide this simulated drone
 				//droneSerialVector.push_back("Simulation B"s); //Comment this out to hide this simulated drone
 				//droneSerialVector.push_back("Simulation C"s); //Comment this out to hide this simulated drone

@@ -13,141 +13,154 @@
 //Project Includes
 #include "Drone.hpp"
 
+#define PI 3.14159265358979
+
 namespace DroneInterface {
-
-	RealDrone::RealDrone() {
-		std::scoped_lock lock(m_mutex);
-		if (m_packet_et_received)
-			m_serial = m_packet_et.DroneSerial;
-	}
-
 	RealDrone::RealDrone(tacopie::tcp_client & client) {
-		std::scoped_lock lock(m_mutex);
-		if (m_packet_et_received)
-			m_serial = m_packet_et.DroneSerial;
 		m_client = &client;
 	}
 	
 	RealDrone::~RealDrone() {
-		std::scoped_lock lock(m_mutex);
 		m_client->disconnect(true);
 	}
 
-	void RealDrone::DataReceivedHandler(const std::shared_ptr<tacopie::tcp_client>& client, const tacopie::tcp_client::read_result& res){
-		std::scoped_lock lock(m_mutex);
+	void RealDrone::DataReceivedHandler(const std::shared_ptr<tacopie::tcp_client> & client, const tacopie::tcp_client::read_result & res) {
 		if (res.success) {
-			uint32_t bytes_needed;
-			m_packet_fragment->BytesNeeded(bytes_needed); //Fragile: Implicit assumption is that this will always succeed/
-			// ECHAI: Will need to revise this fragility at some point in the future.
-
-			if (bytes_needed >= (uint32_t)res.buffer.size()) {
-				m_packet_fragment->m_data.insert(m_packet_fragment->m_data.end(), res.buffer.begin(), res.buffer.end());
-			}
-			else {
-				m_packet_fragment->m_data.insert(m_packet_fragment->m_data.end(), res.buffer.begin(), res.buffer.begin() + bytes_needed);
-			}
-
-			if (m_packet_fragment->IsFinished()) {
-				uint8_t PID;
-				m_packet_fragment->GetPID(PID);
-					
-				switch (PID) {
-					case 0U: {
-						if (this->m_packet_ct.Deserialize(*m_packet_fragment)) {
-							//std::cout << this->m_packet_ct;
-							this->m_packet_ct_received = true;
-							this->m_PacketTimestamp_ct = std::chrono::steady_clock::now();
-						}
-						else {
-							std::cerr << "Error: Tried to deserialize invalid Core Telemetry packet." << std::endl;
-						}
-						break;
+			//Copy all the received data to our buffer
+			m_buffer.insert(m_buffer.end(), res.buffer.begin(), res.buffer.end());
+			
+			//Process received data
+			while (! m_buffer.empty()) {
+				uint32_t bytes_needed;
+				if (m_packet_fragment->BytesNeeded(bytes_needed)) {
+					if (bytes_needed >= (uint32_t) m_buffer.size()) {
+						//All bytes in buffer belong to our current packet
+						m_packet_fragment->m_data.insert(m_packet_fragment->m_data.end(), m_buffer.begin(), m_buffer.end());
+						m_buffer.clear();
 					}
-					case 1U: {
-						if (this->m_packet_et.Deserialize(*m_packet_fragment)) {
-							//std::cout << this->m_packet_et;
-							this->m_packet_et_received = true;
-							this->m_PacketTimestamp_et = std::chrono::steady_clock::now();
-						}
-						else {
-							std::cerr << "Error: Tried to deserialize invalid Extended Telemetry packet." << std::endl;
-						}
-						break;
-					}
-					case 2U: {
-						if (this->m_packet_img.Deserialize(*m_packet_fragment)) {
-							this->m_MostRecentFrame = this->m_packet_img.Frame;
-							this->m_frame_num++;
-							this->m_PacketTimestamp_imagery = std::chrono::steady_clock::now();
-							for (auto const & kv : m_ImageryCallbacks)
-								kv.second(m_MostRecentFrame, m_PacketTimestamp_imagery);
-							//std::cout << this->m_packet_img;
-							//this->m_packet_img_received = true;
-
-							//cv::imshow("frame", this->m_packet_img.Frame);
-							//cv::waitKey(0);
-						}
-						else {
-							std::cerr << "Error: Tried to deserialize invalid Image packet." << std::endl;
-						}
-						break;
-					}
-					case 3U: {
-						if (this->m_packet_ack.Deserialize(*m_packet_fragment)) {
-							std::cout << this->m_packet_ack;
-							this->m_packet_ack_received = true;
-							this->m_PacketTimestamp_ack = std::chrono::steady_clock::now();
-						}
-						else {
-							std::cerr << "Error: Tried to deserialize invalid Acknowledgment packet." << std::endl;
-						}
-						break;
-					}
-					case 4U: {
-						if (this->m_packet_ms.Deserialize(*m_packet_fragment)) {
-							std::cout << this->m_packet_ms;
-							this->m_packet_ms_received = true;
-							this->m_PacketTimestamp_ms = std::chrono::steady_clock::now();
-
-							//SendPacket_EmergencyCommand(1);
-							//std::cout << "SENT EMERGENCY COMMAND PACKET" << std::endl;
-
-							//SendPacket_CameraControl(0, 30);
-							//std::cout << "SENT CAMERA CONTROL PACKET" << std::endl;
-
-							//SendPacket_ExecuteWaypointMission(1, 0, )
-							//std::cout << "SENT EXECUTE WAYPOINT MISSION PACKET" << std::endl;
-
-							//SendPacket_VirtualStickCommand(0, 34.44, 12.2, 3.4, 500, 12);
-							//std::cout << "SENT VIRTUAL STICK COMAND PACKET" << std::endl;
-						}
-						else {
-							std::cerr << "Error: Tried to deserialize invalid Message String packet." << std::endl;
-						}
-						break;
-					}
-					case 5U: {
-						if (this->m_packet_compressedImg.Deserialize(*m_packet_fragment)) {
-							this->m_MostRecentFrame = this->m_packet_compressedImg.Frame;
-							this->m_frame_num++;
-							this->m_PacketTimestamp_imagery = std::chrono::steady_clock::now();
-							for (auto const & kv : m_ImageryCallbacks)
-								kv.second(m_MostRecentFrame, m_PacketTimestamp_imagery);
-						}
-						else {
-							std::cerr << "Error: Tried to deserialize invalid Compressed Image packet." << std::endl;
-						}
-						break;
+					else {
+						//Some bytes in buffer belong to our current packet
+						m_packet_fragment->m_data.insert(m_packet_fragment->m_data.end(), m_buffer.begin(), m_buffer.begin() + bytes_needed);
+						m_buffer.erase(m_buffer.begin(), m_buffer.begin() + bytes_needed);
 					}
 				}
-				m_packet_fragment->Clear();
+				else {
+					//We don't have enough data in our packet fragment to detirmine how many bytes are needed to finish the packet.
+					//Just move 1 byte in this case and try again
+					m_packet_fragment->m_data.push_back(m_buffer[0]);
+					m_buffer.erase(m_buffer.begin());
+				}
+				
+				if (m_packet_fragment->IsFinished()) {
+					if (ProcessFullReceivedPacket())
+						m_packet_fragment->Clear();
+					else
+						m_packet_fragment->ForwardScanForSync(); //If the packet failed to decode we may be out of sync - attempt resynchronization
+				}
 			}
+			
 			client->async_read({ 1024, bind(&RealDrone::DataReceivedHandler, this, client, std::placeholders::_1) });
 		}
 		else {
 			std::cout << "Client disconnected" << std::endl;
 			client->disconnect();
 		}
+	}
+	
+	bool RealDrone::ProcessFullReceivedPacket(void) {
+		uint8_t PID;
+		m_packet_fragment->GetPID(PID);
+
+		switch (PID) {
+			case 0U: {
+				std::scoped_lock lock(m_mutex);
+				if (this->m_packet_ct.Deserialize(*m_packet_fragment)) {
+					//std::cout << this->m_packet_ct;
+					this->m_packet_ct_received = true;
+					this->m_PacketTimestamp_ct = std::chrono::steady_clock::now();
+					return true;
+				}
+				else {
+					std::cerr << "Error: Tried to deserialize invalid Core Telemetry packet." << std::endl;
+					return false;
+				}
+			}
+			case 1U: {
+				std::scoped_lock lock(m_mutex);
+				if (this->m_packet_et.Deserialize(*m_packet_fragment)) {
+					//std::cout << this->m_packet_et;
+					this->m_packet_et_received = true;
+					this->m_PacketTimestamp_et = std::chrono::steady_clock::now();
+					return true;
+				}
+				else {
+					std::cerr << "Error: Tried to deserialize invalid Extended Telemetry packet." << std::endl;
+					return false;
+				}
+			}
+			case 2U: {
+				if (this->m_packet_img.Deserialize(*m_packet_fragment)) {
+					std::scoped_lock lock(m_mutex);
+					this->m_MostRecentFrame = this->m_packet_img.Frame;
+					this->m_frame_num++;
+					this->m_PacketTimestamp_imagery = std::chrono::steady_clock::now();
+					for (auto const & kv : m_ImageryCallbacks)
+						kv.second(m_MostRecentFrame, m_PacketTimestamp_imagery);
+
+					//cv::imshow("frame", this->m_packet_img.Frame);
+					//cv::waitKey(0);
+					return true;
+				}
+				else {
+					std::cerr << "Error: Tried to deserialize invalid Image packet." << std::endl;
+					return false;
+				}
+			}
+			case 3U: {
+				if (this->m_packet_ack.Deserialize(*m_packet_fragment)) {
+					std::cout << this->m_packet_ack;
+					return true;
+				}
+				else {
+					std::cerr << "Error: Tried to deserialize invalid Acknowledgment packet." << std::endl;
+					return false;
+				}
+			}
+			case 4U: {
+				if (this->m_packet_ms.Deserialize(*m_packet_fragment)) {
+					std::cout << this->m_packet_ms;
+					return true;
+				}
+				else {
+					std::cerr << "Error: Tried to deserialize invalid Message String packet." << std::endl;
+					return false;
+				}
+			}
+			case 5U: {
+				if (this->m_packet_compressedImg.Deserialize(*m_packet_fragment)) {
+					std::scoped_lock lock(m_mutex);
+					this->m_MostRecentFrame = this->m_packet_compressedImg.Frame;
+					this->m_frame_num++;
+					this->m_PacketTimestamp_imagery = std::chrono::steady_clock::now();
+					for (auto const & kv : m_ImageryCallbacks)
+						kv.second(m_MostRecentFrame, m_PacketTimestamp_imagery);
+					return true;
+				}
+				else {
+					std::cerr << "Error: Tried to deserialize invalid Compressed Image packet." << std::endl;
+					return false;
+				}
+			}
+			default: {
+				std::cerr << "Error: Unrecognized PID - failed to decode packet from drone." << std::endl;
+				return false;
+			}
+		}
+	}
+	
+	bool RealDrone::Ready(void) {
+		std::scoped_lock lock(m_mutex);
+		return (m_packet_ct_received && m_packet_et_received);
 	}
 	
 	//Get drone serial number as a string (should be available on construction)
@@ -159,8 +172,8 @@ namespace DroneInterface {
 	//Lat & Lon (radians) and WGS84 Altitude (m)
 	bool RealDrone::GetPosition(double & Latitude, double & Longitude, double & Altitude, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
-		Latitude  = this->m_packet_ct.Latitude;
-		Latitude  = this->m_packet_ct.Longitude;
+		Latitude  = this->m_packet_ct.Latitude  * (PI/180.0);
+		Latitude  = this->m_packet_ct.Longitude * (PI/180.0);
 		Altitude  = this->m_packet_ct.Altitude;
 		Timestamp = this->m_PacketTimestamp_ct;
 		return this->m_packet_ct_received;
@@ -179,9 +192,9 @@ namespace DroneInterface {
 	//Yaw, Pitch, Roll (radians) using DJI definitions
 	bool RealDrone::GetOrientation(double & Yaw, double & Pitch, double & Roll, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
-		Yaw       = this->m_packet_ct.Yaw;
-		Pitch     = this->m_packet_ct.Pitch;
-		Roll      = this->m_packet_ct.Roll;
+		Yaw       = this->m_packet_ct.Yaw   * (PI/180.0);
+		Pitch     = this->m_packet_ct.Pitch * (PI/180.0);
+		Roll      = this->m_packet_ct.Roll  * (PI/180.0);
 		Timestamp = this->m_PacketTimestamp_ct;
 		return this->m_packet_ct_received;
 	}
@@ -205,8 +218,8 @@ namespace DroneInterface {
 	//Whether the drone has hit height or radius limits
 	bool RealDrone::GetActiveLimitations(bool & MaxHAG, bool & MaxDistFromHome, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
-		MaxHAG = this->m_packet_et.MaxHeight;
-		MaxDistFromHome = this->m_packet_et.MaxDist;
+		MaxHAG = (this->m_packet_et.MaxHeight == uint8_t(1));
+		MaxDistFromHome = (this->m_packet_et.MaxDist == uint8_t(1));
 		Timestamp = this->m_PacketTimestamp_et;
 		return this->m_packet_et_received;
 	}
@@ -214,13 +227,25 @@ namespace DroneInterface {
 	//Wind & other vehicle warnings as strings
 	bool RealDrone::GetActiveWarnings(std::vector<std::string> & ActiveWarnings, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
-		ActiveWarnings.push_back("BatWarning: " + this->m_packet_et.BatWarning);
-		ActiveWarnings.push_back("WindLevel: " + this->m_packet_et.WindLevel);
-		//Don't print the most recent message here - we just print those immediately when they are received.
-		//if (this->m_packet_ms.Type == 2)
-		//	ActiveWarnings.push_back("Messages: " + this->m_packet_ms.Message);
+		
+		//Interpret battery warning field
+		if (this->m_packet_et.BatWarning == uint8_t(1))
+			ActiveWarnings.push_back("Battery Low"s);
+		else if (this->m_packet_et.BatWarning == uint8_t(2))
+			ActiveWarnings.push_back("Battery Critically Low"s);
+		else if (this->m_packet_et.BatWarning != uint8_t(0))
+			ActiveWarnings.push_back("Battery State Invalid"s);
+		
+		//Interpret wind warning field
+		if ((this->m_packet_et.BatWarning < int8_t(0)) || (this->m_packet_et.BatWarning > int8_t(2)))
+			ActiveWarnings.push_back("Wind Warning: Unknown Condition"s);
+		else if (this->m_packet_et.BatWarning == int8_t(1))
+			ActiveWarnings.push_back("Wind Warning: Level 1"s);
+		else if (this->m_packet_et.BatWarning == int8_t(2))
+			ActiveWarnings.push_back("Wind Warning: Level 2 (Serious)"s);
+		
 		Timestamp = this->m_PacketTimestamp_et;
-		return this->m_packet_ms_received;
+		return this->m_packet_et_received;
 	}
 	
 	//GNSS status (-1 for none, 0-5: DJI definitions)
@@ -235,14 +260,13 @@ namespace DroneInterface {
 	//Returns true if recognized DJI camera is present - Should be available on construction
 	bool RealDrone::IsDJICamConnected(void) {
 		std::scoped_lock lock(m_mutex);
-		return (this->m_packet_et.DJICam == 0 || this->m_packet_et.DJICam == 1);
+		return ((this->m_packet_et.DJICam == 1) || (this->m_packet_et.DJICam == 2));
 	}
 
 	//True if receiving imagery from drone, false otherwise (valid on construction... initially returns false)
 	bool RealDrone::IsCamImageFeedOn(void) {
-		//TODO: 
 		std::scoped_lock lock(m_mutex);
-		return false;
+		return (this->m_packet_et.DJICam == 2);
 	}
 
 	//Start sending frames of live video (as close as possible to the given framerate (frame / s))
@@ -287,46 +311,82 @@ namespace DroneInterface {
 	
 	//Populate Result with whether or not the drone is currently flying (in any mode)
 	bool RealDrone::IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) {
-		//TODO
 		std::scoped_lock lock(m_mutex);
-		return false;
+		Result = (this->m_packet_ct.IsFlying == uint8_t(1));
+		return this->m_packet_ct_received;
 	}
 
 	//Get flight mode as a human-readable string
 	bool RealDrone::GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
-		FlightModeStr = "Flight Mode: " + this->m_packet_et.FlightMode;
-		Timestamp = this->m_PacketTimestamp_et;
-		return this->m_packet_et_received;
+		if (this->m_packet_et_received) {
+			switch (this->m_packet_et.FlightMode) {
+				case uint8_t(0):  FlightModeStr = "Manual"s;                 break;
+				case uint8_t(1):  FlightModeStr = "Atti"s;                   break;
+				case uint8_t(2):  FlightModeStr = "AttiCourseLock"s;         break;
+				case uint8_t(3):  FlightModeStr = "GPSAtti"s;                break;
+				case uint8_t(4):  FlightModeStr = "GPSCourseLock"s;          break;
+				case uint8_t(5):  FlightModeStr = "GPSHomeLock"s;            break;
+				case uint8_t(6):  FlightModeStr = "GPSHotPoint"s;            break;
+				case uint8_t(7):  FlightModeStr = "AssistedTakeoff"s;        break;
+				case uint8_t(8):  FlightModeStr = "AutoTakeoff"s;            break;
+				case uint8_t(9):  FlightModeStr = "AutoLanding"s;            break;
+				case uint8_t(10): FlightModeStr = "GPSWaypoint"s;            break;
+				case uint8_t(11): FlightModeStr = "GoHome"s;                 break;
+				case uint8_t(12): FlightModeStr = "Joystick"s;               break;
+				case uint8_t(13): FlightModeStr = "GPSAttiWristband"s;       break;
+				case uint8_t(14): FlightModeStr = "Draw"s;                   break;
+				case uint8_t(15): FlightModeStr = "GPSFollowMe"s;            break;
+				case uint8_t(16): FlightModeStr = "ActiveTrack"s;            break;
+				case uint8_t(17): FlightModeStr = "TapFly"s;                 break;
+				case uint8_t(18): FlightModeStr = "GPSSport"s;               break;
+				case uint8_t(19): FlightModeStr = "GPSNovice"s;              break;
+				case uint8_t(20): FlightModeStr = "Unknown"s;                break;
+				case uint8_t(21): FlightModeStr = "ConfirmLanding"s;         break;
+				case uint8_t(22): FlightModeStr = "TerrainFollow"s;          break;
+				case uint8_t(23): FlightModeStr = "Tripod"s;                 break;
+				case uint8_t(24): FlightModeStr = "ActiveTrackSpotlight"s;   break;
+				case uint8_t(25): FlightModeStr = "MotorsJustStarted"s;      break;
+				default:          FlightModeStr = "Unknown / Unrecognized"s; break;
+			}
+			Timestamp = this->m_PacketTimestamp_et;
+			return true;
+		}
+		else
+			return false;
 	}
 	
 	//Stop current mission, if running. Then load, verify, and start new waypoint mission.
 	void RealDrone::ExecuteWaypointMission(WaypointMission & Mission) {
 		std::scoped_lock lock(m_mutex);
-		bool isExecuting;
+		//The iOS App should handle any necessary state change, like cancelling a current mission. In any event we certainly don't want to issue an RTL command
+		/*bool isExecuting;
 		TimePoint timestamp;
 		this->IsCurrentlyExecutingWaypointMission(isExecuting, timestamp);
 		if (isExecuting) {
 			this->SendPacket_EmergencyCommand(2); // RTH Command
-		}
-
+		}*/
+		m_currentWaypointMission = Mission;
 		this->SendPacket_ExecuteWaypointMission(Mission.LandAtLastWaypoint, Mission.CurvedTrajectory, Mission.Waypoints);
 	}
 	
 	//Populate Result with whether or not a waypoint mission is currently being executed
 	bool RealDrone::IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) {
-		//TODO
 		std::scoped_lock lock(m_mutex);
-		return false;
+		Result = (this->m_packet_et.FlightMode == uint8_t(10));
+		return this->m_packet_et_received;
 	}
 
 	//Populate arg with current mission (returns false if not flying waypoint mission)
 	bool RealDrone::GetCurrentWaypointMission(WaypointMission & Mission) {
-		//TODO
 		std::scoped_lock lock(m_mutex);
-		return false;
+		if (this->m_packet_et.FlightMode == uint8_t(10)) {
+			Mission = m_currentWaypointMission;
+			return true;
+		}
+		else
+			return false;
 	}
-
 
 	//Put in virtualStick Mode and send command (stop mission if running)
 	void RealDrone::IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command) { 
@@ -359,7 +419,7 @@ namespace DroneInterface {
 	}
 	
 	void RealDrone::SendPacket(DroneInterface::Packet &packet) {
-		std::vector<char> ch_data(packet.m_data.begin(), packet.m_data.end());
+		std::vector<char> ch_data(packet.m_data.begin(), packet.m_data.end()); //Is this copy necessary?
 		m_client->async_write({ ch_data, nullptr });
 	}
 	
@@ -368,9 +428,8 @@ namespace DroneInterface {
 		DroneInterface::Packet_EmergencyCommand packet_ec;
 
 		packet_ec.Action = Action;
-
+		
 		packet_ec.Serialize(packet);
-
 		this->SendPacket(packet);
 	}
 	
@@ -382,7 +441,6 @@ namespace DroneInterface {
 		packet_cc.TargetFPS = TargetFPS;
 
 		packet_cc.Serialize(packet);
-
 		this->SendPacket(packet);
 	}
 	
@@ -395,7 +453,6 @@ namespace DroneInterface {
 		packet_ewm.Waypoints = Waypoints;
 
 		packet_ewm.Serialize(packet);
-
 		this->SendPacket(packet);
 
 	}
@@ -412,7 +469,6 @@ namespace DroneInterface {
 		packet_vsc.timeout = timeout;
 
 		packet_vsc.Serialize(packet);
-
 		this->SendPacket(packet);
 	}
 }
