@@ -345,6 +345,35 @@ namespace Guidance {
 					triangleLabels.push_back(std::to_string(n));
 				MapWidget::Instance().m_guidanceOverlay.SetTriangleLabels(triangleLabels);
 				
+				//Create some lines and circles (vertices) to give to the guidance overlay
+				{
+					std::Evector<std::tuple<LineSegment, float, Eigen::Vector3f>> lineSegments;
+					std::Evector<std::tuple<Eigen::Vector2d, float, Eigen::Vector3f>> circles;
+					
+					float lineThickness = 2.0f;
+					float circleRadius  = 6.5f;
+					Eigen::Vector3f lineColor  (0.0f, 0.8f, 0.0f);
+					Eigen::Vector3f circleColor(0.8f, 0.0f, 0.0f);
+					Eigen::Vector2d vertex1_NM = LatLonToNM(Eigen::Vector2d(44.241080, -95.314821)*PI/180.0);
+					Eigen::Vector2d vertex2_NM = LatLonToNM(Eigen::Vector2d(44.241049, -95.310016)*PI/180.0);
+					lineSegments.push_back(std::make_tuple(LineSegment(vertex1_NM, vertex2_NM), lineThickness, lineColor));
+					circles.push_back(std::make_tuple(vertex1_NM, circleRadius, circleColor));
+					circles.push_back(std::make_tuple(vertex2_NM, circleRadius, circleColor));
+					
+					lineThickness = 4.0f;
+					circleRadius = 7.5f;
+					lineColor << 0.2f, 0.2f, 0.2f;
+					circleColor << 1.0f, 1.0f, 1.0f;
+					vertex1_NM = LatLonToNM(Eigen::Vector2d(44.240509, -95.314010)*PI/180.0);
+					vertex2_NM = LatLonToNM(Eigen::Vector2d(44.242557, -95.311247)*PI/180.0);
+					lineSegments.push_back(std::make_tuple(LineSegment(vertex1_NM, vertex2_NM), lineThickness, lineColor));
+					circles.push_back(std::make_tuple(vertex1_NM, circleRadius, circleColor));
+					circles.push_back(std::make_tuple(vertex2_NM, circleRadius, circleColor));
+					
+					MapWidget::Instance().m_guidanceOverlay.SetLineSegments(lineSegments);
+					MapWidget::Instance().m_guidanceOverlay.SetCircles(circles);
+				}
+				
 				m_missionPrepDone = true; //Mark the prep work as done
 			}
 			

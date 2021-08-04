@@ -87,7 +87,7 @@ namespace DroneInterface {
 		float GimbalPitch = std::nanf("");  //Pitch of Gimbal, if connected (DJI Definition) in radians at waypoint.
 		
 		Waypoint() = default;
-		~Waypoint() = default();
+		~Waypoint() = default;
 		
 		//If switching to C++20, default this
 		bool operator==(Waypoint const & Other) const {

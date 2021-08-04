@@ -204,6 +204,35 @@ void GuidanceOverlay::Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDrawL
 			}
 		}
 	}
+	DrawLines(CursorPos_NM, DrawList, CursorInBounds);
+	DrawCircles(CursorPos_NM, DrawList, CursorInBounds);
+}
+
+void GuidanceOverlay::DrawLines(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds) {
+	float opacity = VisWidget::Instance().Opacity_GuidanceOverlay; //Opacity for overlay (0-100)
+	for (auto const & item : m_Lines) {
+		LineSegment     const & L(std::get<0>(item));
+		float           const & thickness(std::get<1>(item));
+		Eigen::Vector3f const & color(std::get<2>(item));
+		
+		Eigen::Vector2d endpoint1_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(L.m_endpoint1);
+		Eigen::Vector2d endpoint2_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(L.m_endpoint2);
+		ImVec4 colorVec4(color(0), color(1), color(2), opacity/100.0f);
+		DrawList->AddLine(endpoint1_SS, endpoint2_SS, ImGui::GetColorU32(colorVec4), thickness);
+	}
+}
+
+void GuidanceOverlay::DrawCircles(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds) {
+	float opacity = VisWidget::Instance().Opacity_GuidanceOverlay; //Opacity for overlay (0-100)
+	for (auto const & item : m_Circles) {
+		Eigen::Vector2d const & center(std::get<0>(item));
+		float           const & radius(std::get<1>(item));
+		Eigen::Vector3f const & color(std::get<2>(item));
+		
+		Eigen::Vector2d center_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(center);
+		ImVec4 colorVec4(color(0), color(1), color(2), opacity/100.0f);
+		DrawList->AddCircleFilled(center_SS, radius, ImGui::GetColorU32(colorVec4), 11);
+	}
 }
 
 void GuidanceOverlay::Draw_MessageBox(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds) {
@@ -314,6 +343,30 @@ void GuidanceOverlay::SetTriangleLabels(std::vector<std::string> const & Labels)
 void GuidanceOverlay::ClearTriangleLabels(void) {
 	std::scoped_lock lock(m_mutex);
 	m_TriangleLabels.clear();
+}
+
+//Set line segments
+void GuidanceOverlay::SetLineSegments(std::Evector<std::tuple<LineSegment, float, Eigen::Vector3f>> const & Lines) {
+	std::scoped_lock lock(m_mutex);
+	m_Lines = Lines;
+}
+
+//Clear/delete line segments
+void GuidanceOverlay::ClearLineSegments(void) {
+	std::scoped_lock lock(m_mutex);
+	m_Lines.clear();
+}
+
+//Set circles
+void GuidanceOverlay::SetCircles(std::Evector<std::tuple<Eigen::Vector2d, float, Eigen::Vector3f>> const & Circles) {
+	std::scoped_lock lock(m_mutex);
+	m_Circles = Circles;
+}
+
+//Clear/delete circles
+void GuidanceOverlay::ClearCircles() {
+	std::scoped_lock lock(m_mutex);
+	m_Circles.clear();
 }
 
 //Display optional message in box on map (give empty string to disable)
