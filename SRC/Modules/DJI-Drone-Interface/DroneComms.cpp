@@ -254,6 +254,27 @@ namespace DroneInterface {
 		ByteCount = m_size - uint32_t(m_data.size());
 		return true;
 	}
+	
+	//Search the buffer for the sync field - if we find it, throw out everything before it from m_data. If we don't end up finding it, we clear the buffer
+	//This if used to attempt re-synchronization if we receive a corrupt packet or lose synchronization for some reason.
+	//This function guarentees that m_data will be smaller on exit than it was on entry (unless it was empty to start with).
+	void Packet::ForwardScanForSync(void) {
+		if (m_data.empty())
+			return;
+		for (size_t newHeadIndex = 1U; newHeadIndex + 1U < m_data.size(); newHeadIndex++) {
+			if ((m_data[newHeadIndex] == (uint8_t) 218) && (m_data[newHeadIndex + 1] == (uint8_t) 167)) {
+				//We found the sync field
+				m_data.erase(m_data.begin(), m_data.begin() + newHeadIndex);
+				return;
+			}
+		}
+		if ((m_data.size() > 1U) && (m_data.back() == (uint8_t) 218)) {
+			//The last byte might be the start of a sync field
+			m_data.erase(m_data.begin(), m_data.begin() + m_data.size() - 1U);
+			return;
+		}
+		m_data.clear();
+	}
 
 	//Take total packet size and PID and add sync, size, and PID fields to m_data
 	void Packet::AddHeader(uint32_t Size, uint8_t PID) {

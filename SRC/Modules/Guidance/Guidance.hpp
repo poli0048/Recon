@@ -288,7 +288,30 @@ namespace Guidance {
 				Partition.back().m_components.emplace_back(); //Add a component to the new element
 				Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
 				
+				//Make the last item in the partition more interesting by adding a second poly component with a hole
+				vertices_NM.clear();
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245247, -95.306569)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243489, -95.304134)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244269, -95.303076)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245913, -95.305528)*PI/180.0));
+				Partition.back().m_components.emplace_back(); //Add a second component to the previous element
+				Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
+				
+				vertices_NM.clear();
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245087, -95.305907)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244714, -95.305375)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245036, -95.304892)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245449, -95.305398)*PI/180.0));
+				Partition.back().m_components.back().m_holes.emplace_back();
+				Partition.back().m_components.back().m_holes.back().SetBoundary(vertices_NM);
+				
 				MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
+				
+				//Create partition labels to give the guidance overlay
+				std::vector<std::string> partitionLabels;
+				for (int n = 0; n < (int) Partition.size(); n++)
+					partitionLabels.push_back(std::to_string(n));
+				MapWidget::Instance().m_guidanceOverlay.SetPartitionLabels(partitionLabels);
 				
 				//Create a sample vector of triangles to give to the guidance overlay
 				PolygonCollection tempPolyCollection;
@@ -315,6 +338,41 @@ namespace Guidance {
 				std::Evector<Triangle> triangles;
 				tempPolyCollection.Triangulate(triangles);
 				MapWidget::Instance().m_guidanceOverlay.SetTriangles(triangles);
+				
+				//Create triangle labels to give the guidance overlay
+				std::vector<std::string> triangleLabels;
+				for (int n = 0; n < (int) triangles.size(); n++)
+					triangleLabels.push_back(std::to_string(n));
+				MapWidget::Instance().m_guidanceOverlay.SetTriangleLabels(triangleLabels);
+				
+				//Create some lines and circles (vertices) to give to the guidance overlay
+				{
+					std::Evector<std::tuple<LineSegment, float, Eigen::Vector3f>> lineSegments;
+					std::Evector<std::tuple<Eigen::Vector2d, float, Eigen::Vector3f>> circles;
+					
+					float lineThickness = 2.0f;
+					float circleRadius  = 6.5f;
+					Eigen::Vector3f lineColor  (0.0f, 0.8f, 0.0f);
+					Eigen::Vector3f circleColor(0.8f, 0.0f, 0.0f);
+					Eigen::Vector2d vertex1_NM = LatLonToNM(Eigen::Vector2d(44.241080, -95.314821)*PI/180.0);
+					Eigen::Vector2d vertex2_NM = LatLonToNM(Eigen::Vector2d(44.241049, -95.310016)*PI/180.0);
+					lineSegments.push_back(std::make_tuple(LineSegment(vertex1_NM, vertex2_NM), lineThickness, lineColor));
+					circles.push_back(std::make_tuple(vertex1_NM, circleRadius, circleColor));
+					circles.push_back(std::make_tuple(vertex2_NM, circleRadius, circleColor));
+					
+					lineThickness = 4.0f;
+					circleRadius = 7.5f;
+					lineColor << 0.2f, 0.2f, 0.2f;
+					circleColor << 1.0f, 1.0f, 1.0f;
+					vertex1_NM = LatLonToNM(Eigen::Vector2d(44.240509, -95.314010)*PI/180.0);
+					vertex2_NM = LatLonToNM(Eigen::Vector2d(44.242557, -95.311247)*PI/180.0);
+					lineSegments.push_back(std::make_tuple(LineSegment(vertex1_NM, vertex2_NM), lineThickness, lineColor));
+					circles.push_back(std::make_tuple(vertex1_NM, circleRadius, circleColor));
+					circles.push_back(std::make_tuple(vertex2_NM, circleRadius, circleColor));
+					
+					MapWidget::Instance().m_guidanceOverlay.SetLineSegments(lineSegments);
+					MapWidget::Instance().m_guidanceOverlay.SetCircles(circles);
+				}
 				
 				m_missionPrepDone = true; //Mark the prep work as done
 			}

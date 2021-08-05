@@ -6,10 +6,14 @@
 //#include <tuple>
 #include <iostream>
 #include <chrono>
+#include <limits>
 
 //External Includes
 #include "../../handycpp/Handy.hpp"
 #include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
 //#include <opencv2/core/persistence.hpp>
 
 //TorchLib Includes
@@ -622,8 +626,205 @@ static bool TestBench12(std::string const & Arg) {
 static bool TestBench13(std::string const & Arg) { return false; }
 static bool TestBench14(std::string const & Arg) { return false; }
 static bool TestBench15(std::string const & Arg) { return false; }
-static bool TestBench16(std::string const & Arg) { return false; }
-static bool TestBench17(std::string const & Arg) { return false; }
+
+//Shadow Propagation: Non-realtime simulation
+static bool TestBench16(std::string const & Arg) {
+	//Parse argument and load dataset
+	std::filesystem::path datasetPath = SimDatasetStringArgToDatasetPath(Arg);
+	std::cerr << "Simulation dataset path: " << datasetPath.string() << "\r\n";
+	cv::Mat refFrame = GetRefFrame(datasetPath);
+	std::filesystem::path sourceVideoPath = GetSimVideoFilePath(datasetPath);
+	std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> GCPs = LoadFiducialsFromFile(datasetPath);
+	
+	//Set up drone sim
+	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation A"s);
+	if (myDrone == nullptr) {
+		std::cerr << "Error: Unable to get simulated drone from drone manager.\r\n";
+		return false;
+	}
+	DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(myDrone);
+	if (mySimDrone == nullptr) {
+		std::cerr << "Error: Could not down-cast Drone to SimulatedDrone.\r\n";
+		return false;
+	}
+	mySimDrone->SetRealTime(false);
+	mySimDrone->SetSourceVideoFile(sourceVideoPath);
+	
+	//Set reference frame and fiducials in shadow detection module
+	ShadowDetection::ShadowDetectionEngine::Instance().SetReferenceFrame(refFrame);
+	ShadowDetection::ShadowDetectionEngine::Instance().SetFiducials(GCPs);
+	
+	//Register callback with the shadow detection engine for monitoring its output (if desired)
+	bool showLiveOutput = true;
+	if (showLiveOutput) {
+		ShadowDetection::ShadowDetectionEngine::Instance().RegisterCallback([](ShadowDetection::InstantaneousShadowMap const & ShadowMap) {
+			auto duration = ShadowMap.Timestamp.time_since_epoch();
+			double secondsSinceEpoch = double(duration.count()) * double(std::chrono::system_clock::period::num) / double(std::chrono::system_clock::period::den);
+			std::cerr << "Shadow map received. Timestamp: " << secondsSinceEpoch << "\r\n";
+			cv::imshow("Live Shadow Map", ShadowMap.Map);
+			cv::waitKey(1);
+		});
+	}
+	
+	//Start the shadow propagation engine - this registers a callback with the shadow detection engine so it will receive shadow maps
+	std::chrono::time_point<std::chrono::steady_clock> TA_Timestamp = std::chrono::steady_clock::now(); //Init timestamp before starting modules
+	ShadowPropagation::ShadowPropagationEngine::Instance().Start();
+	
+	//Start the shadow detection engine, using imagery from the sim drone
+	ShadowDetection::ShadowDetectionEngine::Instance().Start("Simulation A"s);
+	
+	//Start the sim drone video feed
+	myDrone->StartDJICamImageFeed(1.0);
+	
+	//Until the video feed is done, poll for new time available functions and display them
+	while (myDrone->IsCamImageFeedOn()) {
+		std::chrono::time_point<std::chrono::steady_clock> newTimestamp;
+		if (ShadowPropagation::ShadowPropagationEngine::Instance().GetTimestampOfMostRecentTimeAvailFun(newTimestamp)) {
+			if (newTimestamp > TA_Timestamp) {
+				//We should have a new time available function
+				ShadowPropagation::TimeAvailableFunction TA;
+				if (ShadowPropagation::ShadowPropagationEngine::Instance().GetMostRecentTimeAvailFun(TA)) {
+					TA_Timestamp = newTimestamp;
+					std::cerr << "TA function received.\r\n";
+					
+					//Make some kind of visualization of the TA function
+					cv::Mat TA_8UC1;
+					TA.TimeAvailable.convertTo(TA_8UC1, CV_8UC1);
+					if ((TA_8UC1.rows != TA.TimeAvailable.rows) || (TA_8UC1.cols != TA.TimeAvailable.cols))
+						return false;
+					cv::Mat TA_Vis;
+					cv::applyColorMap(TA_8UC1, TA_Vis, cv::COLORMAP_JET);
+					cv::Vec3b sentinalColor(255,255,255);
+					for (int row = 0; row < TA.TimeAvailable.rows; row++) {
+						for (int col = 0; col < TA.TimeAvailable.cols; col++) {
+							if (TA.TimeAvailable.at<uint16_t>(row, col) == std::numeric_limits<uint16_t>::max())
+								TA_Vis.at<cv::Vec3b>(row, col) = sentinalColor;
+						}
+					}
+					cv::imshow("Live TA Function", TA_Vis);
+					cv::waitKey(1);
+				}
+				else {
+					std::cerr << "Warning: GetTimestampOfMostRecentTimeAvailFun returned true but GetMostRecentTimeAvailFun returned false.\r\n";
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				}
+			}
+			else
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
+		else
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
+	
+	//Stop the shadow propagation module
+	std::cerr << "Stopping the shadow propagation module.\r\n";
+	ShadowPropagation::ShadowPropagationEngine::Instance().Stop();
+	
+	//Stop the shadow detection engine
+	ShadowDetection::ShadowDetectionEngine::Instance().Stop();
+	
+	return true;
+}
+
+//Shadow Propagation: Realtime simulation
+static bool TestBench17(std::string const & Arg) {
+	//Parse argument and load dataset
+	std::filesystem::path datasetPath = SimDatasetStringArgToDatasetPath(Arg);
+	std::cerr << "Simulation dataset path: " << datasetPath.string() << "\r\n";
+	cv::Mat refFrame = GetRefFrame(datasetPath);
+	std::filesystem::path sourceVideoPath = GetSimVideoFilePath(datasetPath);
+	std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> GCPs = LoadFiducialsFromFile(datasetPath);
+	
+	//Set up drone sim
+	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation A"s);
+	if (myDrone == nullptr) {
+		std::cerr << "Error: Unable to get simulated drone from drone manager.\r\n";
+		return false;
+	}
+	DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(myDrone);
+	if (mySimDrone == nullptr) {
+		std::cerr << "Error: Could not down-cast Drone to SimulatedDrone.\r\n";
+		return false;
+	}
+	mySimDrone->SetRealTime(true);
+	mySimDrone->SetSourceVideoFile(sourceVideoPath);
+	
+	//Set reference frame and fiducials in shadow detection module
+	ShadowDetection::ShadowDetectionEngine::Instance().SetReferenceFrame(refFrame);
+	ShadowDetection::ShadowDetectionEngine::Instance().SetFiducials(GCPs);
+	
+	//Register callback with the shadow detection engine for monitoring its output (if desired)
+	bool showLiveOutput = true;
+	if (showLiveOutput) {
+		ShadowDetection::ShadowDetectionEngine::Instance().RegisterCallback([](ShadowDetection::InstantaneousShadowMap const & ShadowMap) {
+			auto duration = ShadowMap.Timestamp.time_since_epoch();
+			double secondsSinceEpoch = double(duration.count()) * double(std::chrono::system_clock::period::num) / double(std::chrono::system_clock::period::den);
+			std::cerr << "Shadow map received. Timestamp: " << secondsSinceEpoch << "\r\n";
+			cv::imshow("Live Shadow Map", ShadowMap.Map);
+			cv::waitKey(1);
+		});
+	}
+	
+	//Start the shadow propagation engine - this registers a callback with the shadow detection engine so it will receive shadow maps
+	std::chrono::time_point<std::chrono::steady_clock> TA_Timestamp = std::chrono::steady_clock::now(); //Init timestamp before starting modules
+	ShadowPropagation::ShadowPropagationEngine::Instance().Start();
+	
+	//Start the shadow detection engine, using imagery from the sim drone
+	ShadowDetection::ShadowDetectionEngine::Instance().Start("Simulation A"s);
+	
+	//Start the sim drone video feed
+	myDrone->StartDJICamImageFeed(1.0);
+	
+	//Until the video feed is done, poll for new time available functions and display them
+	while (myDrone->IsCamImageFeedOn()) {
+		std::chrono::time_point<std::chrono::steady_clock> newTimestamp;
+		if (ShadowPropagation::ShadowPropagationEngine::Instance().GetTimestampOfMostRecentTimeAvailFun(newTimestamp)) {
+			if (newTimestamp > TA_Timestamp) {
+				//We should have a new time available function
+				ShadowPropagation::TimeAvailableFunction TA;
+				if (ShadowPropagation::ShadowPropagationEngine::Instance().GetMostRecentTimeAvailFun(TA)) {
+					TA_Timestamp = newTimestamp;
+					std::cerr << "TA function received.\r\n";
+					
+					//Make some kind of visualization of the TA function
+					cv::Mat TA_8UC1;
+					TA.TimeAvailable.convertTo(TA_8UC1, CV_8UC1);
+					if ((TA_8UC1.rows != TA.TimeAvailable.rows) || (TA_8UC1.cols != TA.TimeAvailable.cols))
+						return false;
+					cv::Mat TA_Vis;
+					cv::applyColorMap(TA_8UC1, TA_Vis, cv::COLORMAP_JET);
+					cv::Vec3b sentinalColor(255,255,255);
+					for (int row = 0; row < TA.TimeAvailable.rows; row++) {
+						for (int col = 0; col < TA.TimeAvailable.cols; col++) {
+							if (TA.TimeAvailable.at<uint16_t>(row, col) == std::numeric_limits<uint16_t>::max())
+								TA_Vis.at<cv::Vec3b>(row, col) = sentinalColor;
+						}
+					}
+					cv::imshow("Live TA Function", TA_Vis);
+					cv::waitKey(1);
+				}
+				else {
+					std::cerr << "Warning: GetTimestampOfMostRecentTimeAvailFun returned true but GetMostRecentTimeAvailFun returned false.\r\n";
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				}
+			}
+			else
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
+		else
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
+	
+	//Stop the shadow propagation module
+	std::cerr << "Stopping the shadow propagation module.\r\n";
+	ShadowPropagation::ShadowPropagationEngine::Instance().Stop();
+	
+	//Stop the shadow detection engine
+	ShadowDetection::ShadowDetectionEngine::Instance().Stop();
+	
+	return true;
+}
+
 static bool TestBench18(std::string const & Arg) { return false; }
 static bool TestBench19(std::string const & Arg) { return false; }
 static bool TestBench20(std::string const & Arg) { return false; }
@@ -1064,7 +1265,7 @@ static bool TestBench27(std::string const & Arg) {
     }
     cv::namedWindow("Output", cv::WINDOW_NORMAL);
     cv::resizeWindow("Output", 576, 192);
-    for (int i = 0; i < prediction.size(); i++) {
+    for (int i = 0; i < (int) prediction.size(); i++) {
         torch::Tensor combined = torch::cat({input[i], target[i], prediction[i]}, 2)[0];
         cv::Mat output(combined.size(0),combined.size(1),CV_32FC1,combined.data_ptr());
         cv::Mat thresholded;
