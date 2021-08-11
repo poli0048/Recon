@@ -24,184 +24,481 @@
 //#include "../Shadow-Propagation/ShadowPropagation.hpp"
 //#include "../DJI-Drone-Interface/DroneManager.hpp"
 
-
+#define TOLERANCE 1e-10
 namespace Guidance {
-	// *********************************************************************************************************************************
-	// **************************************   GuidanceEngine Non-Inline Functions Definitions   **************************************
-	// *********************************************************************************************************************************
-	//Start a survey mission (currently active region) using the given drones
-	bool GuidanceEngine::StartSurvey(std::vector<std::string> const & LowFlierSerials) {
-		std::scoped_lock lock(m_mutex);
-		if (m_running)
-			return false; //Require stopping the previous mission first
-		if (LowFlierSerials.empty())
-			return false; //Require at least 1 drone to start a mission
-		if (! SurveyRegionManager::Instance().GetCopyOfActiveRegionData(nullptr, &m_surveyRegion, nullptr))
-			return false; //No active survey region
-		m_dronesUnderCommand.clear();
-		for (std::string serial : LowFlierSerials) {
-			DroneInterface::Drone * ptr = DroneInterface::DroneManager::Instance().GetDrone(serial);
-			if (ptr != nullptr) {
-				m_dronesUnderCommand.push_back(ptr);
-				VehicleControlWidget::Instance().StopCommandingDrone(serial);
-			}
-		}
-		if (m_dronesUnderCommand.size() == LowFlierSerials.size()) {
-			m_running = true;
-			m_missionPrepDone = false; //This will trigger the pre-planning work that needs to happen for a new mission
-			return true;
-		}
-		else
-			return false;
-	}
+    // *********************************************************************************************************************************
+    // **************************************   GuidanceEngine Non-Inline Functions Definitions   **************************************
+    // *********************************************************************************************************************************
+    //Start a survey mission (currently active region) using the given drones
+    bool GuidanceEngine::StartSurvey(std::vector<std::string> const & LowFlierSerials) {
+        std::scoped_lock lock(m_mutex);
+        if (m_running)
+            return false; //Require stopping the previous mission first
+            if (LowFlierSerials.empty())
+                return false; //Require at least 1 drone to start a mission
+                if (! SurveyRegionManager::Instance().GetCopyOfActiveRegionData(nullptr, &m_surveyRegion, nullptr))
+                    return false; //No active survey region
+                    m_dronesUnderCommand.clear();
+                    for (std::string serial : LowFlierSerials) {
+                        DroneInterface::Drone * ptr = DroneInterface::DroneManager::Instance().GetDrone(serial);
+                        if (ptr != nullptr) {
+                            m_dronesUnderCommand.push_back(ptr);
+                            VehicleControlWidget::Instance().StopCommandingDrone(serial);
+                        }
+                    }
+                    if (m_dronesUnderCommand.size() == LowFlierSerials.size()) {
+                        m_running = true;
+                        m_missionPrepDone = false; //This will trigger the pre-planning work that needs to happen for a new mission
+                        return true;
+                    }
+                    else
+                        return false;
+    }
+
+    //Add a drone to the collection of low fliers and start commanding it
+    bool GuidanceEngine::AddLowFlier(std::string const & Serial) {
+        std::scoped_lock lock(m_mutex);
+        if (! m_running)
+            return false;
+        else {
+            for (auto drone : m_dronesUnderCommand) {
+                if (drone->GetDroneSerial() == Serial) {
+                    VehicleControlWidget::Instance().StopCommandingDrone(Serial);
+                    return true;
+                }
+            }
+            DroneInterface::Drone * ptr = DroneInterface::DroneManager::Instance().GetDrone(Serial);
+            if (ptr != nullptr) {
+                m_dronesUnderCommand.push_back(ptr);
+                VehicleControlWidget::Instance().StopCommandingDrone(Serial);
+                return true;
+            }
+            else
+                return false;
+        }
+    }
+
+    //Stop commanding the drone with the given serial
+    bool GuidanceEngine::RemoveLowFlier(std::string const & Serial) {
+        std::scoped_lock lock(m_mutex);
+        if (! m_running)
+            return false;
+        for (size_t n = 0U; n < m_dronesUnderCommand.size(); n++) {
+            if (m_dronesUnderCommand[n]->GetDroneSerial() == Serial) {
+                m_currentDroneMissions.erase(Serial);
+                m_dronesUnderCommand.erase(m_dronesUnderCommand.begin() + n);
+
+                //If we just removed the last drone, abort the mission - this makes it unnecessary to have an extra UI control
+                //to cancel a mission that has effectively already been canceled through the removal of all drones.
+                if (m_dronesUnderCommand.empty()) {
+                    m_running = false;
+                    m_currentDroneMissions.clear();
+                    m_surveyRegion.Clear();
+                }
+
+                return true;
+            }
+        }
+        return false;
+    }
+
+    //Returns true if currently commanding a mission, false otherwise
+    bool GuidanceEngine::IsRunning(void) {
+        std::scoped_lock lock(m_mutex);
+        return m_running;
+    }
+
+
+    // *********************************************************************************************************************************
+    // *******************************************   Guidance Algorithm Function Definitions   *****************************************
+    // *********************************************************************************************************************************
+
+    //1.1 Helper Function -- Calculate the horizontal distance in meters between two waypoints using the Haversine formula
+    //Based on: http://www.movable-type.co.uk/scripts/latlong.html
+    double GetDistanceBetweenTwoPoints (double const a_latitude, double const a_longitude, double const b_latitude, double const b_longitude) {
+        double PI = 3.14159265358979323846;
+        int R = 6371000; // Radius of the earth metres
+
+        double phi1 = a_latitude * PI/180; // phi in radians
+        double phi2 = b_latitude * PI/180;
+        double deltaphi = (b_latitude-a_latitude) * PI/180;
+        double deltalambda = (b_longitude-a_longitude) * PI/180;
+        //double deltaalt = B.Altitude-A.Altitude;
+
+        double a = sin(deltaphi/2) * sin(deltaphi/2) + cos(phi1) * cos(phi2) * sin(deltalambda/2) * sin(deltalambda/2);
+        double c = 2 * atan2(sqrt(a), sqrt(1-a));
+
+        return R * c; // horizontal distance in metres
+    }
+
+    //1 - Take two points and estimate the time (s) it would take a drone to fly from one to the other (stopped at start and end), assuming a max flight speed (m/s)
+    double EstimateMissionTime(DroneInterface::Waypoint const & A, DroneInterface::Waypoint const & B, double TargetSpeed) {
+        double delta_altitude = B.Altitude-A.Altitude;
+        double delta_horizontal = GetDistanceBetweenTwoPoints(A.Latitude, A.Longitude, B.Latitude, B.Longitude);
+
+        return sqrt(pow(delta_altitude,2) + pow(delta_horizontal,2))/TargetSpeed;
+    }
+
+    //2 - Take a waypoint mission and estimate the time (s) it will take a drone to fly it (not including take-off and landing, or movement to the region).
+    //    Support both the mode where we come to a stop at each waypoint and the mode where we do not stop at waypoints (CurvedTrajectory field of Mission)
+    double EstimateMissionTime(DroneInterface::WaypointMission const & Mission) {
+        double totalTimeTaken = 0.0;
+        for (long unsigned int i = 0; i+1 < Mission.Waypoints.size(); i++){
+            totalTimeTaken += EstimateMissionTime(Mission.Waypoints[i], Mission.Waypoints[i+1], Mission.Waypoints[i].Speed);
+        }
+        return totalTimeTaken;
+    }
+
+    //3.1 Helper Function -- Gets the "score" (estimated flight time) of a triangle based on a square.
+    double GetTriangleScore(Triangle & triangle, ImagingRequirements const & ImagingReqs){
+        //Row spacing = 2 * HAG * tan(0.5 * HFOV) * (1 - SidelapFraction) <In Meters>
+        double row_spacing = 2 * ImagingReqs.HAG * tan(0.5 * ImagingReqs.HFOV) * (1 - ImagingReqs.SidelapFraction);
+        double length = sqrt(2 * triangle.GetArea());
+        return length * (length / row_spacing) / ImagingReqs.TargetSpeed;
+    }
+
+    //3.2 Helper Function -- Recursively bisects triangles until they score less than the targeted flight time.
+    void PartitionSurveyRegionRec(Triangle & mainTriangle, std::Evector<Triangle> & allTriangles, double TargetFlightTime, ImagingRequirements const & ImagingReqs){
+        if (GetTriangleScore(mainTriangle, ImagingReqs) > TargetFlightTime){
+            //Split the triangle into two triangles
+            Triangle subTriangleA;
+            Triangle subTriangleB;
+            mainTriangle.Bisect(subTriangleA, subTriangleB);
+
+            PartitionSurveyRegionRec(subTriangleA, allTriangles, TargetFlightTime, ImagingReqs);
+            PartitionSurveyRegionRec(subTriangleB, allTriangles, TargetFlightTime, ImagingReqs);
+
+        }
+        else{
+            allTriangles.push_back(mainTriangle);
+
+        }
+    }
+
+    void PartitionTrianglesList(Triangle & mainTriangle, std::Evector<Triangle> & allTriangles, std::vector<Eigen::Vector2d> pointsList){
+        // Base case, just one point
+        if (pointsList.size() == 1){
+            Triangle subTriangleA;
+            Triangle subTriangleB;
+            mainTriangle.BisectIntersection(pointsList[0], subTriangleA, subTriangleB);
+            allTriangles.push_back(subTriangleA);
+            allTriangles.push_back(subTriangleB);
+        }
+        // other base case: empty list
+        else if (pointsList.empty()){
+            allTriangles.push_back(mainTriangle);
+        }
+
+        else{
+            Triangle subTriangleA;
+            Triangle subTriangleB;
+            std::vector<Eigen::Vector2d> pointsListA;
+            std::vector<Eigen::Vector2d> pointsListB;
+            mainTriangle.BisectIntersection(pointsList[0], subTriangleA, subTriangleB);
+
+            for (int j = 1; j<pointsList.size(); j++){
+                if (subTriangleA.ToSimplePolygon().ContainsPoint(pointsList[j])){
+                    pointsListA.push_back(pointsList[j]);
+                }
+                else{
+                    pointsListB.push_back(pointsList[j]);
+                }
+            }
+            PartitionTrianglesList(subTriangleA, allTriangles,pointsListA);
+            PartitionTrianglesList(subTriangleB, allTriangles,pointsListB);
+
+        }
+    }
+
+    //3 - Take a survey region, and break it into sub-regions of similar size that can all be flown in approximately the same flight time (argument).
+    //    A good partition uses as few components as possible for a given target execution time. Hueristically, this generally means simple shapes.
+    //    This function needs the target drone speed and imaging requirements because they impact what sized region can be flown in a given amount of time.
+    //Arguments:
+    //Region           - Input  - The input survey region to cover (polygon collection in NM coords)
+    //Partition        - Output - A vector of sub-regions, each one a polygon collection in NM coords (typical case will have a single poly in each sub-region)
+    //TargetFlightTime - Input  - The approx time (in seconds) a drone should be able to fly each sub-region in, given the max vehicle speed and sidelap
+    //ImagingReqs      - Input  - Parameters specifying speed and row spacing (see definitions in struct declaration)
+
+    void PartitionSurveyRegion(PolygonCollection const & Region, std::Evector<PolygonCollection> & Partition, double TargetFlightTime, ImagingRequirements const & ImagingReqs) {
+        // *********************** MESHING SECTION **************************************************
+        //Slice the polygon into triangles.
+        std::Evector<Triangle> allTrianglesTriangulate;
+        std::Evector<Triangle> allTriangles;
+        TriangleAdjacencyMap map;
+        std::vector<std::vector<Eigen::Vector2d>> intersectionsList;
+        std::vector<Eigen::Vector2d> Intersection;
+        for(Polygon shape: Region.m_components){
+            std::Evector<Triangle> subTriangles;
+            shape.Triangulate(subTriangles);
+            for (Triangle & tri: subTriangles){
+                allTrianglesTriangulate.push_back(tri);
+            }
+        }
+
+        //Recursively slice triangles until they are smaller than the Target Flight Time.
+        for(Triangle & triangle: allTrianglesTriangulate){
+            PartitionSurveyRegionRec(triangle, allTriangles, TargetFlightTime/2, ImagingReqs);
+        }
+
+
+        allTrianglesTriangulate.clear();
+
+        intersectionsList.resize(allTriangles.size());
+
+
+        // This loop searches all triangles for vertices that cut an edge
+        // A triangle may cut an edge 0, 1, or 2 times
+        // All intersections are assembled into a list per triangle. We are trying to avoid duplicates
+        for (int i = 0;i < allTriangles.size(); i++){
+            for (int j = 0; j < allTriangles.size(); j++){
+                Intersection.clear();
+                if (i!=j && allTriangles[i].ToSimplePolygon().CheckIntersect(allTriangles[j].ToSimplePolygon(), Intersection)){
+                    //std::cout<< Intersection.size() <<" intersections found!" <<std::endl;
+                    for (auto point: Intersection){
+                        bool isUnique = true;
+                        // Checking list for existence of same point. If exists, not unique and do not add to list
+                        for (int k = 0; k < intersectionsList[i].size(); k ++){
+                            if ((intersectionsList[i][k] - point).norm() < TOLERANCE){
+                                isUnique = false;
+                            }
+                        }
+                        if (isUnique){
+                            //std::cout<< "Adding point! " << std::endl;
+                            intersectionsList[i].push_back(point);
+                        }
+                    }
+                    std::cout<< "Triangle " << std::to_string(i) << " has intersection with triangle " << j  << std::endl;
+                }
+            }
+        }
+
+        for (int i = 0; i < intersectionsList.size(); i++){
+            if (!intersectionsList[i].empty()){
+                std::cout<< "Triangle " << std::to_string(i) << " has intersections " << intersectionsList[i].size() << std::endl;
+            }
+        }
+
+        Triangle subTriangleA;
+        Triangle subTriangleB;
+        allTrianglesTriangulate.clear();
+        for (int i =0; i <allTriangles.size(); i++){
+            if (intersectionsList[i].empty()){
+                allTrianglesTriangulate.push_back(allTriangles[i]);
+            }
+            else{
+
+                /*
+                 *                 for (auto point: intersectionsList[i]){
+                                    Triangle subTriangleA;
+                                    Triangle subTriangleB;
+                                    allTriangles[i].BisectIntersection(point, subTriangleA, subTriangleB);
+                                    allTrianglesTriangulate.push_back(subTriangleA);
+                                    allTrianglesTriangulate.push_back(subTriangleB);
+                                }
+                 */
+                PartitionTrianglesList(allTriangles[i], allTrianglesTriangulate, intersectionsList[i]);
+            }
+
+        }
+
+        std::vector<std::string> triangleLabels;
 	
-	//Add a drone to the collection of low fliers and start commanding it
-	bool GuidanceEngine::AddLowFlier(std::string const & Serial) {
-		std::scoped_lock lock(m_mutex);
-		if (! m_running)
-			return false;
-		else {
-			for (auto drone : m_dronesUnderCommand) {
-				if (drone->GetDroneSerial() == Serial) {
-					VehicleControlWidget::Instance().StopCommandingDrone(Serial);
-					return true;
-				}
-			}
-			DroneInterface::Drone * ptr = DroneInterface::DroneManager::Instance().GetDrone(Serial);
-			if (ptr != nullptr) {
-				m_dronesUnderCommand.push_back(ptr);
-				VehicleControlWidget::Instance().StopCommandingDrone(Serial);
-				return true;
-			}
-			else
-				return false;
-		}
-	}
-	
-	//Stop commanding the drone with the given serial
-	bool GuidanceEngine::RemoveLowFlier(std::string const & Serial) {
-		std::scoped_lock lock(m_mutex);
-		if (! m_running)
-			return false;
-		for (size_t n = 0U; n < m_dronesUnderCommand.size(); n++) {
-			if (m_dronesUnderCommand[n]->GetDroneSerial() == Serial) {
-				m_currentDroneMissions.erase(Serial);
-				m_dronesUnderCommand.erase(m_dronesUnderCommand.begin() + n);
-				
-				//If we just removed the last drone, abort the mission - this makes it unnecessary to have an extra UI control
-				//to cancel a mission that has effectively already been canceled through the removal of all drones.
-				if (m_dronesUnderCommand.empty()) {
-					m_running = false;
-					m_currentDroneMissions.clear();
-					m_surveyRegion.Clear();
-				}
-				
-				return true;
-			}
-		}
-		return false;
-	}
-	
-	//Returns true if currently commanding a mission, false otherwise
-	bool GuidanceEngine::IsRunning(void) {
-		std::scoped_lock lock(m_mutex);
-		return m_running;
-	}
-	
-	
-	// *********************************************************************************************************************************
-	// *******************************************   Guidance Algorithm Function Definitions   *****************************************
-	// *********************************************************************************************************************************
-	
-	//1 - Take two points and estimate the time (s) it would take a drone to fly from one to the other (stopped at start and end), assuming a max flight speed (m/s)
-	double EstimateMissionTime(DroneInterface::Waypoint const & A, DroneInterface::Waypoint const & B, double TargetSpeed) {
-		//TODO
-		return 0.0;
-	}
-	
-	//2 - Take a waypoint mission and estimate the time (s) it will take a drone to fly it (not including take-off and landing, or movement to the region).
-	//    Support both the mode where we come to a stop at each waypoint and the mode where we do not stop at waypoints (CurvedTrajectory field of Mission)
-	double EstimateMissionTime(DroneInterface::WaypointMission const & Mission) {
-		//TODO
-		return 0.0;
-	}
-	
-	//3 - Take a survey region, and break it into sub-regions of similar size that can all be flown in approximately the same flight time (argument).
-	//    A good partition uses as few components as possible for a given target execution time. Hueristically, this generally means simple shapes.
-	//    This function needs the target drone speed and imaging requirements because they impact what sized region can be flown in a given amount of time.
-	//Arguments:
-	//Region           - Input  - The input survey region to cover (polygon collection in NM coords)
-	//Partition        - Output - A vector of sub-regions, each one a polygon collection in NM coords (typical case will have a single poly in each sub-region)
-	//TargetFlightTime - Input  - The approx time (in seconds) a drone should be able to fly each sub-region in, given the max vehicle speed and sidelap
-	//ImagingReqs      - Input  - Parameters specifying speed and row spacing (see definitions in struct declaration)
-	void PartitionSurveyRegion(PolygonCollection const & Region, std::Evector<PolygonCollection> & Partition, double TargetFlightTime,
-	                           ImagingRequirements const & ImagingReqs) {
-		//TODO
-		Partition.clear();
-	}
-	
-	//4 - Take a region or sub-region and plan a trajectory to cover it at a given height that meets the specified imaging requirements. In this case we specify
-	//    the imaging requirements using a maximum speed and sidelap fraction.
-	//Arguments:
-	//Region      - Input  - The input survey region or sub-region to cover (polygon collection in NM coords)
-	//Mission     - Output - The planned mission that covers the input region
-	//ImagingReqs - Input  - Parameters specifying speed and row spacing (see definitions in struct declaration)
-	void PlanMission(PolygonCollection const & Region, DroneInterface::WaypointMission & Mission, ImagingRequirements const & ImagingReqs) {
-		//TODO
-		Mission.Waypoints.clear();
-		Mission.LandAtLastWaypoint = false;
-		Mission.CurvedTrajectory = false;
-	}
-	
-	//5 - Take a Time Available function, a waypoint mission, and a progress indicator (where in the mission you are) and detirmine whether or not the drone
-	//    will be able to complete the mission in the time remaining (i.e. at no point will the time available within a radius of the drone hit 0).
-	//    Additionally, we compute some notion of confidence as follows... we find the lowest that the TA function will be under the drone throughout the mission.
-	//    If this gets closer to 0 it means we are cutting it close and if the predicted TA function is off we could be in trouble.
-	//Arguments:
-	//TA                 - Input  - Time Available function
-	//Mission            - Input  - Drone Mission
-	//DroneStartWaypoint - Input  - The index of the waypoint the drone starts at. Can be non-integer - e.g. 2.4 means 40% of way between waypoint 2 and 3.
-	//DroneStartTime     - Input  - The time when the drone starts the mission. This is used to compare with the timestamped TA function
-	//Margin             - Output - The lowest the TA ever gets under the drone during the mission
-	//
-	//Returns: True if expected to finish without shadows and false otherwise
-	bool IsPredictedToFinishWithoutShadows(ShadowPropagation::TimeAvailableFunction const & TA, DroneInterface::WaypointMission const & Mission,
-	                                       double DroneStartWaypoint, std::chrono::time_point<std::chrono::steady_clock> DroneStartTime, double & Margin) {
-		//TODO
-		return false;
-	}
-	
-	//6 - Given a Time Available function, a collection of sub-regions (with their pre-planned missions), and a start position for a drone, select a sub-region
-	//    to task the drone to. We are balancing 2 things here - trying to do useful work while avoiding shadows, but also avoiding non-sensical jumping to a
-	//    distant region. At a minimum we should ensure that we don't task a drone to a region that we don't expect it to be able to finish without getting hit
-	//    with shadows.
-	//Arguments:
-	//TA                - Input - Time Available function
-	//SubregionMissions - Input - A vector of drone Missions - Element n is the mission for sub-region n.
-	//StartPos          - Input - The starting position of the drone (to tell us how far away from each sub-region mission it is)
-	//
-	//Returns: The index of the drone mission (and sub-region) to task the drone to. Returns -1 if none are plausable
-	int SelectSubRegion(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
-	                    DroneInterface::Waypoint const & StartPos) {
-		//TODO
-		return -1;
-	}
-	
-	//7 - Given a Time Available function, a collection of sub-regions (with their pre-planned missions), and a collection of drone start positions, choose
-	//    sequences (of a given length) of sub-regions for each drone to fly, in order. When the mission time exceeds our prediction horizon the time available
-	//    function is no longer useful in chosing sub-regions but they can still be chosen in a logical fashion that avoids leaving holes in the map... making the
-	//    optimistic assumption that they will be shadow-free when we get there.
-	//TA                  - Input  - Time Available function
-	//SubregionMissions   - Input  - A vector of drone Missions - Element n is the mission for sub-region n.
-	//DroneStartPositions - Input  - Element k is the starting position of drone k
-	//Sequences           - Output - Element k is a vector of sub-region indices to task drone k to (in order)
-	void SelectSubregionSequnces(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
-	                             std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::vector<std::vector<int>> & Sequences) {
-		//TODO
-		Sequences.clear();
-	}
-	
-	
+        for (int i =0; i < allTrianglesTriangulate.size() ; i++){
+                    triangleLabels.push_back(std::to_string(i));
+        }
+        //MapWidget::Instance().m_guidanceOverlay.ClearTriangleLabels();
+        //MapWidget::Instance().m_guidanceOverlay.ClearTriangles();
+        //MapWidget::Instance().m_guidanceOverlay.SetTriangles(allTrianglesTriangulate);
+        //MapWidget::Instance().m_guidanceOverlay.SetTriangleLabels(triangleLabels);
+
+        allTriangles = allTrianglesTriangulate; // ECHAI: Not great but I'm feeling lazy
+        //return;
+        //************************* END OF MESHING ****************************************
+        // Up to this point, we are guaranteed that no vertex cuts another edge!
+
+        //************************ ADJACENCY MAP CONSTRUCTION********************************
+        //Add each triangle and its edges to the map.
+
+        for (int i = 0; i < allTriangles.size(); i++){
+            TriangleAdjacencyMap::Triangle tri;
+            tri.id = i;
+            tri.score = GetTriangleScore(allTriangles[i], ImagingReqs);
+            map.nodes.push_back(tri);
+            map.edges.push_back({});
+            for (int j = 0; j < allTriangles.size(); j++){
+                if((i!=j) && allTriangles[i].ToSimplePolygon().CheckAdjacency(allTriangles[j].ToSimplePolygon())){
+                    map.edges[i].push_back(j);
+                }
+            }
+        }
+        // ****************** END OF ADJACENCY MAP CONSTRUCTION ************************************
+
+        // ****************** GROUP/PARITION CONSTRUCTION ********************************************
+        //Combine triangles greedily until adding another adjacent triangle would go above the Target Flight Time.
+        std::vector<int> groupScoreList;
+        std::vector<int> assignedGroups(allTriangles.size(), -1);
+        for (auto node: map.nodes){
+            std::vector<int> currentCandidateEdges;
+            //If the node is already in a group, ignore it
+            if (assignedGroups[node.id] != -1){
+                continue;
+            }
+
+            //Otherwise, create a group for the solo node.
+            map.groups.push_back({node.id});
+            groupScoreList.push_back(node.score);
+            assignedGroups[node.id] = map.groups.size()-1;
+
+            //Add in edges from the starting node of the group.
+            for(auto item: map.edges[node.id]){
+                currentCandidateEdges.push_back(item);
+            }
+
+            //While there are edges attached to this group, try to add them in.
+            while(currentCandidateEdges.size() > 0){
+                int n = currentCandidateEdges[0];
+                if(map.nodes[n].score + groupScoreList.back() < TargetFlightTime && assignedGroups[n] == -1){
+                    map.groups.back().push_back(map.nodes[n].id);
+                    groupScoreList.back() += map.nodes[n].score;
+                    assignedGroups[n] = map.groups.size()-1;
+                    //Add edges to currentCandidateEdges
+                    for(auto item: map.edges[n]){
+                        currentCandidateEdges.push_back(item);
+                    }
+                }
+                currentCandidateEdges.erase(currentCandidateEdges.begin());
+            }
+
+            //Now, create the new polygon & add it to its own private collection in the Evector of PolygonCollections.
+            PolygonCollection collection;
+            Polygon new_polygon;
+            std::Evector<LineSegment> list_of_segments;
+            for (auto node: map.groups.back()){
+                for (LineSegment line: allTriangles[node].ToSimplePolygon().GetLineSegments()){
+                    list_of_segments.push_back(line);
+                }
+            }
+            new_polygon.m_boundary.CustomSanitize(list_of_segments);
+            collection.m_components.push_back(new_polygon);
+            Partition.push_back(collection);
+        }
+
+        //Set labels for the grouped shapes.
+        std::vector<std::string> groupLabels;
+        std::string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+        for (int n = 0; n < map.groups.size(); n++) groupLabels.push_back(alphabet.substr(n, 1));
+
+        //Display both the triangles and the grouped polygons on Recon.
+        MapWidget::Instance().m_guidanceOverlay.ClearPartitionLabels();
+        MapWidget::Instance().m_guidanceOverlay.ClearSurveyRegionPartition();
+        MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
+        MapWidget::Instance().m_guidanceOverlay.SetPartitionLabels(groupLabels);
+
+        //Set labels for the individual triangles.
+        //std::vector<std::string> triangleLabels;
+	triangleLabels.clear();
+        for (int i = 0; i < map.nodes.size(); i++){
+            std::string fullLabel = alphabet[assignedGroups[i]] + std::to_string(i) + ":";
+            for (int j = 0; j < map.edges[i].size(); j++){
+                if (j!=0){
+                    fullLabel.append(",");
+                }
+                fullLabel.append(std::to_string(map.edges[i][j]));
+            }
+            triangleLabels.push_back(fullLabel);
+        }
+        
+        MapWidget::Instance().m_guidanceOverlay.ClearTriangleLabels();
+        MapWidget::Instance().m_guidanceOverlay.ClearTriangles();
+        MapWidget::Instance().m_guidanceOverlay.SetTriangles(allTriangles);
+        MapWidget::Instance().m_guidanceOverlay.SetTriangleLabels(triangleLabels);
+        
+        //(NON-IMPACTING -- FOR DEVELOPER USE ONLY) Display polygon information on the terminal.
+        std::cout<<"Target Score: " << TargetFlightTime << std::endl;
+        std::cout<<"There are " << map.nodes.size() << " nodes in the graph. This should equal the number of triangles." << std::endl;
+        std::cout<<"There are " << map.groups.size() << " groups in the graph." << std::endl;
+        //Information on individual triangles.
+        for (int i = 0; i < map.nodes.size(); i++){
+            float value = (int)(map.nodes[i].score * 100 + .5);
+            std::cout << "Edges of " << i <<" (Score " << (float)value / 100 << "; Group [" << alphabet[assignedGroups[i]] <<"]) : ";
+            for (int j = 0; j < map.edges[i].size(); j++){
+                std::cout << map.edges[i][j] << ", ";
+            }
+            std::cout << std::endl;
+        }
+        //Information on grouped triangles.
+        for (int n = 0; n < map.groups.size(); n++){
+            std::cout << "Group "<< alphabet.substr(n, 1) << " :";
+            for (auto item: map.groups[n]){
+                std::cout << " " << item;
+            }
+            std::cout << "." << std::endl;
+        }
+
+    }
+
+    //4 - Take a region or sub-region and plan a trajectory to cover it at a given height that meets the specified imaging requirements. In this case we specify
+    //    the imaging requirements using a maximum speed and sidelap fraction.
+    //Arguments:
+    //Region      - Input  - The input survey region or sub-region to cover (polygon collection in NM coords)
+    //Mission     - Output - The planned mission that covers the input region
+    //ImagingReqs - Input  - Parameters specifying speed and row spacing (see definitions in struct declaration)
+    void PlanMission(PolygonCollection const & Region, DroneInterface::WaypointMission & Mission, ImagingRequirements const & ImagingReqs) {
+        //TODO
+        Mission.Waypoints.clear();
+        Mission.LandAtLastWaypoint = false;
+        Mission.CurvedTrajectory = false;
+    }
+
+    //5 - Take a Time Available function, a waypoint mission, and a progress indicator (where in the mission you are) and detirmine whether or not the drone
+    //    will be able to complete the mission in the time remaining (i.e. at no point will the time available within a radius of the drone hit 0).
+    //    Additionally, we compute some notion of confidence as follows... we find the lowest that the TA function will be under the drone throughout the mission.
+    //    If this gets closer to 0 it means we are cutting it close and if the predicted TA function is off we could be in trouble.
+    //Arguments:
+    //TA                 - Input  - Time Available function
+    //Mission            - Input  - Drone Mission
+    //DroneStartWaypoint - Input  - The index of the waypoint the drone starts at. Can be non-integer - e.g. 2.4 means 40% of way between waypoint 2 and 3.
+    //DroneStartTime     - Input  - The time when the drone starts the mission. This is used to compare with the timestamped TA function
+    //Margin             - Output - The lowest the TA ever gets under the drone during the mission
+    //
+    //Returns: True if expected to finish without shadows and false otherwise
+    bool IsPredictedToFinishWithoutShadows(ShadowPropagation::TimeAvailableFunction const & TA, DroneInterface::WaypointMission const & Mission,
+                                           double DroneStartWaypoint, std::chrono::time_point<std::chrono::steady_clock> DroneStartTime, double & Margin) {
+        //TODO
+        return false;
+    }
+
+    //6 - Given a Time Available function, a collection of sub-regions (with their pre-planned missions), and a start position for a drone, select a sub-region
+    //    to task the drone to. We are balancing 2 things here - trying to do useful work while avoiding shadows, but also avoiding non-sensical jumping to a
+    //    distant region. At a minimum we should ensure that we don't task a drone to a region that we don't expect it to be able to finish without getting hit
+    //    with shadows.
+    //Arguments:
+    //TA                - Input - Time Available function
+    //SubregionMissions - Input - A vector of drone Missions - Element n is the mission for sub-region n.
+    //StartPos          - Input - The starting position of the drone (to tell us how far away from each sub-region mission it is)
+    //
+    //Returns: The index of the drone mission (and sub-region) to task the drone to. Returns -1 if none are plausable
+    int SelectSubRegion(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
+                        DroneInterface::Waypoint const & StartPos) {
+        //TODO
+        return -1;
+    }
+
+    //7 - Given a Time Available function, a collection of sub-regions (with their pre-planned missions), and a collection of drone start positions, choose
+    //    sequences (of a given length) of sub-regions for each drone to fly, in order. When the mission time exceeds our prediction horizon the time available
+    //    function is no longer useful in chosing sub-regions but they can still be chosen in a logical fashion that avoids leaving holes in the map... making the
+    //    optimistic assumption that they will be shadow-free when we get there.
+    //TA                  - Input  - Time Available function
+    //SubregionMissions   - Input  - A vector of drone Missions - Element n is the mission for sub-region n.
+    //DroneStartPositions - Input  - Element k is the starting position of drone k
+    //Sequences           - Output - Element k is a vector of sub-region indices to task drone k to (in order)
+    void SelectSubregionSequnces(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
+                                 std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::vector<std::vector<int>> & Sequences) {
+        //TODO
+        Sequences.clear();
+    }
+
+
 }
 
 
