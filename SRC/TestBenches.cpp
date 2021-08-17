@@ -1230,8 +1230,10 @@ static bool TestBench26(std::string const & Arg) {
 // Argument passed in is the absolute path to the Shadow-Propagation Folder
 static bool TestBench27(std::string const & Arg) {
     std::cerr << "Starting!" << std::endl;
-    torch::jit::script::Module module = torch::jit::load(Arg + "/model.pt");
-    torch::jit::script::Module dataTensor = torch::jit::load(Arg + "/data.pt");
+    std::string baseDirectory = Handy::Paths::ThisExecutableDirectory()
+            .parent_path().string().append("/SRC/Modules/Shadow-Propagation");
+    torch::jit::script::Module module = torch::jit::load(baseDirectory + "/model.pt");
+    torch::jit::script::Module dataTensor = torch::jit::load(baseDirectory + "/data.pt");
     torch::Tensor data = dataTensor.attr("data").toTensor();
     int length = data.size(1);
     const int INPUT_LENGTH = 10;

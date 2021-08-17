@@ -56,7 +56,7 @@ namespace ShadowPropagation {
 			static const int  TIME_HORIZON = 10;
 			static constexpr double OUTPUT_THRESHOLD = 0.4;
 
-//			std::Evector<ShadowDetection::InstantaneousShadowMap> m_unprocessedShadowMaps;
+			std::Evector<ShadowDetection::InstantaneousShadowMap> m_unprocessedShadowMaps;
 			TimeAvailableFunction m_TimeAvail; //Most recent time available function
             torch::jit::script::Module m_module; // TorchScript Model
             std::deque<torch::Tensor> m_prevInputs;
@@ -66,7 +66,6 @@ namespace ShadowPropagation {
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 			using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
-			std::Evector<ShadowDetection::InstantaneousShadowMap> m_unprocessedShadowMaps;
 
         static ShadowPropagationEngine & Instance() { static ShadowPropagationEngine Obj; return Obj; }
 			
@@ -161,9 +160,44 @@ namespace ShadowPropagation {
             cv::Mat downsizedMap;
             cv::resize(map.Map, downsizedMap, cv::Size(64, 64), cv::INTER_AREA);
             // Model was trained using 0-1 float values instead of 0-255
-            cv::Mat cvInput;
+            cv::Mat cvInputWithExcess;
+            downsizedMap.convertTo(cvInputWithExcess, CV_32FC1, 1.f/255.0);
 
-            downsizedMap.convertTo(cvInput, CV_32FC1, 1.f/255.0);
+            // Need to remove the area outside of the fisheye lens
+            // Using a mask to "black off" the outside area
+
+            // Creating mask
+            cv::Mat mask = cv::Mat::zeros(cv::Size(64, 64), CV_8UC1);
+
+            // Creates inverted shadow map, then finds enclosing circle of largest contour to create mask
+            cv::Mat invertedShadowMap;
+            cv::threshold(downsizedMap, invertedShadowMap, 127, 255, cv::THRESH_BINARY_INV);
+            std::vector<std::vector<cv::Point>> contours;
+            std::vector<cv::Vec4i> hierarchy;
+            cv::findContours(invertedShadowMap, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+            cv::Point2f center;
+            float radius;
+            if (contours.size() > 0) {
+                std::vector<cv::Point>& largestContour = contours[0];
+                double largestContourArea = cv::contourArea(largestContour);
+                for (int i = 0; i < contours.size(); i++) {
+                    if (cv::contourArea(contours[i]) > largestContourArea) {
+                        largestContour = contours[i];
+                        largestContourArea = cv::contourArea(largestContour);
+                    }
+                }
+                cv::minEnclosingCircle(largestContour, center, radius);
+            }
+            if (contours.size() <= 0 || radius < 29) {
+                // Default circle + radius estimation so things don't fall apart
+                radius = 32;
+                center = cv::Point2f(33.7, 33.7);
+            }
+            cv::circle(mask, center, radius - 3, cv::Scalar(255), -1, 8, 0);
+            cv::Mat cvInput;
+            cvInputWithExcess.copyTo(cvInput, mask);
+
             torch::Tensor inputTensorCompressed = torch::from_blob(cvInput.data, {64, 64}, torch::kFloat);
             torch::Tensor inputTensor = inputTensorCompressed.unsqueeze(0).unsqueeze(0);
             m_prevInputs.push_back(inputTensor);
