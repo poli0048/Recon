@@ -24,6 +24,9 @@
 //#include "../Shadow-Propagation/ShadowPropagation.hpp"
 //#include "../DJI-Drone-Interface/DroneManager.hpp"
 
+#define PI 3.14159265358979323846
+#define radiusEarth 6371000 // Radius of the earth metres
+#define heightECEF 4.4272e+06;
 #define TOLERANCE 1e-10
 namespace Guidance {
     // *********************************************************************************************************************************
@@ -113,12 +116,7 @@ namespace Guidance {
     // *******************************************   Guidance Algorithm Function Definitions   *****************************************
     // *********************************************************************************************************************************
 
-    //1.1 Helper Function -- Calculate the horizontal distance in meters between two waypoints using the Haversine formula
-    //Based on: http://www.movable-type.co.uk/scripts/latlong.html
-    double GetDistanceBetweenTwoPoints (double const a_latitude, double const a_longitude, double const b_latitude, double const b_longitude) {
-        double PI = 3.14159265358979323846;
-        int R = 6371000; // Radius of the earth metres
-
+    double GetDistanceBetweenTwoPoints (double const a_latitude, double const a_longitude, double const b_latitude, double const b_longitude){
         double phi1 = a_latitude * PI/180; // phi in radians
         double phi2 = b_latitude * PI/180;
         double deltaphi = (b_latitude-a_latitude) * PI/180;
@@ -128,9 +126,8 @@ namespace Guidance {
         double a = sin(deltaphi/2) * sin(deltaphi/2) + cos(phi1) * cos(phi2) * sin(deltalambda/2) * sin(deltalambda/2);
         double c = 2 * atan2(sqrt(a), sqrt(1-a));
 
-        return R * c; // horizontal distance in metres
+        return radiusEarth * c; // horizontal distance in metres
     }
-
     //1 - Take two points and estimate the time (s) it would take a drone to fly from one to the other (stopped at start and end), assuming a max flight speed (m/s)
     double EstimateMissionTime(DroneInterface::Waypoint const & A, DroneInterface::Waypoint const & B, double TargetSpeed) {
         double delta_altitude = B.Altitude-A.Altitude;
@@ -142,11 +139,8 @@ namespace Guidance {
     //2 - Take a waypoint mission and estimate the time (s) it will take a drone to fly it (not including take-off and landing, or movement to the region).
     //    Support both the mode where we come to a stop at each waypoint and the mode where we do not stop at waypoints (CurvedTrajectory field of Mission)
     double EstimateMissionTime(DroneInterface::WaypointMission const & Mission) {
-        double totalTimeTaken = 0.0;
-        for (long unsigned int i = 0; i+1 < Mission.Waypoints.size(); i++){
-            totalTimeTaken += EstimateMissionTime(Mission.Waypoints[i], Mission.Waypoints[i+1], Mission.Waypoints[i].Speed);
-        }
-        return totalTimeTaken;
+        //TODO
+        return 0.0;
     }
 
     //3.1 Helper Function -- Gets the "score" (estimated flight time) of a triangle based on a square.
@@ -302,9 +296,9 @@ namespace Guidance {
         }
 
         std::vector<std::string> triangleLabels;
-	
+
         for (int i =0; i < allTrianglesTriangulate.size() ; i++){
-                    triangleLabels.push_back(std::to_string(i));
+            triangleLabels.push_back(std::to_string(i));
         }
         //MapWidget::Instance().m_guidanceOverlay.ClearTriangleLabels();
         //MapWidget::Instance().m_guidanceOverlay.ClearTriangles();
@@ -396,7 +390,7 @@ namespace Guidance {
 
         //Set labels for the individual triangles.
         //std::vector<std::string> triangleLabels;
-	triangleLabels.clear();
+        triangleLabels.clear();
         for (int i = 0; i < map.nodes.size(); i++){
             std::string fullLabel = alphabet[assignedGroups[i]] + std::to_string(i) + ":";
             for (int j = 0; j < map.edges[i].size(); j++){
@@ -407,12 +401,12 @@ namespace Guidance {
             }
             triangleLabels.push_back(fullLabel);
         }
-        
+
         MapWidget::Instance().m_guidanceOverlay.ClearTriangleLabels();
         MapWidget::Instance().m_guidanceOverlay.ClearTriangles();
         MapWidget::Instance().m_guidanceOverlay.SetTriangles(allTriangles);
         MapWidget::Instance().m_guidanceOverlay.SetTriangleLabels(triangleLabels);
-        
+
         //(NON-IMPACTING -- FOR DEVELOPER USE ONLY) Display polygon information on the terminal.
         std::cout<<"Target Score: " << TargetFlightTime << std::endl;
         std::cout<<"There are " << map.nodes.size() << " nodes in the graph. This should equal the number of triangles." << std::endl;
@@ -437,6 +431,21 @@ namespace Guidance {
 
     }
 
+    Eigen::Vector2d NM2ECEF(const Eigen::Vector2d & point_NM){
+        Eigen::Vector3d tempCoordinate_LL3d;
+        Eigen::Vector3d tempCoordinate_ECEF;
+        Eigen::Vector2d point_ECEF;
+
+        Eigen::Vector2d tempC = NMToLatLon(point_NM);
+
+        tempCoordinate_LL3d << tempC(0), tempC(1), 0.0;
+        tempCoordinate_ECEF = LLA2ECEF(tempCoordinate_LL3d);
+        point_ECEF << tempCoordinate_ECEF(0), tempCoordinate_ECEF(1);
+        return  point_ECEF;
+
+    }
+
+
     //4 - Take a region or sub-region and plan a trajectory to cover it at a given height that meets the specified imaging requirements. In this case we specify
     //    the imaging requirements using a maximum speed and sidelap fraction.
     //Arguments:
@@ -448,6 +457,267 @@ namespace Guidance {
         Mission.Waypoints.clear();
         Mission.LandAtLastWaypoint = false;
         Mission.CurvedTrajectory = false;
+        std::Evector<Eigen::Vector2d> vertices_NM;
+        std::Evector<PolygonCollection> Partition;
+
+        std::Evector<std::tuple<LineSegment, float, Eigen::Vector3f>> lineSegments;
+        std::Evector<std::tuple<LineSegment, float, Eigen::Vector3f>> hatchLinesVisualize;
+        std::Evector<std::tuple<Eigen::Vector2d, float, Eigen::Vector3f>> circles;
+
+        float lineThickness = 2.0f;
+        float circleRadius  = 6.5f;
+        Eigen::Vector3f lineColor  (0.0f, 0.8f, 0.0f);
+        Eigen::Vector3f circleColor(0.8f, 0.0f, 0.0f);
+
+        for (auto subregion: Region.m_components){
+            std::Evector<LineSegment> edges = subregion.m_boundary.GetLineSegments();
+            SimplePolygon tempPolygon;
+
+            // These variables are for the calculating the hatchlines
+            std::vector<LineSegment> hatchLines;
+            std::vector<LineSegment> hatchLines_NM;
+            LineSegment longest_edge;
+            double longest_side_length = 0.0;
+
+
+            // Finding the longest edge of the simple polygon
+            for (auto edge: edges){
+                if (edge.GetLength() > longest_side_length){
+                    longest_side_length = edge.GetLength();
+                    longest_edge = edge;
+                }
+            }
+            lineSegments.push_back(std::make_tuple(longest_edge, lineThickness, lineColor));
+            // Step 1: Rotation
+            // 1a: translation: I want to be able to view the rotation, which means this is a rotation around a point
+            // Point (x1,y1) to be rotatated around point (x2,y2)
+            // (xt, yt) = (x1,y1) - (x2,y2)
+            // angle to x-axis given by arctan(x/y)
+            // Point of rotation will be edge vertex closest to zero
+
+            Eigen::Vector2d rotationPoint; // This will be the point of rotation.
+            Eigen::Vector2d pointTranslated; // This will be the effective point to rotate
+
+            if (longest_edge.m_endpoint1.norm() < longest_edge.m_endpoint2.norm()){
+                rotationPoint = longest_edge.m_endpoint1;
+                pointTranslated = longest_edge.m_endpoint2 - longest_edge.m_endpoint1;
+            }
+            else{
+                rotationPoint = longest_edge.m_endpoint2;
+                pointTranslated = longest_edge.m_endpoint1 - longest_edge.m_endpoint2;
+            }
+            double theta = atan2(pointTranslated(1), pointTranslated(0));
+
+            // Calculating rotation matrix
+            Eigen::Matrix2d rot2D;
+            rot2D << cos(-theta), -sin(-theta),
+            sin(-theta),  cos(-theta);
+
+            // Create rotated polygon
+            vertices_NM.clear();
+            for (auto vertex: subregion.m_boundary.GetVertices()){
+                vertices_NM.push_back((rot2D *(vertex-rotationPoint))+rotationPoint);
+            }
+
+            tempPolygon.SetBoundary(vertices_NM); // Create our rotated polygon
+
+            //********************** FOR PLOTTING PURPOSES *********************************
+
+            //For visualization purposes, we are plotting original and rotated polygon
+            Partition.emplace_back(); //Create a new element in the partition
+            Partition.back().m_components.emplace_back(); //Add a component to the new element
+            Partition.back().m_components.back().m_boundary.SetBoundary(subregion.m_boundary.GetVertices());
+
+            Partition.emplace_back(); //Create a new element in the partition
+            Partition.back().m_components.emplace_back(); //Add a component to the new element
+            Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
+            // ****************** END OF FOR PLOTTING PURPOSES ********************
+            //****************** END OF POLYGON ROTATION **************************
+
+            //****************** POLYGON FILL *************************************
+            // Create bounding box containing our polygon
+            Eigen::Vector4d bounding_box = tempPolygon.GetAABB(); //vector (XMin, XMax, YMin, YMax)
+            Eigen::Vector2d MinMin_NM; // Store (XMin, YMin)
+            Eigen::Vector2d MaxMax_NM; // Store (XMax, YMax)
+            Eigen::Vector2d MinMin_ECEF; // Store (XMin, YMin), for debugging purposes
+            Eigen::Vector2d MaxMax_ECEF; // Store (XMax, YMax), for debugging purposes
+
+            MinMin_NM << bounding_box(0), bounding_box(2);
+            MaxMax_NM << bounding_box(1), bounding_box(3);
+            vertices_NM.clear();
+            vertices_NM.emplace_back(MinMin_NM);
+            vertices_NM.emplace_back(MaxMax_NM);
+
+            // ****************** HATCH LINE GENERATION ****************************************
+            // Fill the polygon with hatch lines
+            // 1) Figure out spacing.
+            //      1a) Convert bounding box to meters
+            //      1b) Get straight line trajectories with overlap using Imaging requirements
+
+            // 1a) Convert bounding box to meters
+
+            // 1b) Get straight line trajectories based on imaging requirements
+            // Start first hatch line half the row spacing from top of box, which is yMax
+            // Build horizontal lines until y-value is less than yMin
+            // All lines go from Xmin to Xmax
+            double rowSpacing = 2 * ImagingReqs.HAG * tan(0.5 * ImagingReqs.HFOV) * (1 - ImagingReqs.SidelapFraction);
+            double rowSpacing_NM = MetersToNMUnits(rowSpacing, MaxMax_NM(1));
+
+            // This is for debugging. Useful to understand distances in meters
+            double numHatchLines = ceil((MaxMax_ECEF(1) - MinMin_ECEF(1)- (rowSpacing/2))/rowSpacing);
+            double y_init = MaxMax_ECEF(1)-(rowSpacing/2.0);
+            numHatchLines = ceil((MaxMax_NM(1) - MinMin_NM(1)- (rowSpacing_NM/2))/rowSpacing_NM);
+            y_init = MaxMax_NM(1)-(rowSpacing_NM/2.0);
+
+
+            for (int i = 0; i<numHatchLines; i++){
+                //InputSegments.emplace_back(Eigen::Vector2d(0.0, 0.0), Eigen::Vector2d(1.0, 0.0));
+                hatchLines.emplace_back(
+                        Eigen::Vector2d(MinMin_NM(0), y_init-(i*rowSpacing_NM)),
+                        Eigen::Vector2d(MaxMax_NM(0), y_init-(i*rowSpacing_NM)));
+            }
+
+            //********************* END OF HATCHLINE GENERATION ********************************************
+
+            // ******************* GENERATE FRAGMENTED LINES FOR TRAJECTORIES ******************************
+            // Now we break the hatchlines
+            // For each hatchline
+            // 2a) Break line where it intersects with polygon edges
+            // 2b) Keep segment that is internal to polygon. Note that a line segment that might break in multiple places
+            std::Evector<LineSegment> FragmentedHatchLines;
+
+            for (auto currentHatchLine: hatchLines){
+                std::vector<Eigen::Vector2d> allIntersections;
+                bool IsInteriorA, IsInteriorB;
+
+                // For each polygon edge, collect all intersections
+                std::vector<double> m1_norm;
+                for (auto edge: tempPolygon.GetLineSegments() ){
+                    Eigen::Vector2d Intersection;
+                    if (edge.ComputeInteriorIntersection(currentHatchLine, Intersection, IsInteriorA, IsInteriorB)){
+                        allIntersections.push_back(Intersection);
+                        m1_norm.push_back((Intersection-currentHatchLine.m_endpoint1).norm());
+                    }
+                }
+                // Sort intersections according to distance to one endpoint of hatchline
+                std::vector<std::pair<double,int> >V;
+                for(int i=0;i<m1_norm.size();i++){
+                    std::pair<double,int>P=std::make_pair(m1_norm[i],i);
+                    V.push_back(P);
+                }
+                sort(V.begin(),V.end());
+                // V is now the intersections sorted by their norm distance to one end-point of hatchline
+
+                // Now construct line segments, keeping only those inside the polygon
+                // Guaranteed that line segment in each loop is possible shortest
+                // Therefore it is either completely inside or outside polygon
+                // Therefore the mid-point must be completely inside or outside polygon
+                for (int i = 1; i< V.size(); i++){
+                    Eigen::Vector2d midPoint = (allIntersections[V[i-1].second]+allIntersections[(V[i].second)])/2;
+                    if(tempPolygon.ContainsPoint(midPoint)){
+                        FragmentedHatchLines.push_back(LineSegment(allIntersections[V[i-1].second],allIntersections[(V[i].second)]));
+                    }
+                }
+            }
+            // ***************** FRAGMENTED LINES GENERATION COMPLETED *****************************
+
+            // For each line segment
+            //      1a) Populate waypoint vector with end points
+            //              Shift end_points inwards by 0.5*rowSpacing_NM
+            //              If line length is larger than rowspacing_NM, then the shift will result in a single point
+            //                  Populate waypoint vector with just that single midpoint
+            //              Otherwise, populate with m1 and m2
+            //      1b) Create temp sorted list of norm and index of all remaining endpoints, see example code above
+            //              The closest endpoint will be at index 0
+            //              The associated line segment will be the next line
+            //      1c) Undo the rotation of the points.
+            //            NOTE WELL!!!! This function rotates around a point that is NOT the origin
+            //            Therefore, the rotation operation is technically a translation, then rotation, then translation
+            //
+
+            //1a: Populate waypoint vector with end points
+            for (auto & line: FragmentedHatchLines){
+                if(line.GetLength() < rowSpacing_NM){
+                    LineSegment tempLine;
+                    tempLine.m_endpoint1 = (line.m_endpoint1 + line.m_endpoint2) / 2;
+                    tempLine.m_endpoint2 = tempLine.m_endpoint1;
+                    line = tempLine;
+                } else {
+                    if(line.m_endpoint1[0] > line.m_endpoint2[0]){
+                        line.m_endpoint1[0] -= 0.5*rowSpacing_NM;
+                        line.m_endpoint2[0] += 0.5*rowSpacing_NM;
+                    } else {
+                        line.m_endpoint1[0] += 0.5*rowSpacing_NM;
+                        line.m_endpoint2[0] -= 0.5*rowSpacing_NM;
+                    }
+                }
+            }
+            //1b: Create temp sorted list of norm and index of all remaining endpoints, see example code above [WARNING: UNSORTED]
+            std::vector<Eigen::Vector2d> orderedPoints;
+            std::vector<bool> hasLineBeenUsed (FragmentedHatchLines.size(), false);
+            bool isEndpointOne = true;
+            int chosenLineIndex = 0;
+            hasLineBeenUsed[0] = true;
+            orderedPoints.push_back(FragmentedHatchLines[0].m_endpoint2);
+            orderedPoints.push_back(FragmentedHatchLines[0].m_endpoint1);
+            while (std::find(hasLineBeenUsed.begin(), hasLineBeenUsed.end(), false) != hasLineBeenUsed.end()){
+                Eigen::Vector2d currentEndpoint;
+                Eigen::Vector2d chosenPoint;
+                if(isEndpointOne) currentEndpoint = FragmentedHatchLines[chosenLineIndex].m_endpoint1;
+                else currentEndpoint = FragmentedHatchLines[chosenLineIndex].m_endpoint2;
+                chosenPoint = currentEndpoint;
+                //Find the closest unused point to this one
+                for (int x = 0; x < hasLineBeenUsed.size(); x++){
+                    if(hasLineBeenUsed[x]) continue;
+                    if (chosenPoint == currentEndpoint){
+                        chosenLineIndex = x;
+                        isEndpointOne = false;
+                        chosenPoint = FragmentedHatchLines[x].m_endpoint1;
+                    }
+                    if((chosenPoint - currentEndpoint).norm() > (FragmentedHatchLines[x].m_endpoint1 - currentEndpoint).norm()) {
+                        chosenLineIndex = x;
+                        isEndpointOne = false;
+                        chosenPoint = FragmentedHatchLines[x].m_endpoint1;
+                    }
+                    if((chosenPoint - currentEndpoint).norm() > (FragmentedHatchLines[x].m_endpoint2 - currentEndpoint).norm()) {
+                        chosenLineIndex = x;
+                        isEndpointOne = true;
+                        chosenPoint = FragmentedHatchLines[x].m_endpoint2;
+                    }
+                }
+                hasLineBeenUsed[chosenLineIndex] = true;
+                if(isEndpointOne){
+                    orderedPoints.push_back(FragmentedHatchLines[chosenLineIndex].m_endpoint2);
+                    orderedPoints.push_back(FragmentedHatchLines[chosenLineIndex].m_endpoint1);
+                } else {
+                    orderedPoints.push_back(FragmentedHatchLines[chosenLineIndex].m_endpoint1);
+                    orderedPoints.push_back(FragmentedHatchLines[chosenLineIndex].m_endpoint2);
+                }
+            }
+
+            //1c: Undo Rotation of the points.
+            rot2D << cos(theta), -sin(theta),
+            sin(theta),  cos(theta);
+            for (auto & line: FragmentedHatchLines){
+                line.m_endpoint1 = (rot2D *(line.m_endpoint1-rotationPoint))+rotationPoint;
+                line.m_endpoint2 = (rot2D *(line.m_endpoint2-rotationPoint))+rotationPoint;
+            }
+            for (auto & point: orderedPoints){
+                point = (rot2D *(point-rotationPoint))+rotationPoint;
+                Eigen::Vector2d LatLonPoint;
+                LatLonPoint = NMToLatLon(point);
+                DroneInterface::Waypoint newWayPoint;
+                newWayPoint.Latitude = LatLonPoint[0];
+                newWayPoint.Longitude = LatLonPoint[1];
+                newWayPoint.Altitude = ImagingReqs.HAG;
+                newWayPoint.Speed = ImagingReqs.TargetSpeed;
+                newWayPoint.LoiterTime   = std::nanf("");
+                newWayPoint.GimbalPitch   = std::nanf("");
+                newWayPoint.CornerRadius = 5.0f;
+                Mission.Waypoints.push_back(newWayPoint);
+            }
+        }
+        MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
     }
 
     //5 - Take a Time Available function, a waypoint mission, and a progress indicator (where in the mission you are) and detirmine whether or not the drone
