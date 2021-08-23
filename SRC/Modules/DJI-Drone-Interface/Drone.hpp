@@ -140,6 +140,8 @@ namespace DroneInterface {
 			Packet* m_packet_fragment = new Packet();      //Only used in DataReceivedHandler and ProcessFullReceivedPacket
 			bool ProcessFullReceivedPacket(void);          //Process a full packet. Returns true on success and false on failure (likily hash check fail)
 			
+			void AddImageTimestampToLogAndFPSReport(TimePoint Timestamp);
+			
 			std::mutex               m_mutex;               //All fields in this block are protected by this mutex
 			Packet_CoreTelemetry     m_packet_ct;           //Data is retrieved from this packet in access methods
 			Packet_ExtendedTelemetry m_packet_et;           //Data is retrieved from this packet in access methods
@@ -151,6 +153,8 @@ namespace DroneInterface {
 			int                      m_frame_num = -1;
 			cv::Mat                  m_MostRecentFrame;
 			std::unordered_map<int, std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)>> m_ImageryCallbacks;
+			std::vector<TimePoint>   m_receivedImageTimestamps; //Log of timestamps for received imagery
+			TimePoint                m_TimestampOfLastFPSReport;
 			
 			Packet_Image m_packet_img;                     //Only used in ProcessFullReceivedPacket
 			Packet_CompressedImage m_packet_compressedImg; //Only used in ProcessFullReceivedPacket

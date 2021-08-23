@@ -12,12 +12,14 @@
 
 //Project Includes
 #include "Drone.hpp"
+#include "../../Utilities.hpp"
 
 #define PI 3.14159265358979
 
 namespace DroneInterface {
 	RealDrone::RealDrone(tacopie::tcp_client & client) {
 		m_client = &client;
+		m_TimestampOfLastFPSReport = std::chrono::steady_clock::now();
 	}
 	
 	RealDrone::~RealDrone() {
@@ -104,6 +106,7 @@ namespace DroneInterface {
 					this->m_MostRecentFrame = this->m_packet_img.Frame;
 					this->m_frame_num++;
 					this->m_PacketTimestamp_imagery = std::chrono::steady_clock::now();
+					AddImageTimestampToLogAndFPSReport(this->m_PacketTimestamp_imagery);
 					for (auto const & kv : m_ImageryCallbacks)
 						kv.second(m_MostRecentFrame, m_PacketTimestamp_imagery);
 
@@ -142,6 +145,7 @@ namespace DroneInterface {
 					this->m_MostRecentFrame = this->m_packet_compressedImg.Frame;
 					this->m_frame_num++;
 					this->m_PacketTimestamp_imagery = std::chrono::steady_clock::now();
+					AddImageTimestampToLogAndFPSReport(this->m_PacketTimestamp_imagery);
 					for (auto const & kv : m_ImageryCallbacks)
 						kv.second(m_MostRecentFrame, m_PacketTimestamp_imagery);
 					return true;
@@ -154,6 +158,29 @@ namespace DroneInterface {
 			default: {
 				std::cerr << "Error: Unrecognized PID - failed to decode packet from drone." << std::endl;
 				return false;
+			}
+		}
+	}
+	
+	void RealDrone::AddImageTimestampToLogAndFPSReport(TimePoint Timestamp) {
+		m_receivedImageTimestamps.push_back(Timestamp);
+		
+		//If desired, print out the effective frame rate over the last few seconds
+		//Just replace true with false to turn this off - this is really just for development so this should suffice.
+		if (true) {
+			double timeAverageInterval = 10.0; //Time interval to estimate average frame rate over (seconds)
+			double reportingInterval   = 2.0;  //Minimum amount of time between FPS printout to stderr (seconds)
+			
+			if (SecondsElapsed(m_TimestampOfLastFPSReport, std::chrono::steady_clock::now()) >= reportingInterval) {
+				double imageCount = 0.0;
+				for (auto riter = m_receivedImageTimestamps.rbegin(); riter != m_receivedImageTimestamps.rend(); riter++) {
+					if (SecondsElapsed(*riter, Timestamp) < timeAverageInterval)
+						imageCount += 1.0;
+					else
+						break;
+				}
+				std::cerr << "Average framerate over last " << timeAverageInterval << " seconds: " << imageCount/timeAverageInterval << " fps\r\n";
+				m_TimestampOfLastFPSReport = std::chrono::steady_clock::now();
 			}
 		}
 	}
