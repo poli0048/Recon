@@ -65,6 +65,9 @@ public:
 
     //Test to see if a point is approximately on the line segment
     bool ContainsPoint(Eigen::Vector2d const & Point) const;
+    
+    //Get segment length
+    double GetLength(void) const;
 
     //Get the point on the line segment closest to the provided point
     Eigen::Vector2d ProjectPoint(Eigen::Vector2d const & Point) const;

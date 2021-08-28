@@ -9,6 +9,7 @@
 
 //Project Includes
 #include "Drone.hpp"
+#include "../../Utilities.hpp"
 
 #define PI 3.14159265358979
 
@@ -356,7 +357,11 @@ namespace DroneInterface {
 	//Populate Result with whether or not the drone is currently flying (in any mode)
 	bool SimulatedDrone::IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
+		
 		Result = true;
+		//double t = SecondsSinceT0Epoch(std::chrono::steady_clock::now());
+		//Result = (fmod(t, 10.0) < 5.0);
+		
 		Timestamp = std::chrono::steady_clock::now();
 		return true;
 	}

@@ -42,6 +42,11 @@ bool LineSegment::ContainsPoint(Eigen::Vector2d const & Point) const {
     return (Point - projection).norm() < TOLERANCE;
 }
 
+//Get segment length
+double LineSegment::GetLength(void) const {
+	return (m_endpoint2 - m_endpoint1).norm();
+}
+
 //Get the point on the line segment closest to the provided point
 Eigen::Vector2d LineSegment::ProjectPoint(Eigen::Vector2d const & Point) const {
     //The closest point will be the orthogonal projection of the given point onto the line, if that projection is contained in the segment.
@@ -345,8 +350,8 @@ bool SimplePolygon::CheckIntersect(SimplePolygon const & otherPolygon, std::vect
     std::Evector<LineSegment> segmentA = this->GetLineSegments();
     std::Evector<Eigen::Vector2d> pointsB = otherPolygon.GetVertices();
 
-    for (int i=0; i<segmentA.size(); i++){
-        for (int j=0; j<pointsB.size(); j++){
+    for (int i=0; i < (int) segmentA.size(); i++){
+        for (int j=0; j < (int) pointsB.size(); j++){
             //Eigen::Vector2d tempIntersection;
 
             if (insideColinear(segmentA[i], pointsB[j])){
