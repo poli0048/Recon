@@ -11,7 +11,8 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
-#include<filesystem>
+#include <filesystem>
+#include <algorithm>
 
 //External Includes
 #include "../../../handycpp/Handy.hpp" //Provides std::filesystem and Handy::File
@@ -19,6 +20,7 @@
 #include <tacopie/tacopie>
 
 //Project Includes
+#include "../../EigenAliases.h"
 #include "DroneComms.hpp"
 #include "DroneDataStructures.h"
 namespace DroneInterface {
@@ -84,7 +86,7 @@ namespace DroneInterface {
     class RealDrone : public Drone {
     public:
         RealDrone() = delete;
-        RealDrone(tacopie::tcp_client & client);
+        RealDrone(const std::shared_ptr<tacopie::tcp_client> & client);
         ~RealDrone();
 
         bool Ready(void) override;
@@ -123,7 +125,9 @@ namespace DroneInterface {
 
         //RealDrone-specific methods
         void DataReceivedHandler(const std::shared_ptr<tacopie::tcp_client>& client, const tacopie::tcp_client::read_result& res);
-
+        void Possess(RealDrone * Target); //Transfer state to another RealDrone Object on the next opportunity, leaving this object dead
+        bool IsDead(void); //Returns true if state has been transferred to another object. Can safely be destroyed if dead.
+        
         // test functions
         void LoadTestWaypointMission(WaypointMission & testMission);
         void SendTestVirtualStickPacketA();
@@ -133,7 +137,7 @@ namespace DroneInterface {
         //Some modules that use imagery can't handle missing frames gracefully. Thus, we use provide a callback mechanism to ensure that such a module
         //can have a guarantee that each frame received by the drone interface module will be provided downstream. See field m_ImageryCallbacks
 
-        tacopie::tcp_client* m_client;
+        tacopie::tcp_client * m_client;
         std::vector<uint8_t> m_buffer; //Only used in DataReceivedHandler
 
         void SendPacket(Packet & packet);
@@ -142,10 +146,11 @@ namespace DroneInterface {
         void SendPacket_ExecuteWaypointMission(uint8_t LandAtEnd, uint8_t CurvedFlight, std::vector<Waypoint> Waypoints);
         void SendPacket_VirtualStickCommand(uint8_t Mode, float Yaw, float V_x, float V_y, float HAG, float timeout);
 
-        Packet* m_packet_fragment = new Packet();      //Only used in DataReceivedHandler and ProcessFullReceivedPacket
+        Packet * m_packet_fragment = new Packet();     //Only used in DataReceivedHandler and ProcessFullReceivedPacket
         bool ProcessFullReceivedPacket(void);          //Process a full packet. Returns true on success and false on failure (likily hash check fail)
 
         void AddImageTimestampToLogAndFPSReport(TimePoint Timestamp);
+        void TransferStateToTargetObject(void); //Used for possession
 
         std::mutex               m_mutex;               //All fields in this block are protected by this mutex
         Packet_CoreTelemetry     m_packet_ct;           //Data is retrieved from this packet in access methods
@@ -160,6 +165,8 @@ namespace DroneInterface {
         std::unordered_map<int, std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)>> m_ImageryCallbacks;
         std::vector<TimePoint>   m_receivedImageTimestamps; //Log of timestamps for received imagery
         TimePoint                m_TimestampOfLastFPSReport;
+        RealDrone *              m_possessionTarget = nullptr; //Nullptr if no possession requested
+        bool                     m_isDead = false; //Set to true after possessing another object. Can be destroyed safely.
 
         Packet_Image m_packet_img;                     //Only used in ProcessFullReceivedPacket
         Packet_CompressedImage m_packet_compressedImg; //Only used in ProcessFullReceivedPacket
@@ -179,6 +186,7 @@ namespace DroneInterface {
     public:
         SimulatedDrone();
         SimulatedDrone(std::string Serial);
+        SimulatedDrone(std::string Serial, Eigen::Vector3d const & Position_LLA); //Position is Lat (rad), Lon (rad), Alt (m)
         ~SimulatedDrone();
 
         bool Ready(void) override;
@@ -218,10 +226,13 @@ namespace DroneInterface {
         //SimulatedDrone-specific methods
         void SetRealTime(bool Realtime); //True: Imagery will be provided at close-to-real-time rate. False: Imagery is provided as fast as possible
         void SetSourceVideoFile(std::filesystem::path const & VideoPath); //Should be set before calling StartDJICamImageFeed()
+        std::filesystem::path GetSourceVideoFile(void);
         bool GetReferenceFrame(double SecondsIntoVideo, cv::Mat & Frame); //Get a single frame - will fail if the video feed is running
 
         static bool ResizeTo720p(cv::Mat & Frame); //Make sure the frame is 720p... resize if needed.
         static bool Resize_4K_to_720p(cv::Mat & Frame); //Drop a 4K m_frame down to 720p
+        
+        void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG);
     private:
         //Some modules that use imagery can't handle missing frames gracefully. Thus, we use provide a callback mechanism to ensure that such a module
         //can have a guarantee that each frame received by the drone interface module will be provided downstream.
@@ -242,6 +253,19 @@ namespace DroneInterface {
         //Additional State Data
         std::string m_serial;
         double m_Lat, m_Lon, m_Alt; //Lat (rad), Lon (rad), alt (m)
+        double m_V_North, m_V_East, m_V_Down; //NED velocity
+        double m_yaw, m_pitch, m_roll; //Radians (DJI definitions)
+        double m_groundAlt; //(m)
+        
+        double m_HomeLat, m_HomeLon;
+        int m_targetWaypoint = -1; //Next waypoint (when in waypoint mission mode)
+        int m_waypointMissionState = -1; //0=takeoff, 1=goto waypoint, 2=pause at waypoint, 3=turning at waypoint
+        TimePoint m_arrivalAtWaypoint_Timestamp;
+        VirtualStickCommand_ModeA m_LastVSCommand_ModeA;
+        VirtualStickCommand_ModeB m_LastVSCommand_ModeB;
+        TimePoint m_LastVSCommand_ModeA_Timestamp;
+        TimePoint m_LastVSCommand_ModeB_Timestamp;
+        TimePoint m_LastPoseUpdate;
 
         bool m_realtime = false;
         std::filesystem::path m_videoPath;
@@ -251,16 +275,17 @@ namespace DroneInterface {
         unsigned int m_FrameNumber = 0U;     //Frame number of most recent frame (increments on each *used* frame)
         TimePoint m_FrameTimestamp;          //Timestamp of most recent frame
         TimePoint m_VideoFeedStartTimestamp; //Timestamp of start of video feed
-        int m_flightMode = 0;                //0 = P, 1 = Waypoint, 2 = VirtualStick, -1 = Other
+        int m_flightMode = 0;                //-1=Other, 0=On Ground, 1=P, 2=Waypoint, 3=VirtualStick_A, 4=VirtualStick_B, 5=Takeoff, 6=Landing, 7=RTH
         WaypointMission m_LastMission;       //A copy of the last waypoint mission uploaded to the drone
 
-        bool m_virtualStickWarningIssued = false;  //Issue warning once per object to avoid terminal spamming
-        bool m_waypointWarningIssued = false;      //Issue warning once per object to avoid terminal spamming
-        bool m_HoverWarningIssued = false;         //Issue warning once per object to avoid terminal spamming
-        bool m_LandNowWarningIssued = false;       //Issue warning once per object to avoid terminal spamming
-        bool m_GoHomeAndLandWarningIssued = false; //Issue warning once per object to avoid terminal spamming
-
-        void DroneMain(void);
+        void   DroneMain(void);
+        void   UpdateDronePose(void);
+        void   UpdateDrone2DPositionBasedOnVelocity(double deltaT, Eigen::Matrix3d const & C_ENU_ECEF);
+        void   UpdateDroneVertChannelBasedOnTargetHAG(double deltaT, double TargetHAG, double climbRate, double descentRate);
+        double UpdateDroneOrientationBasedOnYawTarget(double deltaT, double TargetYaw, double turnRate);
+        void   Update2DVelocityBasedOnTarget(double deltaT, Eigen::Vector2d const & V_Target_EN, double max2DAcc, double max2DDec, double max2DSpeed);
+        void   ComputeTarget2DVelocityBasedOnTargetPosAndSpeed(double TargetLat, double TargetLon, double TargetMoveSpeed,
+                                                               Eigen::Vector2d & V_Target_EN, Eigen::Matrix3d const & C_ECEF_ENU);
     };
 
 }

@@ -513,7 +513,7 @@ void MapWidget::Draw(void) {
 			else {
 				std::ostringstream outSS;
 				outSS << std::fixed << std::setprecision(1) << MSAValue;
-				tooltipText += "Min Safe Altitude: " + outSS.str();
+				tooltipText += "Min Safe Altitude: "s + outSS.str() + " m"s;
 			}
 			if ((! std::isnan(AvoidanceZonesValue)) && (AvoidanceZonesValue > 0.5))
 				tooltipText += "\r\nAvoidance Zone";

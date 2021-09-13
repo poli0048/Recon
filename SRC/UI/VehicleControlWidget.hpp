@@ -142,7 +142,7 @@ class VehicleControlWidget {
 			}
 		}
 		
-		static inline std::filesystem::path GetPathForSimVideoInput(void);
+		//static inline std::filesystem::path GetPathForSimVideoInput(void);
 		static inline bool IsDroneHovered(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & drone_ScreenSpace,
 		                                  Eigen::Matrix2d const & R, float IconWidth_pixels);
 		
@@ -239,12 +239,18 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 						
 						//We will set our East-North velocity to a multiple of v_EN... we just need to scale it appropriately
 						double maxSpeed_mps = myState.m_vehicleSpeedMPH * 0.44704f;
-						double maxDecel = 3.0; //m/s/s - measured on Inspire 1
+						double maxDecel = 2.5; //m/s/s - measured on Inspire 1
 						double stoppingDist = maxSpeed_mps*maxSpeed_mps / (2.0 * maxDecel);
 						if (distFromTarget > stoppingDist)
 							v_EN *= maxSpeed_mps;
-						else
-							v_EN *= std::sqrt(2.0 * maxDecel * distFromTarget);
+						else {
+							//On final approach - slowing down (we command < the speed corresponding to a perfect stop to get ahead of system latency)
+							v_EN *= 0.9*std::sqrt(2.0 * maxDecel * distFromTarget);
+							
+							//Re-shape and soften commanded V near 0 to avoid oscillations
+							if (v_EN.norm() < 1.0)
+								v_EN = v_EN * v_EN.norm();
+						}
 						command.V_North = v_EN(1);
 						command.V_East  = v_EN(0);
 						
@@ -258,8 +264,9 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 								if (drone->GetHAG(HAG, HAGTimestamp) && (SecondsElapsed(HAGTimestamp, std::chrono::steady_clock::now()) < 4.0)) {
 									double groundAlt = Altitude - HAG;
 									double minSafeHAG = MSA - groundAlt;
-									myState.m_targetHAGFeet = minSafeHAG*3.280839895;
-									command.HAG = minSafeHAG;
+									double targetHAG = minSafeHAG + 1.0; //Fly 1 meter above MSA to avoid triggering watchdog alarms
+									myState.m_targetHAGFeet = targetHAG*3.280839895;
+									command.HAG = targetHAG;
 								}
 							}
 						}
@@ -601,6 +608,12 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 						
 						//TODO: Maybe check along path to target and adjust height if needed based on MSA (if available) or issue warning.
 						//Maybe leave this to the watchdog... we don't need redundant functionality and the added complexity here.
+						//No - it's a good idea. We can't leave it to the watchdog since we might want to auto adjust the height to avoid
+						//obstacles, and we don't want to expose that level of control to outside this class. We should do a look-ahead
+						//in the control loop. Update... actually guarenteeing that we will clear obstructions is tricky... we might need
+						//to slow down or stop horizontal movement. If we can't guarentee it... we should actually have the watchdog look ahead
+						//and stop the drones if they are on track to a violation. We may still want to do this check here, but it would be
+						//extra (to try and avoid a future violation)
 					}
 					m_indexOfDroneUnderDrag = -1; //Cancel drag
 				}
@@ -721,6 +734,9 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 				ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 				
 				ImGui::TextUnformatted("Movement Speed");
+				ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::CalcTextSize(" Max ").x - 3.0f*style.FramePadding.x);
+				if (ImGui::SmallButton(" Max "))
+					state->m_vehicleSpeedMPH = 33.6f;
 				ImGui::SetNextItemWidth(-1.0f);
 				ImGui::DragFloat("##SpeedDrag", &(state->m_vehicleSpeedMPH), 0.05f, 1.0f, 33.6f, "%.1f (mph)");
 				ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
@@ -761,7 +777,7 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 				ImU32 composCol = IM_COL32(255,100,100,255);
 				Eigen::Vector2d startPos_ScreenSpace = ImGui::GetCursorScreenPos();
 				float widgetSize = height + 2.0f*ImGui::GetStyle().FramePadding.y + ImGui::GetFontSize();
-				ImGui::Dummy(ImVec2(widgetSize, widgetSize));
+				ImGui::InvisibleButton("Fancy Yaw Widget", ImVec2(widgetSize, widgetSize));
 				ImDrawList * draw_list = ImGui::GetWindowDrawList();
 				Eigen::Vector2d center(startPos_ScreenSpace(0) + widgetSize/2.0f, startPos_ScreenSpace(1) + widgetSize/2.0f);
 				float radius = 0.45f*widgetSize - ImGui::GetFontSize()/2.0f;
@@ -807,7 +823,7 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 				//If the mouse is over the indicator, allow setting yaw through a click
 				Eigen::Vector2d delta = CursorPos_ScreenSpace - center;
 				if (delta.norm() <= radius) {
-					if (ImGui::IsMouseDown(0)) {
+					if (ImGui::IsItemActive()) {
 						state->m_targetYawDeg = float(std::atan2(delta(1), delta(0))*180.0/PI + 90.0);
 						if (state->m_targetYawDeg < 0.0f)
 							state->m_targetYawDeg += 360.0f;
@@ -868,7 +884,7 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 }
 
 //Get the path of the first .MOV file in the first sim data set folder in "Simulation-Data-Sets" ("first" in a number-aware lexicographical sense)
-inline std::filesystem::path VehicleControlWidget::GetPathForSimVideoInput(void) {
+/*inline std::filesystem::path VehicleControlWidget::GetPathForSimVideoInput(void) {
 	auto datasetDirs = Handy::SubDirectories(Handy::Paths::ThisExecutableDirectory().parent_path() / "Simulation-Data-Sets"s);
 	std::sort(datasetDirs.begin(), datasetDirs.end(), [](std::string const & A, std::string const & B) -> bool { return StringNumberAwareCompare_LessThan(A, B); });
 	if (datasetDirs.empty())
@@ -881,7 +897,7 @@ inline std::filesystem::path VehicleControlWidget::GetPathForSimVideoInput(void)
 			return file;
 	}
 	return std::filesystem::path();
-}
+}*/
 
 inline void VehicleControlWidget::AllDronesStopAndHover(void) {
 	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
@@ -1065,13 +1081,31 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 				}
 				else {
 					ImGui::DragFloat("Target FPS", &(myState.m_targetFPS), 0.02f, 0.1f, 15.0f, "%.1f");
+					DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(& drone);
+					if (mySimDrone != nullptr) {
+						//This is a simulated drone - make it possible to set the video source
+						if (ImGui::BeginMenu("Video Source")) {
+							std::vector<std::filesystem::path> subDirs = Handy::SubDirectories(Handy::Paths::ThisExecutableDirectory().parent_path() /
+							                                                                   "Simulation-Data-Sets"s);
+							std::sort(subDirs.begin(), subDirs.end(), [](std::string const & A, std::string const & B) ->
+							                                          bool { return StringNumberAwareCompare_LessThan(A, B); });
+							for (auto const & subdir : subDirs) {
+								if (ImGui::MenuItem(subdir.stem().string().c_str())) {
+									mySimDrone->SetSourceVideoFile(GetSimVideoFilePath(subdir));
+									mySimDrone->SetRealTime(true);
+								}
+							}
+							ImGui::EndMenu();
+						}
+					}
+					
 					if (ImGui::MenuItem("Start Feed", NULL, false, true)) {
 						//If the drone is actually a simulated drone we need to set the source video file
-						DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(& drone);
+						/*DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(& drone);
 						if (mySimDrone != nullptr) {
 							mySimDrone->SetRealTime(true);
 							mySimDrone->SetSourceVideoFile(GetPathForSimVideoInput());
-						}
+						}*/
 						drone.StartDJICamImageFeed(myState.m_targetFPS);
 					}
 				}
@@ -1101,6 +1135,7 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 		if (MyGui::BeginMenu(u8"\uf05a", labelMargin, "Full Info")) {
 			double PI = 3.14159265358979;
 			float col2Start = ImGui::CalcTextSize("Height Above Ground:   ").x;
+			float col2P5Start = col2Start + ImGui::CalcTextSize("77777 feet  ").x;
 			float col3Start = col2Start + ImGui::CalcTextSize("Connected (Image feed OFF)    ").x;
 			
 			DroneInterface::Drone::TimePoint Timestamp;
@@ -1119,6 +1154,8 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 				ImGui::TextUnformatted("Altitude: ");
 				ImGui::SameLine(col2Start);
 				ImGui::Text("%.0f feet", Altitude*3.280839895);
+				ImGui::SameLine(col2P5Start);
+				ImGui::Text("(%.1f m)", Altitude);
 				PrintAgeWarning(Timestamp, col3Start);
 			}
 			else {
@@ -1130,6 +1167,8 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 				ImGui::TextUnformatted("Height Above Ground: ");
 				ImGui::SameLine(col2Start);
 				ImGui::Text("%.0f feet", HAG*3.280839895);
+				ImGui::SameLine(col2P5Start);
+				ImGui::Text("(%.1f m)", HAG);
 				PrintAgeWarning(Timestamp, col3Start);
 				ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 			}
@@ -1144,16 +1183,22 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 				ImGui::TextUnformatted("North Velocity: ");
 				ImGui::SameLine(col2Start);
 				ImGui::Text("%.1f mph", V_North*2.23694);
+				ImGui::SameLine(col2P5Start);
+				ImGui::Text("(%.1f m/s)", V_North);
 				PrintAgeWarning(Timestamp, col3Start);
 				
 				ImGui::TextUnformatted("East Velocity: ");
 				ImGui::SameLine(col2Start);
 				ImGui::Text("%.1f mph", V_East*2.23694);
+				ImGui::SameLine(col2P5Start);
+				ImGui::Text("(%.1f m/s)", V_East);
 				PrintAgeWarning(Timestamp, col3Start);
 				
 				ImGui::TextUnformatted("Down Velocity: ");
 				ImGui::SameLine(col2Start);
 				ImGui::Text("%.1f mph", V_Down*2.23694);
+				ImGui::SameLine(col2P5Start);
+				ImGui::Text("(%.1f m/s)", V_Down);
 				PrintAgeWarning(Timestamp, col3Start);
 				ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 			}

@@ -17,14 +17,16 @@
 #define PI 3.14159265358979
 
 namespace DroneInterface {
-	RealDrone::RealDrone(tacopie::tcp_client & client) {
-		m_client = &client;
+	RealDrone::RealDrone(const std::shared_ptr<tacopie::tcp_client> & client) {
+		m_client = client.get();
 		m_TimestampOfLastFPSReport = std::chrono::steady_clock::now();
+		
+		//Kick off reading from socket
+		client->async_read({ 1024, bind(&RealDrone::DataReceivedHandler, this, client, std::placeholders::_1) });
 	}
 	
-	RealDrone::~RealDrone() {
-		m_client->disconnect(true);
-	}
+	RealDrone::~RealDrone() { }
+	
 	void RealDrone::LoadTestWaypointMission(WaypointMission & testMission){
 
 	    testMission.Waypoints.clear();
@@ -169,11 +171,86 @@ namespace DroneInterface {
 				}
 			}
 			
-			client->async_read({ 1024, bind(&RealDrone::DataReceivedHandler, this, client, std::placeholders::_1) });
+			//If we have been instructed to take possession of another object, transfer our state to it here and set up the client to
+			//call the target objects receive handler instead of our own. Otherwise, trigger the next read.
+			if (m_possessionTarget != nullptr) {
+				TransferStateToTargetObject();
+				client->async_read({ 1024, bind(&RealDrone::DataReceivedHandler, m_possessionTarget, client, std::placeholders::_1) });
+			}
+			else
+				client->async_read({ 1024, bind(&RealDrone::DataReceivedHandler, this, client, std::placeholders::_1) });
 		}
 		else {
 			std::cout << "Client disconnected" << std::endl;
 			client->disconnect();
+		}
+	}
+	
+	//Transfer state to another RealDrone Object on the next opportunity, leaving this object dead
+	void RealDrone::Possess(RealDrone * Target) {
+		std::scoped_lock lock(m_mutex);
+		m_possessionTarget = Target;
+	}
+	
+	//Returns true if state has been transferred to another object. Can safely be destroyed if dead.
+	bool RealDrone::IsDead(void) {
+		std::scoped_lock lock(m_mutex);
+		return m_isDead;
+	}
+	
+	void RealDrone::TransferStateToTargetObject(void) {
+		if (m_possessionTarget != nullptr) {
+			std::scoped_lock lock_A(m_mutex);
+			std::scoped_lock lock_B(m_possessionTarget->m_mutex);
+			
+			m_possessionTarget->m_client = this->m_client;
+			m_possessionTarget->m_packet_fragment = this->m_packet_fragment;
+			
+			//Transfer Core Telemetry data
+			if (this->m_packet_ct_received) {
+				if ((! m_possessionTarget->m_packet_ct_received) || (this->m_PacketTimestamp_ct > m_possessionTarget->m_PacketTimestamp_ct)) {
+					m_possessionTarget->m_packet_ct          = this->m_packet_ct;
+					m_possessionTarget->m_PacketTimestamp_ct = this->m_PacketTimestamp_ct;
+					m_possessionTarget->m_packet_ct_received = this->m_packet_ct_received;
+				}
+			}
+			
+			//Transfer Extended Telemetry data
+			if (this->m_packet_et_received) {
+				if ((! m_possessionTarget->m_packet_et_received) || (this->m_PacketTimestamp_et > m_possessionTarget->m_PacketTimestamp_et)) {
+					m_possessionTarget->m_packet_et          = this->m_packet_et;
+					m_possessionTarget->m_PacketTimestamp_et = this->m_PacketTimestamp_et;
+					m_possessionTarget->m_packet_et_received = this->m_packet_et_received;
+				}
+			}
+			
+			//Transfer Imagery data
+			if (this->m_frame_num >= 0) {
+				if ((m_possessionTarget->m_frame_num < 0) || (this->m_PacketTimestamp_imagery > m_possessionTarget->m_PacketTimestamp_imagery)) {
+					m_possessionTarget->m_PacketTimestamp_imagery = this->m_PacketTimestamp_imagery;
+					m_possessionTarget->m_frame_num = std::max(m_possessionTarget->m_frame_num + 1, this->m_frame_num);
+					m_possessionTarget->m_MostRecentFrame = this->m_MostRecentFrame;
+					m_possessionTarget->m_receivedImageTimestamps = this->m_receivedImageTimestamps;
+					m_possessionTarget->m_TimestampOfLastFPSReport = this->m_TimestampOfLastFPSReport;
+				}
+			}
+			
+			//Transfer Image callbacks - this is a bit sketchy since both objects may have issued the same callback handle to two different requests.
+			//We will try to merge and skip any items that conflict. This shouldn't be a problem in practice since this is primarily used to support
+			//re-activating a drone object if the connection is lost and re-established, in which case typically only the old object will have callbacks.
+			for (auto const & kv : this->m_ImageryCallbacks) {
+				if (m_possessionTarget->m_ImageryCallbacks.count(kv.first) > 0U)
+					std::cerr << "Warning in RealDrone::TransferStateToTargetObject(): Dropping Image callback due to conflicting handle.\r\n";
+				else
+					m_possessionTarget->m_ImageryCallbacks[kv.first] = kv.second;
+			}
+			
+			//Make sure the target of posession doesn't have it's own target
+			m_possessionTarget->m_possessionTarget = nullptr;
+			m_possessionTarget->m_isDead = false;
+			
+			//Mark this object as dead
+			m_isDead = true;
 		}
 	}
 	

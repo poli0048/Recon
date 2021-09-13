@@ -120,6 +120,17 @@ inline double MetersToNMUnits(double Meters, double yPos_NM) {
 	return Meters*NMUnitsPerMeter;
 }
 
+//Convert a distance in normalized mercator units to meters at a given point on Earth (only the y-coord matters).
+//This is not exact and should certainly never be used over large distances.
+inline double NMUnitsToMeters(double Dist_NM, double yPos_NM) {
+	const double PI = 3.14159265358979;
+	const double C = 40075017.0; //meters (Wikipedia)
+	
+	double lat = 2.0*(atan(exp(yPos_NM*PI)) - PI/4.0);
+	double MetersPerNMUnit = C*cos(lat)/2.0;
+	return Dist_NM*MetersPerNMUnit;
+}
+
 //Convert a distance in meters to pixels at the given zoom level and point on Earth (only the y-coord matters).
 //Be careful with this - it is not perfect and gets especially bad over long distances.
 inline double MetersToPixels(double Meters, double yPos_NM, double MapZoom) {

@@ -108,7 +108,7 @@ inline Eigen::Vector3d CommandWidget::positionLLA2ECEF(double lat, double lon, d
 }
 
 inline void CommandWidget::WatchdogThreadMain(void) {
-	double approxCheckPeriod  = 2.0; //seconds (doesn't impact abort latancy)
+	double approxCheckPeriod  = 0.25; //seconds (doesn't impact abort latancy)
 	
 	//Wait for DataTileProvider to initialize
 	while (Maps::DataTileProvider::Instance() == nullptr)
@@ -116,7 +116,7 @@ inline void CommandWidget::WatchdogThreadMain(void) {
 	
 	std::chrono::time_point<std::chrono::steady_clock> lastCheckTimepoint = std::chrono::steady_clock::now();
 	while (! m_watchdogThreadAbort) {
-		if (SecondsElapsed(lastCheckTimepoint, std::chrono::steady_clock::now()) >= approxCheckPeriod) {
+		if (SecondsElapsed(lastCheckTimepoint) >= approxCheckPeriod) {
 			//Get drone telemetry and check for hazards
 			std::scoped_lock lock(m_watchdowMutex);
 			
@@ -130,7 +130,7 @@ inline void CommandWidget::WatchdogThreadMain(void) {
 					continue;
 				bool isFlying;
 				DroneInterface::Drone::TimePoint T0;
-				if ((! drone->IsCurrentlyFlying(isFlying, T0)) || (SecondsElapsed(T0, std::chrono::steady_clock::now()) >= 5.0))
+				if ((! drone->IsCurrentlyFlying(isFlying, T0)) || (! isFlying) || (SecondsElapsed(T0, std::chrono::steady_clock::now()) >= 5.0))
 					continue;
 				drones.push_back(drone);
 			}
@@ -138,8 +138,76 @@ inline void CommandWidget::WatchdogThreadMain(void) {
 			//Initialize a vector to track which drones are in a hazardous state
 			std::vector<bool> hazardStates(drones.size(), false);
 			
-			//If enabled, check for violations of MSA and avoidance zones
+			//Check for violations of no-fly zones, avoidance zones, or min safe altitude rules. We look ahead of each drone based on it's
+			//current position and velocity vector so we can trigger a hazard state early enough to stop the drone before the violation.
 			if (m_CheckMSA || m_CheckAvoidanceZones) {
+				for (size_t n = 0U; n < drones.size(); n++) {
+					DroneInterface::Drone::TimePoint T0, T1;
+					double Latitude, Longitude, Altitude;
+					double V_North, V_East, V_Down;
+					if (drones[n]->GetPosition(Latitude, Longitude, Altitude, T0) && (SecondsElapsed(T0) < 5.0) &&
+					    drones[n]->GetVelocity(V_North, V_East, V_Down, T1)       && (SecondsElapsed(T1) < 5.0)) {
+						//We have up-to-date position and velocity for this drone
+						Eigen::Vector2d Position_NM = LatLonToNM(Eigen::Vector2d(Latitude, Longitude));
+						
+						double speed2D = std::sqrt(V_North*V_North + V_East*V_East);
+						double maxDecel = 2.5; //m/s/s - measured on Inspire 1
+						double stoppingDist = speed2D*speed2D / (2.0 * maxDecel); //m
+						double lookaheadDist = 1.25*stoppingDist;
+						double lookaheadDist_NM = MetersToNMUnits(lookaheadDist, Position_NM(1));
+						double sampleDist_NM = MetersToNMUnits(2.0, Position_NM(1));
+						int numberOfForwardSamples = int(std::round(lookaheadDist_NM / sampleDist_NM));
+						
+						std::Evector<Eigen::Vector2d> samplePoints_NM;
+						samplePoints_NM.push_back(Position_NM);
+						
+						Eigen::Vector2d V_NM(V_East, V_North);
+						if (V_NM.norm() > 1e-8) {
+							V_NM.normalize();
+							for (int n = 0; n < numberOfForwardSamples; n++)
+								samplePoints_NM.push_back(Position_NM + (n + 1)*sampleDist_NM*V_NM);
+							samplePoints_NM.push_back(Position_NM + lookaheadDist_NM*V_NM);
+						}
+						
+						double MSA;
+						double LandingZone;
+						double AvoidanceZone;
+						for (auto const & samplePoint_NM : samplePoints_NM) {
+							if (m_CheckMSA &&
+							    Maps::DataTileProvider::Instance()->TryGetData(samplePoint_NM, Maps::DataLayer::MinSafeAltitude, MSA) &&
+							    Maps::DataTileProvider::Instance()->TryGetData(samplePoint_NM, Maps::DataLayer::SafeLandingZones, LandingZone)) {
+								if (std::isnan(MSA)) {
+									std::cerr << "Hazard - Drone serial: " << drones[n]->GetDroneSerial() << " - No-fly zone violation.\r\n";
+									VehicleControlWidget::Instance().SetHazardCondition(drones[n]->GetDroneSerial(), m_pauseDronesOnMSAViolation);
+									hazardStates[n] = true;
+								}
+								else if ((Altitude < MSA) && (std::isnan(LandingZone) || (LandingZone < 0.5))) {
+									std::cerr << "Hazard - Drone serial: " << drones[n]->GetDroneSerial() << " - MSA violation.\r\n";
+									VehicleControlWidget::Instance().SetHazardCondition(drones[n]->GetDroneSerial(), m_pauseDronesOnMSAViolation);
+									hazardStates[n] = true;
+								}
+							}
+							if (m_CheckAvoidanceZones &&
+							    Maps::DataTileProvider::Instance()->TryGetData(samplePoint_NM, Maps::DataLayer::AvoidanceZones, AvoidanceZone)) {
+								if ((! std::isnan(AvoidanceZone)) && (AvoidanceZone >= 0.5)) {
+									std::cerr << "Hazard - Drone serial: " << drones[n]->GetDroneSerial() << " - avoidance zone violation.\r\n";
+									VehicleControlWidget::Instance().SetHazardCondition(drones[n]->GetDroneSerial(), false);
+									hazardStates[n] = true;
+								}
+							}
+							if (hazardStates[n]) {
+								double hazardDist = NMUnitsToMeters((samplePoint_NM - Position_NM).norm(), Position_NM(1));
+								std::cerr << "Hazard distance: " << hazardDist << " m (Lookahead is " << lookaheadDist << " m)\r\n";
+								break;
+							}
+						}
+					}
+				}
+			}
+			
+			//If enabled, check for violations of MSA and avoidance zones
+			//The commented out version here only checks the drones current location - it doesn't look ahead.
+			/*if (m_CheckMSA || m_CheckAvoidanceZones) {
 				for (size_t n = 0U; n < drones.size(); n++) {
 					DroneInterface::Drone::TimePoint T0;
 					double Latitude, Longitude, Altitude;
@@ -172,9 +240,13 @@ inline void CommandWidget::WatchdogThreadMain(void) {
 						}
 					}
 				}
-			}
+			}*/
 			
 			//If enabled, check for proximity violations
+			//TODO: For this to be useful, it really needs to look ahead in time like the checks above do. We could have a relative velocity of
+			//almost 70 mph with these drones... we can't wait until they are almost on top of each other to react.
+			//Also, our mitigation of stopping the drones may be a poor choice. It might be better to drop one in height and raise the other
+			//and have the drones dodge each other instead of trying to come to a full stop.
 			if (m_CheckVehicleProximity) {
 				for (size_t n = 0U; n < drones.size(); n++) {
 					DroneInterface::Drone::TimePoint T0;
@@ -223,7 +295,7 @@ inline void CommandWidget::WatchdogThreadMain(void) {
 			lastCheckTimepoint = std::chrono::steady_clock::now();
 		}
 		
-		std::this_thread::sleep_for(std::chrono::milliseconds(250));
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
 }
 

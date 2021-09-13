@@ -18,7 +18,8 @@ inline void getRefDescriptors(const cv::Mat& ref_color, cv::Mat& descriptors_ref
 	detector->detectAndCompute(img_ref, cv::noArray(), keypoints_ref, descriptors_ref); //remove. save descriptors_ref
 }
 
-
+//Note: This function is misleadingly named. estimateAffinePartial2D() estimates a 4DOF affine transformation that allows rotation, translation,
+//and uniform scaling. This is likily too general for image stabilization... rotation and translation only would be better.
 inline void getOrbRotation(const cv::Mat& descriptors_ref, const std::vector<cv::KeyPoint>& keypoints_ref, const cv::Mat& rot_color, cv::Mat& H) {
 	cv::Mat img_rot;
 	std::vector<cv::KeyPoint> keypoints_rot;

@@ -5,6 +5,7 @@
 
 //External Includes
 #include "../HandyImGuiInclude.hpp"
+#include <opencv2/core.hpp>
 
 //Project Includes
 #include "ReconUI.hpp"
@@ -159,18 +160,28 @@ inline void MainMenu::Draw() {
 						for (std::string serial : DroneSerialsWithDJICams) {
 							//std::string menuItemText = "Start using drone: "s + serial;
 							if (ImGui::MenuItem(("Start using drone: "s + serial).c_str())) {
-								//Start (or restart) the cam feed with the specified frame rate
+								//If the drone is simulated, load the ref frame and GCPs corresponding to the chosen video feed
+								//If the drone is real, launch the fiducial marking tool to select a reference frame and mark GCPs
 								DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(serial);
+								DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(drone);
+								if (mySimDrone != nullptr) {
+									std::filesystem::path datasetPath = mySimDrone->GetSourceVideoFile().parent_path();
+									cv::Mat refFrame = GetRefFrame(datasetPath);
+									std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> GCPs = LoadFiducialsFromFile(datasetPath);
+									ShadowDetection::ShadowDetectionEngine::Instance().SetReferenceFrame(refFrame);
+									ShadowDetection::ShadowDetectionEngine::Instance().SetFiducials(GCPs);
+								}
+								else {
+									//TODO - this tool doesn't exist yet
+								}
+								
+								//Start (or restart) the cam feed with the specified frame rate
 								if (drone->IsCamImageFeedOn())
 									drone->StopDJICamImageFeed();
 								drone->StartDJICamImageFeed(m_shadowDetectionModuleVidFeedFPS);
 								
 								//Instruct the shadow detection module to start (using this drone serial)
 								ShadowDetection::ShadowDetectionEngine::Instance().Start(serial);
-								
-								//TODO: Open a new tool for selecting a reference frame and maring fiducials
-								//This tool needs to call SetReferenceFrame() and SetFiducials() on the shadow detection engine
-								//in order to actually start that module processing.
 							}
 						}
 					}
@@ -193,6 +204,44 @@ inline void MainMenu::Draw() {
 				ImGui::EndMenu();
 			}
 			
+			ImGui::EndMenu();
+		}
+		
+		if (ImGui::BeginMenu("Simulator")) {
+			double PI = 3.14159265358979;
+			if (MyGui::MenuItem(u8"\uf04b", labelMargin, "Lamberton (1 Drone)")) {
+				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation A"s, Eigen::Vector3d(44.236124*PI/180.0, -95.308418*PI/180.0, 345.03));
+			}
+			if (MyGui::MenuItem(u8"\uf04b", labelMargin, "Lamberton (3 Drones)")) {
+				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation A"s, Eigen::Vector3d(44.236124*PI/180.0, -95.308418*PI/180.0, 345.03));
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation B"s, Eigen::Vector3d(44.236120*PI/180.0, -95.308018*PI/180.0, 345.03));
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation C"s, Eigen::Vector3d(44.236544*PI/180.0, -95.307398*PI/180.0, 345.03));
+			}
+			unsigned int NumSimDrones = DroneInterface::DroneManager::Instance().NumSimulatedDrones();
+			ImGui::Separator();
+			if (ImGui::BeginMenu("Start Waypoint Mission", (NumSimDrones > 0))) {
+				std::vector<std::string> serials = DroneInterface::DroneManager::Instance().GetConnectedDroneSerialNumbers();
+				for (auto const & serial : serials) {
+					DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(serial);
+					if (drone == nullptr)
+						continue;
+					DroneInterface::SimulatedDrone * simDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(drone);
+					if (simDrone == nullptr)
+						continue;
+					if (ImGui::BeginMenu(("Drone: "s + serial).c_str())) {
+						if (ImGui::MenuItem("Short Mission - Point 2 Point"))
+							simDrone->StartSampleWaypointMission(10, false, false, Eigen::Vector2d(5.0, 50.0), 30.0);
+						if (ImGui::MenuItem("Short Mission - Round Corners"))
+							simDrone->StartSampleWaypointMission(10, true, false, Eigen::Vector2d(5.0, 50.0), 30.0);
+						ImGui::EndMenu();
+					}
+				}
+				ImGui::EndMenu();
+			}
+			if (MyGui::MenuItem(u8"\uf04d", labelMargin, "End Simulation (Destroy all sim drones)", NULL, false, (NumSimDrones > 0)))
+				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
 			ImGui::EndMenu();
 		}
 		

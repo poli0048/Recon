@@ -2,17 +2,6 @@
 #Author: Bryan Poling
 #Copyright (c) 2020 Sentek Systems, LLC. All rights reserved. 
 
-#Note: We have a problem where we occasionally segfault on program exit. This happens even with libtorch and serial removed from the project,
-#      which means the issue has been there for some time (these are the 2 most recently added libraries) but I missed this behavior because
-#      it happens so rarely and has so few consequences. The stack trace is not especially useful - the segfault originates from a thread that
-#      GDB can't detirmine the origins of; all we can see is that it happens in pthread_mutex_lock somewhere in libusb-1.0.so. Since we are
-#      not using libusb in our project and we are not linking against it, this is somewhat of a mystery. I can only guess that one of the
-#      openCV modules is pulling this in via the dynamic loader at runtime... probably to support things like USB cameras. None of the other
-#      dependencies would have any business whatsoever pulling in libusb, so this seems like the best bet. The best course of action here is
-#      probably to build the latest version of OpenCV 4 and make whatever changes are needed to migrate to that. If the problem is still there,
-#      we can make a debug build of OpenCV and see if the stack trace is any more helpful. For now, since there are so few consequences, we
-#      are going to ignore this issue.
-
 CC = gcc
 #CC = g++
 #CC = clang++-3.5
