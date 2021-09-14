@@ -55,6 +55,7 @@ namespace DroneInterface {
         //Drone live video access - The mobile client should decode the live video feed and extract every N'th frame and send it to the server.
         //N should be detirmined when StartDJICamImageFeed() is called in order to achieve the given frame rate as closely as possible.
         //There is a frame counter that starts at 0 and increments each time a new frame is received by the server.
+        //If it is important that no frames ever be missed (e.g. for feeding into LSTM), you should use the callback system.
         virtual bool IsDJICamConnected(void) = 0; //Should be available when drone is ready
         virtual bool IsCamImageFeedOn(void) = 0; //True if receiving imagery from drone, false otherwise (valid when drone is ready)
         virtual void StartDJICamImageFeed(double TargetFPS) = 0; //Start sending frames of live video (as close as possible to the given framerate (frame / s))
@@ -134,9 +135,6 @@ namespace DroneInterface {
         void SendTestVirtualStickPacketB();
 
     private:
-        //Some modules that use imagery can't handle missing frames gracefully. Thus, we use provide a callback mechanism to ensure that such a module
-        //can have a guarantee that each frame received by the drone interface module will be provided downstream. See field m_ImageryCallbacks
-
         tacopie::tcp_client * m_client;
         std::vector<uint8_t> m_buffer; //Only used in DataReceivedHandler
 
@@ -176,16 +174,15 @@ namespace DroneInterface {
         WaypointMission m_currentWaypointMission;
     };
 
-    //The SimulatedDrone class provides an interface to interact with a single virtual/simulated drone
-    //Note: Right now the simulated drone is very dumb... we don't pretend to fly missions or send warnings or any of the other
-    //standard things one might expect of a simulated drone. We just mimic a drone in a stationary hover (P mode) over a fixed
-    //point in Lamberton, MN. We do provide meaningful implementations of all image-related functions however, so the simulated
-    //drone can be used to test anything involving live drone imagery. Imagery is pulled from a video file and dispatched either
-    //at real-time speed or as fast as possible, depending on configuration.
+    //The SimulatedDrone class provides an interface to interact with a single virtual/simulated drone.
+    //Imagery is pulled from a video file and dispatched either at real-time speed or as fast as possible, depending on the configuration.
+    //Simulated drones should pretty much work in all supported modes and their dynamics are based on the DJI Inspire 2.
+    //The one notable exception is that we don't simulate the drones smart RTL functionality and they won't auto-land on critical battery.
+    //The battery level will just sit at 0 and the drone will continue to fly normally. This was deliberate to avoid practical limitations
+    //from hindering the testing and development of guidance algorithms.
     class SimulatedDrone : public Drone {
     public:
         SimulatedDrone();
-        SimulatedDrone(std::string Serial);
         SimulatedDrone(std::string Serial, Eigen::Vector3d const & Position_LLA); //Position is Lat (rad), Lon (rad), Alt (m)
         ~SimulatedDrone();
 
@@ -233,9 +230,8 @@ namespace DroneInterface {
         static bool Resize_4K_to_720p(cv::Mat & Frame); //Drop a 4K m_frame down to 720p
         
         void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG);
+   
     private:
-        //Some modules that use imagery can't handle missing frames gracefully. Thus, we use provide a callback mechanism to ensure that such a module
-        //can have a guarantee that each frame received by the drone interface module will be provided downstream.
         std::unordered_map<int, std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)>> m_ImageryCallbacks;
 
         std::thread       m_MainThread;
@@ -258,9 +254,14 @@ namespace DroneInterface {
         double m_groundAlt; //(m)
         
         double m_HomeLat, m_HomeLon;
+        double m_battLevel;
         int m_targetWaypoint = -1; //Next waypoint (when in waypoint mission mode)
-        int m_waypointMissionState = -1; //0=takeoff, 1=goto waypoint, 2=pause at waypoint, 3=turning at waypoint
+        //We use m_waypointMissionState to track a state machine that governs the drones behavior in a waypoint mission
+        //States: 0=takeoff, 1=goto waypoint (P2P), 2=pause at waypoint (P2P), 3=turning at waypoint (P2P),
+        //        4=goto waypoint (curved), 5=turn through waypoint (curved)
+        int m_waypointMissionState = -1;
         TimePoint m_arrivalAtWaypoint_Timestamp;
+        double m_turningSpeedThroughWaypoint;
         VirtualStickCommand_ModeA m_LastVSCommand_ModeA;
         VirtualStickCommand_ModeB m_LastVSCommand_ModeB;
         TimePoint m_LastVSCommand_ModeA_Timestamp;

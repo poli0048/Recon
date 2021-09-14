@@ -69,6 +69,9 @@ namespace DroneInterface {
 		m_HomeLat = Position_LLA(0);
 		m_HomeLon = Position_LLA(1);
 		
+		//Start with a full battery
+		m_battLevel = 1.0;
+		
 		//Drone initialized with position will initially be on the ground
 		m_flightMode = 0;
 		
@@ -78,95 +81,6 @@ namespace DroneInterface {
 		m_LastVSCommand_ModeA_Timestamp = std::chrono::steady_clock::now();
 		m_LastVSCommand_ModeB_Timestamp = std::chrono::steady_clock::now();
 		m_LastPoseUpdate = std::chrono::steady_clock::now();
-	}
-	
-	SimulatedDrone::SimulatedDrone(std::string Serial) : SimulatedDrone() {
-		std::scoped_lock lock(m_mutex);
-		
-		m_serial = Serial; //Save Serial String
-		
-		//Set position
-		m_Lat = 0.7720877065630863;
-		m_Lon = -1.663401472323783;
-		m_Alt = 466.0;
-		
-		//Set velocity
-		m_V_North = 0.0;
-		m_V_East  = 0.0;
-		m_V_Down  = 0.0;
-		
-		//Set up a waypoint mission that we can pretend to be flying
-		m_LastMission.Waypoints.clear();
-		m_LastMission.Waypoints.emplace_back();
-		m_LastMission.Waypoints.back().Latitude     =  44.237308 * PI/180.0; // radians
-		m_LastMission.Waypoints.back().Longitude    = -95.307433 * PI/180.0; // radians
-		m_LastMission.Waypoints.back().Altitude     =  466.0; // m
-		m_LastMission.Waypoints.back().CornerRadius =  0.0f;  // m (Not used since we aren't using curved trajectories)
-		m_LastMission.Waypoints.back().Speed        =  9.5f;  // m/s
-		m_LastMission.Waypoints.back().LoiterTime   = std::nanf("");
-		m_LastMission.Waypoints.back().GimbalPitch  = std::nanf("");
-		
-		m_LastMission.Waypoints.emplace_back();
-		m_LastMission.Waypoints.back().Latitude     =  44.237308 * PI/180.0; // radians
-		m_LastMission.Waypoints.back().Longitude    = -95.309309 * PI/180.0; // radians
-		m_LastMission.Waypoints.back().Altitude     =  466.0; // m
-		m_LastMission.Waypoints.back().CornerRadius = 0.0f;   // m (Not used since we aren't using curved trajectories)
-		m_LastMission.Waypoints.back().Speed        = 9.5f;   // m/s
-		m_LastMission.Waypoints.back().LoiterTime   = std::nanf("");
-		m_LastMission.Waypoints.back().GimbalPitch  = std::nanf("");
-		
-		m_LastMission.Waypoints.emplace_back();
-		m_LastMission.Waypoints.back().Latitude     =  44.237819 * PI/180.0; // radians
-		m_LastMission.Waypoints.back().Longitude    = -95.309309 * PI/180.0; // radians
-		m_LastMission.Waypoints.back().Altitude     =  466.0; // m
-		m_LastMission.Waypoints.back().CornerRadius = 0.0f;   // m (Not used since we aren't using curved trajectories)
-		m_LastMission.Waypoints.back().Speed        = 9.5f;   // m/s
-		m_LastMission.Waypoints.back().LoiterTime   = std::nanf("");
-		m_LastMission.Waypoints.back().GimbalPitch  = std::nanf("");
-		
-		m_LastMission.Waypoints.emplace_back();
-		m_LastMission.Waypoints.back().Latitude     =  44.237819 * PI/180.0; // radians
-		m_LastMission.Waypoints.back().Longitude    = -95.307433 * PI/180.0; // radians
-		m_LastMission.Waypoints.back().Altitude     =  466.0; // m
-		m_LastMission.Waypoints.back().CornerRadius = 0.0f;   // m (Not used since we aren't using curved trajectories)
-		m_LastMission.Waypoints.back().Speed        = 9.5f;   // m/s
-		m_LastMission.Waypoints.back().LoiterTime   = std::nanf("");
-		m_LastMission.Waypoints.back().GimbalPitch  = std::nanf("");
-		
-		m_LastMission.Waypoints.emplace_back();
-		m_LastMission.Waypoints.back().Latitude     =  44.238344 * PI/180.0; // radians
-		m_LastMission.Waypoints.back().Longitude    = -95.307433 * PI/180.0; // radians
-		m_LastMission.Waypoints.back().Altitude     =  466.0; // m
-		m_LastMission.Waypoints.back().CornerRadius = 0.0f;   // m (Not used since we aren't using curved trajectories)
-		m_LastMission.Waypoints.back().Speed        = 9.5f;   // m/s
-		m_LastMission.Waypoints.back().LoiterTime   = std::nanf("");
-		m_LastMission.Waypoints.back().GimbalPitch  = std::nanf("");
-		
-		m_LastMission.Waypoints.emplace_back();
-		m_LastMission.Waypoints.back().Latitude     =  44.238344 * PI/180.0; // radians
-		m_LastMission.Waypoints.back().Longitude    = -95.309309 * PI/180.0; // radians
-		m_LastMission.Waypoints.back().Altitude     =  466.0; // m
-		m_LastMission.Waypoints.back().CornerRadius = 0.0f; // m (Not used since we aren't using curved trajectories)
-		m_LastMission.Waypoints.back().Speed        = 9.5f; // m/s
-		m_LastMission.Waypoints.back().LoiterTime   = std::nanf("");
-		m_LastMission.Waypoints.back().GimbalPitch  = std::nanf("");
-		
-		m_LastMission.LandAtLastWaypoint = false;
-		m_LastMission.CurvedTrajectory = false;
-		
-		m_flightMode = 2;
-		
-		//For drones B and C, shift position and waypoint mission so the drones aren't all piled up on each other
-		if (Serial == "Simulation B"s) {
-			m_Lat += 0.00001;
-			for (auto & waypoint : m_LastMission.Waypoints)
-				waypoint.Longitude += 0.0001;
-		}
-		else if (Serial == "Simulation C"s) {
-			m_Lat -= 0.00001;
-			for (auto & waypoint : m_LastMission.Waypoints)
-				waypoint.Latitude -= 0.00005;
-		}
 	}
 	
 	SimulatedDrone::~SimulatedDrone() {
@@ -231,10 +145,9 @@ namespace DroneInterface {
 	}
 	
 	//Drone Battery level (0 = Empty, 1 = Full)
-	//TODO: Update
 	bool SimulatedDrone::GetVehicleBatteryLevel(double & BattLevel, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
-		BattLevel = 0.76;
+		BattLevel = m_battLevel;
 		//BattLevel = 0.19;
 		Timestamp = std::chrono::steady_clock::now();
 		return true;
@@ -462,8 +375,12 @@ namespace DroneInterface {
 		//Set state to takeoff if necessary. Just go to first waypoint if already in the air
 		if (m_flightMode == 0)
 			m_waypointMissionState = 0;
-		else
-			m_waypointMissionState = 1;
+		else {
+			if (m_LastMission.CurvedTrajectory)
+				m_waypointMissionState = 4;
+			else
+				m_waypointMissionState = 1;
+		}
 		m_targetWaypoint = 0;
 		m_flightMode = 2;
 	}
@@ -733,6 +650,10 @@ namespace DroneInterface {
 		double deltaT = SecondsElapsed(m_LastPoseUpdate, now); 
 		m_LastPoseUpdate = now;
 		
+		//Update drone battery level
+		double dischargeRate = (m_flightMode > 0) ? 7.2464e-04 : 1.5e-04; //Units per second
+		m_battLevel = std::max(m_battLevel - deltaT * dischargeRate, 0.0);
+		
 		//First update 2D position (all flying modes)
 		if (m_flightMode > 0)
 			UpdateDrone2DPositionBasedOnVelocity(deltaT, C_ENU_ECEF);
@@ -742,11 +663,7 @@ namespace DroneInterface {
 			Update2DVelocityBasedOnTarget(deltaT, Eigen::Vector2d(0.0, 0.0), max2DAcc, max2DDec, max2DSpeed);
 		}
 		if (m_flightMode == 2) {
-			//Currently flying a waypoint mission
-			//std::cerr << "m_flightMode: " << m_flightMode << "\r\n";
-			//std::cerr << "m_waypointMissionState: " << m_waypointMissionState << "\r\n";
-			
-			//TODO
+			//Currently flying a waypoint mission - this is a big state machine that depends on m_targetWaypoint and m_waypointMissionState
 			if ((m_targetWaypoint < 0) || (m_targetWaypoint >= (int) m_LastMission.Waypoints.size())) {
 				//The waypoint is invalid or the mission is over
 				if (m_LastMission.LandAtLastWaypoint)
@@ -759,11 +676,15 @@ namespace DroneInterface {
 				double targetHAG = m_LastMission.Waypoints[0].Altitude - m_groundAlt;
 				UpdateDroneVertChannelBasedOnTargetHAG(deltaT, targetHAG, climbRate, descentRate);
 				Update2DVelocityBasedOnTarget(deltaT, Eigen::Vector2d(0.0, 0.0), max2DAcc, max2DDec, max2DSpeed);
-				if (fabs(m_LastMission.Waypoints[0].Altitude - m_Alt) < 0.5)
-					m_waypointMissionState = 1;
+				if (fabs(m_LastMission.Waypoints[0].Altitude - m_Alt) < 0.5) {
+					if (m_LastMission.CurvedTrajectory)
+						m_waypointMissionState = 4;
+					else
+						m_waypointMissionState = 1;
+				}
 			}
 			else if (m_waypointMissionState == 1) {
-				//Goto waypoint
+				//Goto waypoint (P2P)
 				Waypoint const & waypoint(m_LastMission.Waypoints[m_targetWaypoint]);
 				UpdateDroneVertChannelBasedOnTargetHAG(deltaT, waypoint.Altitude - m_groundAlt, climbRate, descentRate);
 				
@@ -782,31 +703,21 @@ namespace DroneInterface {
 				}
 				
 				//Detirmine when we have reached the waypoint and update state accordingly
-				if (m_LastMission.CurvedTrajectory) {
-					Eigen::Vector3d P1 = LLA2ECEF(Eigen::Vector3d(m_Lat, m_Lon, m_Alt));
-					Eigen::Vector3d P2 = LLA2ECEF(Eigen::Vector3d(waypoint.Latitude, waypoint.Longitude, m_Alt));
-					if ((P2 - P1).norm() < std::max((double) waypoint.CornerRadius, 0.25)) {
-						//We are close enough to start heading to the next waypoint
-						m_targetWaypoint++;
-					}
-				}
-				else {
-					Eigen::Vector3d P1 = LLA2ECEF(Eigen::Vector3d(m_Lat, m_Lon, m_Alt));
-					Eigen::Vector3d P2 = LLA2ECEF(Eigen::Vector3d(waypoint.Latitude, waypoint.Longitude, m_Alt));
-					if ((P2 - P1).norm() < 0.25) {
-						m_waypointMissionState = 2;
-						m_arrivalAtWaypoint_Timestamp = std::chrono::steady_clock::now();
-					}
+				Eigen::Vector3d P1 = LLA2ECEF(Eigen::Vector3d(m_Lat, m_Lon, m_Alt));
+				Eigen::Vector3d P2 = LLA2ECEF(Eigen::Vector3d(waypoint.Latitude, waypoint.Longitude, m_Alt));
+				if ((P2 - P1).norm() < 0.25) {
+					m_waypointMissionState = 2;
+					m_arrivalAtWaypoint_Timestamp = std::chrono::steady_clock::now();
 				}
 			}
 			else if (m_waypointMissionState == 2) {
-				//Pause at waypoint
+				//Pause at waypoint (P2P)
 				Update2DVelocityBasedOnTarget(deltaT, Eigen::Vector2d(0.0, 0.0), max2DAcc, max2DDec, max2DSpeed);
 				if (SecondsElapsed(m_arrivalAtWaypoint_Timestamp) > 2.0)
 					m_waypointMissionState = 3;
 			}
 			else if (m_waypointMissionState == 3) {
-				//turning at waypoint
+				//turning at waypoint (P2P)
 				if (m_targetWaypoint + 1 >= (int) m_LastMission.Waypoints.size()) {
 					//We are at the last waypoint
 					if (m_LastMission.LandAtLastWaypoint)
@@ -835,6 +746,80 @@ namespace DroneInterface {
 					}
 				}
 				
+			}
+			else if (m_waypointMissionState == 4) {
+				//Goto waypoint (curved)
+				Waypoint const & waypoint(m_LastMission.Waypoints[m_targetWaypoint]);
+				UpdateDroneVertChannelBasedOnTargetHAG(deltaT, waypoint.Altitude - m_groundAlt, climbRate, descentRate);
+				
+				double speed = 0.0; //m/s
+				if (m_targetWaypoint == 0)
+					speed = m_LastMission.Waypoints[0].Speed;
+				else
+					speed = m_LastMission.Waypoints[m_targetWaypoint - 1].Speed;
+				Eigen::Vector2d V_Target_EN;
+				ComputeTarget2DVelocityBasedOnTargetPosAndSpeed(waypoint.Latitude, waypoint.Longitude, speed, V_Target_EN, C_ECEF_ENU);
+				Update2DVelocityBasedOnTarget(deltaT, V_Target_EN, max2DAcc, max2DDec, max2DSpeed);
+				
+				if (V_Target_EN.norm() > 0.1) {
+					double targetYaw = std::atan2(V_Target_EN(0), V_Target_EN(1));
+					UpdateDroneOrientationBasedOnYawTarget(deltaT, targetYaw, turnRate);
+				}
+				
+				//When we get close enough to the waypoint change modes
+				Eigen::Vector3d P1 = LLA2ECEF(Eigen::Vector3d(m_Lat, m_Lon, m_Alt));
+				Eigen::Vector3d P2 = LLA2ECEF(Eigen::Vector3d(waypoint.Latitude, waypoint.Longitude, m_Alt));
+				if (m_targetWaypoint + 1 >= (int) m_LastMission.Waypoints.size()) {
+					//We are at the last waypoint
+					if ((P2 - P1).norm() < 0.25)
+						m_targetWaypoint++; //This will trigger the mission ending on next pass through loop
+				}
+				else {
+					if ((P2 - P1).norm() < std::max((double) waypoint.CornerRadius, 0.25)) {
+						m_waypointMissionState = 5;
+						m_turningSpeedThroughWaypoint = std::sqrt(m_V_North*m_V_North + m_V_East*m_V_East);
+					}
+				}
+			}
+			else if (m_waypointMissionState == 5) {
+				//turn through waypoint (curved)
+				Waypoint const & waypoint(m_LastMission.Waypoints[m_targetWaypoint]);
+				Waypoint const & nextWaypoint(m_LastMission.Waypoints[m_targetWaypoint + 1]); //We should never be in this state for the last waypoint
+				
+				//Computing the actual ideal arc to follow is overkill here. Instead, we aim for a point between the current waypoint
+				//and the next one (a distance of CornerRadius away from the current waypoint) and update our orientation to point
+				//between the waypoints. We allow for above-limit accel/decel to reduce overshoot and when we transition states to
+				//head to the next waypoint we kill off any velocity that is orthogonal to the line between the waypoints. This
+				//fully eliminates overshoot. Technically we are breaking the laws of physics here (which we already do with the vertical
+				//channel and orientation) but the violation is relatively minor and gives very realistic looking trajectories.
+				
+				Eigen::Vector3d P1_ECEF = LLA2ECEF(Eigen::Vector3d(waypoint.Latitude, waypoint.Longitude, m_Alt));
+				Eigen::Vector3d P2_ECEF = LLA2ECEF(Eigen::Vector3d(nextWaypoint.Latitude, nextWaypoint.Longitude, m_Alt));
+				Eigen::Vector3d V_ECEF = P2_ECEF - P1_ECEF;
+				V_ECEF.normalize();
+				Eigen::Vector3d V_ENU = C_ECEF_ENU * V_ECEF;
+				Eigen::Vector3d P3_ECEF = P1_ECEF + waypoint.CornerRadius * V_ECEF;
+				Eigen::Vector3d Target_LLA = ECEF2LLA(P3_ECEF);
+				
+				Eigen::Vector2d V_Target_EN;
+				ComputeTarget2DVelocityBasedOnTargetPosAndSpeed(Target_LLA(0), Target_LLA(1), m_turningSpeedThroughWaypoint, V_Target_EN, C_ECEF_ENU);
+				Update2DVelocityBasedOnTarget(deltaT, V_Target_EN, 2.0*max2DAcc, 2.0*max2DDec, max2DSpeed);
+				
+				if (V_ENU.norm() > 0.1) {
+					double targetYaw = std::atan2(V_ENU(0), V_ENU(1));
+					UpdateDroneOrientationBasedOnYawTarget(deltaT, targetYaw, turnRate);
+				}
+				
+				Eigen::Vector3d currentVel_ENU(m_V_East, m_V_North, -1.0*m_V_Down);
+				Eigen::Vector3d orthVel = currentVel_ENU - currentVel_ENU.dot(V_ENU)*V_ENU;
+				if (orthVel.norm() < 0.25 * m_turningSpeedThroughWaypoint) {
+					currentVel_ENU = currentVel_ENU.dot(V_ENU)*V_ENU;
+					m_V_North = currentVel_ENU(1);
+					m_V_East  = currentVel_ENU(0);
+					m_V_Down  = -1.0*currentVel_ENU(2);
+					m_waypointMissionState = 4;
+					m_targetWaypoint++;
+				}
 			}
 			
 		}

@@ -26,8 +26,6 @@
 #include "../DJI-Drone-Interface/DroneManager.hpp"
 #include "ocam_utils.h"
 
-//TODO: Just discovered that the main thread is holding onto the mutex way too long... locking up the UI when running.
-
 namespace ShadowDetection {
 	using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 	
@@ -35,7 +33,7 @@ namespace ShadowDetection {
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 			
-			cv::Mat Map;           //fixed-size (512 x 512) shadow map image. Use uint8_t type with 0-127 = unshadowed, and 128-256 = shadowed
+			cv::Mat Map;           //fixed-size (512 x 512) shadow map image. Use uint8_t type with 0-127 = unshadowed, and 128-254 = shadowed, 255 = Masked
 			Eigen::Vector2d UL_LL; //(Latitude, Longitude) of center of upper-left pixel, in radians
 			Eigen::Vector2d UR_LL; //(Latitude, Longitude) of center of upper-right pixel, in radians
 			Eigen::Vector2d LL_LL; //(Latitude, Longitude) of center of lower-left pixel, in radians
