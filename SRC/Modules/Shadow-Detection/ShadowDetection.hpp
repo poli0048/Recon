@@ -105,7 +105,7 @@ namespace ShadowDetection {
 				m_engineThread = std::thread(&ShadowDetectionEngine::ModuleMain, this);
 			}
 			~ShadowDetectionEngine() {
-				Stop();
+				//Don't call Stop() since this unregisters a callback with the shadow detection module, which may already be destroyed.
 				m_abort = true;
 				if (m_engineThread.joinable())
 					m_engineThread.join();

@@ -26,29 +26,33 @@ class VisWidget {
 	public:
 		static VisWidget & Instance() { static VisWidget Widget; return Widget; }
 		
-		bool LayerVisible_MSA = false;
-		bool LayerVisible_AvoidanceZones = false;
-		bool LayerVisible_SafeLandingZones = false;
-		bool LayerVisible_SurveyRegion = false;
-		bool LayerVisible_GuidanceOverlay = false;
+		bool LayerVisible_MSA;
+		bool LayerVisible_AvoidanceZones;
+		bool LayerVisible_SafeLandingZones;
+		bool LayerVisible_SurveyRegion;
+		bool LayerVisible_GuidanceOverlay;
+		bool LayerVisible_ShadowMapOverlay;
 		
 		//All opacities are in the range 0 to 100
-		float Opacity_MSA = 100.0f;
-		float Opacity_AvoidanceZones = 100.0f;
-		float Opacity_SafeLandingZones = 100.0f;
-		float Opacity_SurveyRegion = 100.0f;
-		float Opacity_GuidanceOverlay = 100.0f;
+		float Opacity_MSA;
+		float Opacity_AvoidanceZones;
+		float Opacity_SafeLandingZones;
+		float Opacity_SurveyRegion;
+		float Opacity_GuidanceOverlay;
+		float Opacity_ShadowMapOverlay;
 		
-		float MSA_CmapMinVal = 0.0f;   //MSA corresponding to low end of colormap (m)
-		float MSA_CmapMaxVal = 400.0f; //MSA corresponding to high end of colormap (m)
-		int   MSA_NoFlyDrawMode = 0;   //0 = Transparrent, 1 = Red Stripes
+		float MSA_CmapMinVal;    //MSA corresponding to low end of colormap (m)
+		float MSA_CmapMaxVal;    //MSA corresponding to high end of colormap (m)
+		int   MSA_NoFlyDrawMode; //0 = Transparrent, 1 = Red Stripes
 		
-		std::array<float, 3> SurveyRegionColor = {0.0f, 0.0f, 0.8f}; //RGB in range 0 to 1
-		float SurveyRegionVertexRadius = 5.0f;  //Vertex radius (in pixels) when editing.
-		float SurveyRegionEdgeThickness = 3.0f; //Edge thickness (in pixels) when editing.
+		std::array<float, 3> SurveyRegionColor; //RGB in range 0 to 1
+		float SurveyRegionVertexRadius;         //Vertex radius (in pixels) when editing.
+		float SurveyRegionEdgeThickness;        //Edge thickness (in pixels) when editing.
 		
-		bool GuidanceOverlay_ShowMessageBox = true;
-		bool GuidanceOverlay_ShowTrianglesInsteadOfPartition = false;
+		bool GuidanceOverlay_ShowMessageBox;
+		bool GuidanceOverlay_ShowTrianglesInsteadOfPartition;
+		
+		std::array<float, 3> ShadowMapColor; //RGB in range 0 to 1
 		
 		//Constructors and Destructors
 		VisWidget() : Log(*(ReconUI::Instance().Log)) { LoadDefaults(); LoadFromDisk(); }
@@ -63,11 +67,13 @@ class VisWidget {
 			        CEREAL_NVP(LayerVisible_SafeLandingZones),
 			        CEREAL_NVP(LayerVisible_SurveyRegion),
 			        CEREAL_NVP(LayerVisible_GuidanceOverlay),
+			        CEREAL_NVP(LayerVisible_ShadowMapOverlay),
 			        CEREAL_NVP(Opacity_MSA),
 			        CEREAL_NVP(Opacity_AvoidanceZones),
 			        CEREAL_NVP(Opacity_SafeLandingZones),
 			        CEREAL_NVP(Opacity_SurveyRegion),
 			        CEREAL_NVP(Opacity_GuidanceOverlay),
+			        CEREAL_NVP(Opacity_ShadowMapOverlay),
 			        CEREAL_NVP(MSA_CmapMinVal),
 			        CEREAL_NVP(MSA_CmapMaxVal),
 			        CEREAL_NVP(MSA_NoFlyDrawMode),
@@ -75,7 +81,8 @@ class VisWidget {
 			        CEREAL_NVP(SurveyRegionVertexRadius),
 			        CEREAL_NVP(SurveyRegionEdgeThickness),
 			        CEREAL_NVP(GuidanceOverlay_ShowMessageBox),
-			        CEREAL_NVP(GuidanceOverlay_ShowTrianglesInsteadOfPartition));
+			        CEREAL_NVP(GuidanceOverlay_ShowTrianglesInsteadOfPartition),
+			        CEREAL_NVP(ShadowMapColor));
 		}
 	
 	private:
@@ -125,17 +132,19 @@ inline void VisWidget::LoadFromDisk(void) {
 
 //Set all parameters to defaults (good fallback if file loading fails)
 inline void VisWidget::LoadDefaults(void) {
-	LayerVisible_MSA = false;
-	LayerVisible_AvoidanceZones = false;
+	LayerVisible_MSA              = false;
+	LayerVisible_AvoidanceZones   = false;
 	LayerVisible_SafeLandingZones = false;
-	LayerVisible_SurveyRegion = false;
-	LayerVisible_GuidanceOverlay = false;
+	LayerVisible_SurveyRegion     = false;
+	LayerVisible_GuidanceOverlay  = false;
+	LayerVisible_ShadowMapOverlay = false;
 	
-	Opacity_MSA = 100.0f;
-	Opacity_AvoidanceZones = 100.0f;
+	Opacity_MSA              = 100.0f;
+	Opacity_AvoidanceZones   = 100.0f;
 	Opacity_SafeLandingZones = 100.0f;
-	Opacity_SurveyRegion = 100.0f;
-	Opacity_GuidanceOverlay = 100.0f;
+	Opacity_SurveyRegion     = 100.0f;
+	Opacity_GuidanceOverlay  = 100.0f;
+	Opacity_ShadowMapOverlay = 100.0f;
 	
 	MSA_CmapMinVal = 0.0f;
 	MSA_CmapMaxVal = 400.0f;
@@ -147,6 +156,8 @@ inline void VisWidget::LoadDefaults(void) {
 	
 	GuidanceOverlay_ShowMessageBox = true;
 	GuidanceOverlay_ShowTrianglesInsteadOfPartition = false;
+	
+	ShadowMapColor = {0.4f, 0.4f, 0.7f};
 }
 
 //Make sure all vis parameters are reasonable
@@ -156,6 +167,7 @@ inline void VisWidget::SanitizeState(void) {
 	Opacity_SafeLandingZones = std::max(std::min(Opacity_SafeLandingZones, 100.0f), 0.0f);
 	Opacity_SurveyRegion     = std::max(std::min(Opacity_SurveyRegion,     100.0f), 0.0f);
 	Opacity_GuidanceOverlay  = std::max(std::min(Opacity_GuidanceOverlay,  100.0f), 0.0f);
+	Opacity_ShadowMapOverlay = std::max(std::min(Opacity_ShadowMapOverlay, 100.0f), 0.0f);
 	
 	MSA_CmapMinVal = std::max(std::min(MSA_CmapMinVal, 10000.0f), -1000.0f);
 	MSA_CmapMaxVal = std::max(std::min(MSA_CmapMaxVal, 10000.0f), -1000.0f);
@@ -166,6 +178,10 @@ inline void VisWidget::SanitizeState(void) {
 	SurveyRegionColor[2] = std::max(std::min(SurveyRegionColor[2], 1.0f), 0.0f);
 	SurveyRegionVertexRadius = std::max(std::min(SurveyRegionVertexRadius, 20.0f), 1.0f);
 	SurveyRegionEdgeThickness = std::max(std::min(SurveyRegionEdgeThickness, 10.0f), 1.0f);
+	
+	ShadowMapColor[0] = std::max(std::min(ShadowMapColor[0], 1.0f), 0.0f);
+	ShadowMapColor[1] = std::max(std::min(ShadowMapColor[1], 1.0f), 0.0f);
+	ShadowMapColor[2] = std::max(std::min(ShadowMapColor[2], 1.0f), 0.0f);
 }
 
 inline void VisWidget::Draw() {
@@ -334,9 +350,32 @@ inline void VisWidget::Draw() {
 			if (ImGui::RadioButton("##Show Decomposition ", GuidanceOverlay_ShowTrianglesInsteadOfPartition))
 				GuidanceOverlay_ShowTrianglesInsteadOfPartition = true;
 			
-			//ImGui::TextUnformatted("Show Triangles ");
-			//ImGui::SameLine(col2Start);
-			//ImGui::Checkbox("##Show Triangulation", &GuidanceOverlay_ShowTrianglesInsteadOfPartition);
+			ImGui::EndPopup();
+		}
+	}
+	
+	ImGui::TextUnformatted("Shadow Map Overlay");
+	ImGui::SameLine(checkBoxXPos);
+	ImGui::Checkbox("##Shadow Map Overlay", &LayerVisible_ShadowMapOverlay);
+	ImGui::SameLine(settingsButtonXPos);
+	if (ImGui::Button("\uf013##Shadow Map Overlay Settings"))
+		ImGui::OpenPopup("Shadow Map Overlay Settings");
+	{
+		ImExt::Style styleSitter(StyleVar::WindowPadding, Math::Vector2(4.0f));
+		if (ImGui::BeginPopup("Shadow Map Overlay Settings", ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize)) {
+			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Opacity  ").x;
+			std::string label = "Opacity  "s;
+			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
+			ImGui::TextUnformatted(label.c_str());
+			ImGui::SameLine(col2Start);
+			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
+			ImGui::SliderFloat("##Opacity_ShadowMapOverlay", &Opacity_ShadowMapOverlay, 0.0f, 100.0f, "%.0f");
+			
+			label = "Color "s;
+			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
+			ImGui::TextUnformatted(label.c_str());
+			ImGui::SameLine(col2Start);
+			ImGui::ColorEdit3("##ShadowMapColor", &(ShadowMapColor[0]), ImGuiColorEditFlags_NoInputs);
 			
 			ImGui::EndPopup();
 		}

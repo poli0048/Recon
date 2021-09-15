@@ -185,25 +185,26 @@ namespace DroneInterface {
 			
 			//Simulated drones are initialized in a not-flying state at ground level. Hence, the provided
 			//initial location should be at ground level. Position is Lat (rad), Lon (rad), Alt (m).
-			inline void AddSimulatedDrone(std::string Serial, Eigen::Vector3d const & Position_LLA) {
+			inline SimulatedDrone * AddSimulatedDrone(std::string Serial, Eigen::Vector3d const & Position_LLA) {
 				std::scoped_lock lock(m_mutex);
 				
 				if (Serial.empty()) {
 					std::cerr << "Can't add sim drone with empty serial number.\r\n";
-					return;
+					return nullptr;
 				}
 				if (m_simulatedDrones.count(Serial) > 0U) {
 					std::cerr << "Failed to add sim drone because another sim drone exists with the same serial number.\r\n";
-					return;
+					return nullptr;
 				}
 				for (RealDrone * drone : m_droneRealVector) {
 					if (drone->GetDroneSerial() == Serial) {
 						std::cerr << "Failed to add sim drone because a real drone has the same serial number.\r\n";
-						return;
+						return nullptr;
 					}
 				}
 				SimulatedDrone * simDrone = new SimulatedDrone(Serial, Position_LLA);
 				m_simulatedDrones[Serial].reset(simDrone);
+				return simDrone;
 			}
 			
 			inline void ClearSimulatedDrones(void) {
