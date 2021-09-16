@@ -1080,7 +1080,11 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 						drone.StopDJICamImageFeed();
 				}
 				else {
-					ImGui::DragFloat("Target FPS", &(myState.m_targetFPS), 0.02f, 0.1f, 15.0f, "%.1f");
+					ImGui::DragFloat("Target FPS", &(myState.m_targetFPS), 0.02f, 0.25f, 30.0f, "%.1f");
+					float framePeriod = std::clamp(std::round(30.0f/myState.m_targetFPS), 1.0f, 120.0f);
+					float actualFPS = 30.0/framePeriod;
+					ImGui::Text("Actual FPS will be: %.2f", actualFPS);
+					
 					DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(& drone);
 					if (mySimDrone != nullptr) {
 						//This is a simulated drone - make it possible to set the video source
