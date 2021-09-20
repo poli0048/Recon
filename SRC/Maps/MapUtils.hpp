@@ -99,6 +99,23 @@ inline Eigen::Vector3d ECEF2LLA(Eigen::Vector3d const & Position_ECEF) {
 	return Eigen::Vector3d(lat, lon, alt);
 }
 
+//Get the rotation between ECEF and ENU at a given latitude and longitude
+inline Eigen::Matrix3d latLon_2_C_ECEF_ENU(double lat, double lon) {
+	//Populate C_ECEF_NED
+	Eigen::Matrix3d C_ECEF_NED;
+	C_ECEF_NED << -sin(lat)*cos(lon), -sin(lat)*sin(lon),  cos(lat),
+	              -sin(lon),                    cos(lon),       0.0,
+	              -cos(lat)*cos(lon), -cos(lat)*sin(lon), -sin(lat);
+	
+	//Compute C_ECEF_ENU from C_ECEF_NED
+	Eigen::Matrix3d C_NED_ENU;
+	C_NED_ENU << 0.0,  1.0,  0.0,
+	             1.0,  0.0,  0.0,
+	             0.0,  0.0, -1.0;
+	Eigen::Matrix3d C_ECEF_ENU = C_NED_ENU * C_ECEF_NED;
+	return C_ECEF_ENU;
+}
+
 inline Eigen::Vector2d WidgetCoordsToNormalizedMercator(Eigen::Vector2d const & WidgetCords, Eigen::Vector2d const & ULCorner_NM, double Zoom, int32_t tileWidth) {
 	double screenPixelLengthNM = 2.0 / (pow(2.0, Zoom) * ((double) tileWidth));
 	return (ULCorner_NM + Eigen::Vector2d(WidgetCords(0)*screenPixelLengthNM, -1.0*WidgetCords(1)*screenPixelLengthNM));

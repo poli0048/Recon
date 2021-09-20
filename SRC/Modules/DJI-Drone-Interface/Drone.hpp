@@ -81,6 +81,9 @@ namespace DroneInterface {
         virtual void Hover(void) = 0; //Stop any running missions and leave virtualStick mode (if in it) and hover in place (P mode)
         virtual void LandNow(void) = 0; //Initiate landing sequence immediately at current vehicle location
         virtual void GoHomeAndLand(void) = 0; //Initiate a Return-To-Home sequence that lands the vehicle at it's take-off location
+        
+        //Dev and Testing Methods
+        virtual void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG) = 0;
     };
 
     //The RealDrone class provides an interface to interact with a single real drone
@@ -123,6 +126,9 @@ namespace DroneInterface {
         void Hover(void)         override;
         void LandNow(void)       override;
         void GoHomeAndLand(void) override;
+        
+        //Dev and Testing Methods
+        void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG) override;
 
         //RealDrone-specific methods
         void DataReceivedHandler(const std::shared_ptr<tacopie::tcp_client>& client, const tacopie::tcp_client::read_result& res);
@@ -219,7 +225,10 @@ namespace DroneInterface {
         void Hover(void)         override;
         void LandNow(void)       override;
         void GoHomeAndLand(void) override;
-
+        
+        //Dev and Testing Methods
+        void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG) override;
+        
         //SimulatedDrone-specific methods
         void SetRealTime(bool Realtime); //True: Imagery will be provided at close-to-real-time rate. False: Imagery is provided as fast as possible
         void SetSourceVideoFile(std::filesystem::path const & VideoPath); //Should be set before calling StartDJICamImageFeed()
@@ -229,8 +238,6 @@ namespace DroneInterface {
         static bool ResizeTo720p(cv::Mat & Frame); //Make sure the frame is 720p... resize if needed.
         static bool Resize_4K_to_720p(cv::Mat & Frame); //Drop a 4K m_frame down to 720p
         
-        void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG);
-   
     private:
         std::unordered_map<int, std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)>> m_ImageryCallbacks;
 

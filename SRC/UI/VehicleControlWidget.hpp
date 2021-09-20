@@ -159,10 +159,11 @@ class VehicleControlWidget {
 		
 		//Limited coordinate conversion utilities
 		static inline Eigen::Vector3d positionLLA2ECEF(double lat, double lon, double alt);
-		static inline Eigen::Matrix3d latLon_2_C_ECEF_ENU(double lat, double lon);
+		//static inline Eigen::Matrix3d latLon_2_C_ECEF_ENU(double lat, double lon);
 		
 };
 
+//TODO: Remove this and use MapUtils now
 inline Eigen::Vector3d VehicleControlWidget::positionLLA2ECEF(double lat, double lon, double alt) {
 	double a = 6378137.0;           //Semi-major axis of reference ellipsoid
 	double ecc = 0.081819190842621; //First eccentricity of the reference ellipsoid
@@ -174,7 +175,7 @@ inline Eigen::Vector3d VehicleControlWidget::positionLLA2ECEF(double lat, double
 	return(Eigen::Vector3d(X, Y, Z));
 }
 
-inline Eigen::Matrix3d VehicleControlWidget::latLon_2_C_ECEF_ENU(double lat, double lon) {
+/*inline Eigen::Matrix3d VehicleControlWidget::latLon_2_C_ECEF_ENU(double lat, double lon) {
 	//Populate C_ECEF_NED
 	Eigen::Matrix3d C_ECEF_NED;
 	C_ECEF_NED << -sin(lat)*cos(lon), -sin(lat)*sin(lon),  cos(lat),
@@ -188,7 +189,7 @@ inline Eigen::Matrix3d VehicleControlWidget::latLon_2_C_ECEF_ENU(double lat, dou
 	             0.0,  0.0, -1.0;
 	Eigen::Matrix3d C_ECEF_ENU = C_NED_ENU * C_ECEF_NED;
 	return C_ECEF_ENU;
-}
+}*/
 
 inline void VehicleControlWidget::ControlThreadMain(void) {
 	double approxLoopPeriod  = 0.15; //seconds
@@ -247,9 +248,19 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 							//On final approach - slowing down (we command < the speed corresponding to a perfect stop to get ahead of system latency)
 							v_EN *= 0.9*std::sqrt(2.0 * maxDecel * distFromTarget);
 							
+							//Re-shape and soften commanded V near target to avoid oscillations
+							double wellRadius = 2.0;
+							if (distFromTarget < wellRadius) {
+								double a = 0.9*std::sqrt(2.0 * maxDecel * wellRadius);
+								double b = v_EN.norm() / a;
+								double c = b*b*a; //New speed
+								v_EN.normalize();
+								v_EN *= c;
+							}
+							
 							//Re-shape and soften commanded V near 0 to avoid oscillations
-							if (v_EN.norm() < 1.0)
-								v_EN = v_EN * v_EN.norm();
+							//if (v_EN.norm() < 1.0)
+							//	v_EN = v_EN * v_EN.norm();
 						}
 						command.V_North = v_EN(1);
 						command.V_East  = v_EN(0);

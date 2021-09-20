@@ -248,20 +248,21 @@ inline void MainMenu::Draw() {
 			}
 			unsigned int NumSimDrones = DroneInterface::DroneManager::Instance().NumSimulatedDrones();
 			ImGui::Separator();
-			if (ImGui::BeginMenu("Start Waypoint Mission", (NumSimDrones > 0))) {
+			if (ImGui::BeginMenu("Start Waypoint Mission", true)) {
+			//if (ImGui::BeginMenu("Start Waypoint Mission", (NumSimDrones > 0))) {
 				std::vector<std::string> serials = DroneInterface::DroneManager::Instance().GetConnectedDroneSerialNumbers();
 				for (auto const & serial : serials) {
 					DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(serial);
 					if (drone == nullptr)
 						continue;
-					DroneInterface::SimulatedDrone * simDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(drone);
-					if (simDrone == nullptr)
-						continue;
+					//DroneInterface::SimulatedDrone * simDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(drone);
+					//if (simDrone == nullptr)
+					//	continue;
 					if (ImGui::BeginMenu(("Drone: "s + serial).c_str())) {
 						if (ImGui::MenuItem("Short Mission - Point 2 Point"))
-							simDrone->StartSampleWaypointMission(10, false, false, Eigen::Vector2d(5.0, 50.0), 30.0);
+							drone->StartSampleWaypointMission(10, false, false, Eigen::Vector2d(5.0, 50.0), 30.0);
 						if (ImGui::MenuItem("Short Mission - Round Corners"))
-							simDrone->StartSampleWaypointMission(10, true, false, Eigen::Vector2d(5.0, 50.0), 30.0);
+							drone->StartSampleWaypointMission(10, true, false, Eigen::Vector2d(5.0, 50.0), 30.0);
 						ImGui::EndMenu();
 					}
 				}

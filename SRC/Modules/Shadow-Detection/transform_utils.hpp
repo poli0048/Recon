@@ -143,9 +143,9 @@ inline void findPose(std::Evector<Eigen::Vector2d>& fiducials_PX, std::Evector<E
 	//std::cout << "Pose estimated." << std::endl;
 }
 
-inline cv::Mat latLon_2_C_ECEF_NED(double lat, double lon) {
+//inline cv::Mat latLon_2_C_ECEF_NED(double lat, double lon) {
 	//Compute matrix components
-	double C11 = -sin(lat) * cos(lon);
+	/*double C11 = -sin(lat) * cos(lon);
 	double C12 = -sin(lat) * sin(lon);
 	double C13 = cos(lat);
 	double C21 = -sin(lon);
@@ -155,7 +155,7 @@ inline cv::Mat latLon_2_C_ECEF_NED(double lat, double lon) {
 	double C32 = -cos(lat) * sin(lon);
 	double C33 = -sin(lat);
 
-	cv::Mat C_ECEF_NED = (cv::Mat_<double>(3, 3) << C11, C12, C13, C21, C22, C23, C31, C32, C33); // every three is one row
+	cv::Mat C_ECEF_NED = (cv::Mat_<double>(3, 3) << C11, C12, C13, C21, C22, C23, C31, C32, C33); // every three is one row*/
 
 	////Populate C_ECEF_NED
 	//Eigen::Matrix3d C_ECEF_NED;
@@ -163,8 +163,8 @@ inline cv::Mat latLon_2_C_ECEF_NED(double lat, double lon) {
 	//C_ECEF_NED(1, 0) = C21; C_ECEF_NED(1, 1) = C22; C_ECEF_NED(1, 2) = C23;
 	//C_ECEF_NED(2, 0) = C31; C_ECEF_NED(2, 1) = C32; C_ECEF_NED(2, 2) = C33;
 
-	return(C_ECEF_NED);
-}
+	//return(C_ECEF_NED);
+//}
 
 //Compute latitude (radians), longitude (radians), and altitude (height above WGS84 ref. elipsoid, in meters) from ECEF position (in meters)
 //Latitude and longitude are also both given with respect to the WGS84 reference elipsoid.
@@ -211,7 +211,19 @@ inline void positionECEF2LLA(cv::Point3d const& Position, double& lat, double& l
 }
 
 inline cv::Mat latLon_2_C_ECEF_ENU(double lat, double lon) {
-	cv::Mat C_ECEF_NED = latLon_2_C_ECEF_NED(lat, lon);
+	//Compute C_ECEF_NED
+	double C11 = -sin(lat) * cos(lon);
+	double C12 = -sin(lat) * sin(lon);
+	double C13 = cos(lat);
+	double C21 = -sin(lon);
+	double C22 = cos(lon);
+	double C23 = 0.0;
+	double C31 = -cos(lat) * cos(lon);
+	double C32 = -cos(lat) * sin(lon);
+	double C33 = -sin(lat);
+	cv::Mat C_ECEF_NED = (cv::Mat_<double>(3, 3) << C11, C12, C13, C21, C22, C23, C31, C32, C33); // every three is one row
+	
+	//cv::Mat C_ECEF_NED = latLon_2_C_ECEF_NED(lat, lon);
 	cv::Mat C_NED_ENU = (cv::Mat_<double>(3, 3) << 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, -1.0);
 	cv::Mat C_ECEF_ENU = C_NED_ENU * C_ECEF_NED;
 	return(C_ECEF_ENU);

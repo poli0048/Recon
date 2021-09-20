@@ -13,26 +13,11 @@
 #include "../../Maps/MapUtils.hpp"
 #include "../../UI/VehicleControlWidget.hpp"
 #include "../Guidance/Guidance.hpp"
+#include "DroneUtils.hpp"
 
 #define PI 3.14159265358979
 
 //DroneInterface::Drone::TimePoint InitTimepoint = std::chrono::steady_clock::now(); //Used for testing message age warnings
-
-static Eigen::Matrix3d latLon_2_C_ECEF_ENU(double lat, double lon) {
-	//Populate C_ECEF_NED
-	Eigen::Matrix3d C_ECEF_NED;
-	C_ECEF_NED << -sin(lat)*cos(lon), -sin(lat)*sin(lon),  cos(lat),
-	              -sin(lon),                    cos(lon),       0.0,
-	              -cos(lat)*cos(lon), -cos(lat)*sin(lon), -sin(lat);
-	
-	//Compute C_ECEF_ENU from C_ECEF_NED
-	Eigen::Matrix3d C_NED_ENU;
-	C_NED_ENU << 0.0,  1.0,  0.0,
-	             1.0,  0.0,  0.0,
-	             0.0,  0.0, -1.0;
-	Eigen::Matrix3d C_ECEF_ENU = C_NED_ENU * C_ECEF_NED;
-	return C_ECEF_ENU;
-}
 
 static double sgn(double val) {
     if (val < 0.0) return -1.0;
@@ -975,12 +960,9 @@ namespace DroneInterface {
 		std::cerr << "Starting sample waypoint mission.\r\n";
 		
 		//Tell the vehicle control widget and the guidance module to stop commanding this drone.
-		VehicleControlWidget::Instance().StopCommandingDrone(m_serial);
-		Guidance::GuidanceEngine::Instance().RemoveLowFlier(m_serial);
-		
-		DroneInterface::WaypointMission mission;
-		mission.LandAtLastWaypoint = LandAtEnd;
-		mission.CurvedTrajectory = CurvedTrajectories;
+		std::string droneSerial = GetDroneSerial();
+		VehicleControlWidget::Instance().StopCommandingDrone(droneSerial);
+		Guidance::GuidanceEngine::Instance().RemoveLowFlier(droneSerial);
 		
 		//Get drone's current position and the ground altitude
 		DroneInterface::Drone::TimePoint Timestamp;
@@ -994,50 +976,17 @@ namespace DroneInterface {
 			return;
 		}
 		double groundAlt = Altitude - currentHAG;
-		
 		std::cerr << "groundAlt: " << groundAlt << "\r\n";
 		
-		//Set up ENU frame under drone
-		Eigen::Vector3d Pos_ECEF = LLA2ECEF(Eigen::Vector3d(Latitude, Longitude, Altitude));
 		Eigen::Matrix3d C_ECEF_ENU = latLon_2_C_ECEF_ENU(Latitude, Longitude);
-		Eigen::Matrix3d C_ENU_ECEF = C_ECEF_ENU.transpose();
+		Eigen::Vector3d currentPos_ECEF = LLA2ECEF(Eigen::Vector3d(Latitude, Longitude, Altitude));
+		Eigen::Vector3d StartOffset_ENU(StartOffset_EN(0), StartOffset_EN(1), 0.0);
+		Eigen::Vector3d FirstWaypoint_ECEF = currentPos_ECEF + C_ECEF_ENU.transpose()*StartOffset_ENU;
+		Eigen::Vector3d FirstWaypoint_LLA = ECEF2LLA(FirstWaypoint_ECEF);
+		Eigen::Vector2d FirstWaypoint_LL(FirstWaypoint_LLA(0), FirstWaypoint_LLA(1));
 		
-		//Set first waypoint
-		Eigen::Vector3d WaypointPos_ECEF = Pos_ECEF + C_ENU_ECEF*Eigen::Vector3d(StartOffset_EN(0), StartOffset_EN(1), 0.0);
-		Eigen::Vector3d WaypointPos_LLA = ECEF2LLA(WaypointPos_ECEF);
-		mission.Waypoints.emplace_back();
-		mission.Waypoints.back().Latitude  = WaypointPos_LLA(0);
-		mission.Waypoints.back().Longitude = WaypointPos_LLA(1);
-		mission.Waypoints.back().Altitude  = groundAlt + HAG;
-		mission.Waypoints.back().CornerRadius = 5.0;
-		mission.Waypoints.back().Speed = 15.0;
-		
-		std::cerr << "Waypoint Alt: " << mission.Waypoints.back().Altitude << "\r\n";
-		
-		//Add waypoints
-		for (int n = 0; n < NumWaypoints; n++) {
-			//Get last waypoint position
-			DroneInterface::Waypoint const & lastWaypoint(mission.Waypoints.back());
-			Eigen::Vector3d LastPosition_ECEF = LLA2ECEF(Eigen::Vector3d(lastWaypoint.Latitude, lastWaypoint.Longitude, lastWaypoint.Altitude));
-			
-			Eigen::Vector3d V_EN(0.0, 0.0, 0.0); //Vector between last waypoint and this waypoint
-			switch (n % 4) {
-				case 0: V_EN <<    0.0, 15.0, 0.0; break;
-				case 1: V_EN << -100.0,  0.0, 0.0; break;
-				case 2: V_EN <<    0.0, 15.0, 0.0; break;
-				case 3: V_EN <<  100.0,  0.0, 0.0; break;
-			}
-			
-			Eigen::Vector3d NewPosition_ECEF = LastPosition_ECEF + C_ENU_ECEF*V_EN;
-			Eigen::Vector3d NewPosition_LLA  = ECEF2LLA(NewPosition_ECEF);
-			
-			mission.Waypoints.emplace_back();
-			mission.Waypoints.back().Latitude  = NewPosition_LLA(0);
-			mission.Waypoints.back().Longitude = NewPosition_LLA(1);
-			mission.Waypoints.back().Altitude  = NewPosition_LLA(2);
-			mission.Waypoints.back().CornerRadius = 5.0;
-			mission.Waypoints.back().Speed = 15.0;
-		}
+		DroneInterface::WaypointMission mission = CreateSampleWaypointMission(NumWaypoints, CurvedTrajectories, LandAtEnd,
+		                                                                      FirstWaypoint_LL, groundAlt, HAG);
 		
 		this->ExecuteWaypointMission(mission);
 	}

@@ -13,6 +13,9 @@
 //Project Includes
 #include "Drone.hpp"
 #include "../../Utilities.hpp"
+#include "../../UI/VehicleControlWidget.hpp"
+#include "../Guidance/Guidance.hpp"
+#include "DroneUtils.hpp"
 
 #define PI 3.14159265358979
 
@@ -306,8 +309,12 @@ namespace DroneInterface {
 			}
 			case 3U: {
 				if (this->m_packet_ack.Deserialize(*m_packet_fragment)) {
-					std::cout << this->m_packet_ack;
-					return true;
+					if ((this->m_packet_ack.Positive == uint8_t(1)) && (this->m_packet_ack.SourcePID == uint8_t(252)))
+						return true;
+					else {
+						std::cout << this->m_packet_ack;
+						return true;
+					}
 				}
 				else {
 					std::cerr << "Error: Tried to deserialize invalid Acknowledgment packet." << std::endl;
@@ -525,6 +532,7 @@ namespace DroneInterface {
 	bool RealDrone::IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
 		Result = (this->m_packet_ct.IsFlying == uint8_t(1));
+		Timestamp = this->m_PacketTimestamp_ct;
 		return this->m_packet_ct_received;
 	}
 
@@ -586,6 +594,7 @@ namespace DroneInterface {
 	bool RealDrone::IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
 		Result = (this->m_packet_et.FlightMode == uint8_t(10));
+		Timestamp = this->m_PacketTimestamp_et;
 		return this->m_packet_et_received;
 	}
 
@@ -640,6 +649,42 @@ namespace DroneInterface {
 	void RealDrone::GoHomeAndLand(void) {
 		std::scoped_lock lock(m_mutex);
 		this->SendPacket_EmergencyCommand(2);
+	}
+	
+	void RealDrone::StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd,
+	                                           Eigen::Vector2d const & StartOffset_EN, double HAG) {
+		std::cerr << "Starting sample waypoint mission.\r\n";
+		
+		//Tell the vehicle control widget and the guidance module to stop commanding this drone.
+		std::string droneSerial = GetDroneSerial();
+		VehicleControlWidget::Instance().StopCommandingDrone(droneSerial);
+		Guidance::GuidanceEngine::Instance().RemoveLowFlier(droneSerial);
+		
+		//Get drone's current position and the ground altitude
+		DroneInterface::Drone::TimePoint Timestamp;
+		double Latitude, Longitude, Altitude, currentHAG;
+		if (! this->GetPosition(Latitude, Longitude, Altitude, Timestamp)) {
+			std::cerr << "Error in StartSampleWaypointMission(): Failed to get drone's current position. Aborting.\r\n";
+			return;
+		}
+		if (! this->GetHAG(currentHAG, Timestamp)) {
+			std::cerr << "Error in StartSampleWaypointMission(): Failed to get drone's HAG. Aborting.\r\n";
+			return;
+		}
+		double groundAlt = Altitude - currentHAG;
+		std::cerr << "groundAlt: " << groundAlt << "\r\n";
+		
+		Eigen::Matrix3d C_ECEF_ENU = latLon_2_C_ECEF_ENU(Latitude, Longitude);
+		Eigen::Vector3d currentPos_ECEF = LLA2ECEF(Eigen::Vector3d(Latitude, Longitude, Altitude));
+		Eigen::Vector3d StartOffset_ENU(StartOffset_EN(0), StartOffset_EN(1), 0.0);
+		Eigen::Vector3d FirstWaypoint_ECEF = currentPos_ECEF + C_ECEF_ENU.transpose()*StartOffset_ENU;
+		Eigen::Vector3d FirstWaypoint_LLA = ECEF2LLA(FirstWaypoint_ECEF);
+		Eigen::Vector2d FirstWaypoint_LL(FirstWaypoint_LLA(0), FirstWaypoint_LLA(1));
+		
+		DroneInterface::WaypointMission mission = CreateSampleWaypointMission(NumWaypoints, CurvedTrajectories, LandAtEnd,
+		                                                                      FirstWaypoint_LL, groundAlt, HAG);
+		
+		this->ExecuteWaypointMission(mission);
 	}
 	
 	void RealDrone::SendPacket(DroneInterface::Packet &packet) {

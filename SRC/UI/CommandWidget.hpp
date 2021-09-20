@@ -77,11 +77,11 @@ class CommandWidget {
 		
 		//An MSA violation occurs when a drone is below the MSA and not in a landing zone
 		bool  m_CheckMSA = true;
-		bool  m_pauseDronesOnMSAViolation = true;
+		bool  m_pauseDronesOnMSAViolation = false;
 		
 		//A proximity violation occurs when two flying drones get too close to one another
 		bool  m_CheckVehicleProximity = true;
-		bool  m_AutoPauseDronesOnProximityViolation = true;
+		bool  m_AutoPauseDronesOnProximityViolation = false;
 		float m_vehicleProximityWarnThreshold = 3.0; //meters
 		
 		//An avoidance zone violation occurs when a drone is in an avoidance zone
