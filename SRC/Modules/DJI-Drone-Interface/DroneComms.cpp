@@ -806,8 +806,14 @@ namespace DroneInterface {
 	}
 	
 	std::ostream & operator<<(std::ostream & Str, Packet_MessageString const & v) { 
-		Str << "Type ---: " << (unsigned int) v.Type    << "\r\n";
-		Str << "Message : " <<                v.Message << "\r\n";
+		switch (v.Type) {
+			case uint8_t(0): Str << "Type ---: Debug\r\n"; break;
+			case uint8_t(1): Str << "Type ---: Info\r\n"; break;
+			case uint8_t(2): Str << "Type ---: Warning\r\n"; break;
+			case uint8_t(3): Str << "Type ---: Error\r\n"; break;
+			default:         Str << "Type ---: Unrecognized (" << (unsigned int) v.Type << ")\r\n"; break;
+		}
+		Str << "**************** Message ****************\r\n" << v.Message << "\r\n";
 		return Str;
 	}
 	

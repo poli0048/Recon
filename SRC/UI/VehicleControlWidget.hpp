@@ -53,6 +53,9 @@ class VehicleControlWidget {
 		Eigen::Vector2d                  m_targetLatLon = Eigen::Vector2d(std::nan(""), std::nan("")); //Lat and Lon (radians) of target pos
 		bool                             m_flyAtDeck = false; //When true fly at min safe altitude (overrides m_targetHAGFeet)
 		bool                             m_hazard = false; //True if in hazardous state
+		bool                             m_LastCommandWasHover = false;
+		bool                             m_AtTargetState = false;
+		DroneInterface::Drone::TimePoint m_TimeAtWhichWeReachedTargetState;
 		
 		vehicleState() = default;
 		vehicleState(std::string const & Serial) : m_serial(Serial) { }
@@ -100,7 +103,7 @@ class VehicleControlWidget {
 		//Set/Clear Hazard lets the vehicle control widget decide on how to respond to a hazard instead of requiring the command module to make the call.
 		//This is needed so that the vehicle control widget can react by stopping the vehicle only if it isn't already in a hazardous state. If already in a
 		//hazardous state we don't want to stop the drone again since it would interfere with our ability to command the vehicle out of the hazardous state.
-		inline void SetHazardCondition(std::string Serial, bool PauseOnHazard);
+		inline void SetHazardCondition(std::string Serial, bool StopOnHazard, bool DodgeUpOnHazard);
 		inline void ClearHazardCondition(std::string Serial);
 		
 	private:
@@ -142,7 +145,6 @@ class VehicleControlWidget {
 			}
 		}
 		
-		//static inline std::filesystem::path GetPathForSimVideoInput(void);
 		static inline bool IsDroneHovered(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & drone_ScreenSpace,
 		                                  Eigen::Matrix2d const & R, float IconWidth_pixels);
 		
@@ -152,47 +154,97 @@ class VehicleControlWidget {
 		inline void DroneCommand_GoHomeAndLand(DroneInterface::Drone & Drone, vehicleState & State);
 		
 		inline void DrawVideoWindows(void);
+		
+		inline bool TryGetDroneTelemetry(DroneInterface::Drone * Drone, Eigen::Vector3d & DronePos_LLA, Eigen::Vector3d & DronePos_ECEF,
+		                                 Eigen::Vector3d & DroneVel_ENU, double & DroneYaw, double & DroneHAG, double MaxTelAge);
+		inline bool AtTargetState(Eigen::Vector3d const & DronePos_LLA, Eigen::Vector3d const & DronePos_ECEF,
+		                          Eigen::Vector3d const & DroneVel_ENU, double DroneYaw, double DroneHAG, vehicleState const & State);
 		inline void ControlThreadMain(void);
 		
 		inline void DrawMission_ManualControl(vehicleState * State, Eigen::Vector2d const & dronePos_ScreenSpace, ImDrawList * DrawList);
 		inline void DrawMission_Waypoints(size_t DroneNum, DroneInterface::Drone * Drone, Eigen::Vector2d const & dronePos_ScreenSpace, ImDrawList * DrawList);
-		
-		//Limited coordinate conversion utilities
-		static inline Eigen::Vector3d positionLLA2ECEF(double lat, double lon, double alt);
-		//static inline Eigen::Matrix3d latLon_2_C_ECEF_ENU(double lat, double lon);
-		
 };
 
-//TODO: Remove this and use MapUtils now
-inline Eigen::Vector3d VehicleControlWidget::positionLLA2ECEF(double lat, double lon, double alt) {
-	double a = 6378137.0;           //Semi-major axis of reference ellipsoid
-	double ecc = 0.081819190842621; //First eccentricity of the reference ellipsoid
-	double eccSquared = ecc*ecc;
-	double N = a/sqrt(1.0 - eccSquared*sin(lat)*sin(lat));
-	double X = (N + alt)*cos(lat)*cos(lon);
-	double Y = (N + alt)*cos(lat)*sin(lon);
-	double Z = (N*(1 - eccSquared) + alt)*sin(lat);
-	return(Eigen::Vector3d(X, Y, Z));
+//Try to get position, velocity, yaw, and HAG. Returns true if all can be read and all items have age under MaxTelAge (in seconds)
+inline bool VehicleControlWidget::TryGetDroneTelemetry(DroneInterface::Drone * Drone, Eigen::Vector3d & DronePos_LLA, Eigen::Vector3d & DronePos_ECEF,
+                                                       Eigen::Vector3d & DroneVel_ENU, double & DroneYaw, double & DroneHAG, double MaxTelAge) {
+	DroneInterface::Drone::TimePoint posTimestamp;
+	double Latitude, Longitude, Altitude;
+	if (! Drone->GetPosition(Latitude, Longitude, Altitude, posTimestamp))
+		return false;
+	else if (SecondsElapsed(posTimestamp) > MaxTelAge)
+		return false;
+	DronePos_LLA << Latitude, Longitude, Altitude;
+	DronePos_ECEF = LLA2ECEF(DronePos_LLA);
+	
+	DroneInterface::Drone::TimePoint velTimestamp;
+	double V_North, V_East, V_Down;
+	if (! Drone->GetVelocity(V_North, V_East, V_Down, velTimestamp))
+		return false;
+	else if (SecondsElapsed(velTimestamp) > MaxTelAge)
+		return false;
+	DroneVel_ENU << V_East, V_North, -1.0*V_Down;
+	
+	DroneInterface::Drone::TimePoint orientationTimestamp;
+	double Yaw, Pitch, Roll;
+	if (! Drone->GetOrientation(Yaw, Pitch, Roll, orientationTimestamp))
+		return false;
+	else if (SecondsElapsed(orientationTimestamp) > MaxTelAge)
+		return false;
+	DroneYaw = Yaw;
+	
+	DroneInterface::Drone::TimePoint HAGTimestamp;
+	double HAG;
+	if (! Drone->GetHAG(HAG, HAGTimestamp))
+		return false;
+	else if (SecondsElapsed(HAGTimestamp) > MaxTelAge)
+		return false;
+	DroneHAG = HAG;
+	
+	return true;
 }
 
-/*inline Eigen::Matrix3d VehicleControlWidget::latLon_2_C_ECEF_ENU(double lat, double lon) {
-	//Populate C_ECEF_NED
-	Eigen::Matrix3d C_ECEF_NED;
-	C_ECEF_NED << -sin(lat)*cos(lon), -sin(lat)*sin(lon),  cos(lat),
-	              -sin(lon),                    cos(lon),       0.0,
-	              -cos(lat)*cos(lon), -cos(lat)*sin(lon), -sin(lat);
+//Returns true if a drone is approximately at it's target state (i.e. no additional movement is needed)
+inline bool VehicleControlWidget::AtTargetState(Eigen::Vector3d const & DronePos_LLA, Eigen::Vector3d const & DronePos_ECEF,
+                                                Eigen::Vector3d const & DroneVel_ENU, double DroneYaw, double DroneHAG, vehicleState const & State) {
+	double PI = 3.14159265358979;
 	
-	//Compute C_ECEF_ENU from C_ECEF_NED
-	Eigen::Matrix3d C_NED_ENU;
-	C_NED_ENU << 0.0,  1.0,  0.0,
-	             1.0,  0.0,  0.0,
-	             0.0,  0.0, -1.0;
-	Eigen::Matrix3d C_ECEF_ENU = C_NED_ENU * C_ECEF_NED;
-	return C_ECEF_ENU;
-}*/
+	//Check 2D position
+	Eigen::Vector3d targetPos_LLA(State.m_targetLatLon(0), State.m_targetLatLon(1), DronePos_LLA(2));
+	Eigen::Vector3d targetPos_ECEF = LLA2ECEF(targetPos_LLA);
+	double posDelta2D = (targetPos_ECEF - DronePos_ECEF).norm();
+	if (posDelta2D > 1.0)
+		return false;
+	
+	//Check HAG
+	double targetHAG = State.m_targetHAGFeet/3.280839895;
+	if (fabs(DroneHAG - targetHAG) > 1.0)
+		return false;
+	
+	//Check Yaw
+	double yawDelta = State.m_targetYawDeg*PI/180.0 - DroneYaw;
+	yawDelta = fmod(yawDelta, 2*PI);
+	if (yawDelta < 0.0)
+		yawDelta += 2*PI;
+	if (yawDelta > PI)
+		yawDelta = 2*PI - yawDelta;
+	//yawDelta is now the difference between the current and commanded yaw (without sign)
+	if (yawDelta > 5.0*PI/180.0)
+		return false;
+	
+	//TODO: We currently skip the speed check only because we haven't tracked down the bad velocity telemetry bug yet
+	return true;
+	
+	//Check 2D Speed (should be small)
+	double speed2D = std::sqrt(DroneVel_ENU(0)*DroneVel_ENU(0) + DroneVel_ENU(1)*DroneVel_ENU(1));
+	if (speed2D > 3.0*0.44704)
+		return false;
+	
+	return true;
+}
 
 inline void VehicleControlWidget::ControlThreadMain(void) {
-	double approxLoopPeriod  = 0.15; //seconds
+	double approxLoopPeriod  = 0.10; //seconds
 	
 	//Wait for DataTileProvider to initialize
 	while (Maps::DataTileProvider::Instance() == nullptr)
@@ -212,30 +264,63 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 			if (! myState.m_userControlEnabled)
 				continue;
 			
-			//If we get here the drone exists and is under maual control
-			DroneInterface::VirtualStickCommand_ModeA command;
-			command.Yaw     = myState.m_targetYawDeg*PI/180.0;
-			command.V_North = 0.0;
-			command.V_East  = 0.0;
-			command.HAG     = myState.m_targetHAGFeet/3.280839895;
-			command.timeout = std::max(2.0, 10.0*approxLoopPeriod);
+			//If we get here the drone exists and is under manual control
 			
-			//If we have up-to-date drone telemetry, we set the EN velocity to hold a desired position
-			if ((! std::isnan(myState.m_targetLatLon(0))) && (! std::isnan(myState.m_targetLatLon(1)))) {
-				DroneInterface::Drone::TimePoint posTimestamp;
-				double Latitude, Longitude, Altitude;
-				if (drone->GetPosition(Latitude, Longitude, Altitude, posTimestamp)) {
-					if (SecondsElapsed(posTimestamp, std::chrono::steady_clock::now()) > 4.0)
-						std::cerr << "Warning in ControlThreadMain(): Drone telemetry is old! Zeroing velocity.\r\n";
+			//Get current telemetry
+			Eigen::Vector3d dronePos_LLA;
+			Eigen::Vector3d dronePos_ECEF;
+			Eigen::Vector3d droneVel_ENU;
+			double droneYaw; //Radians
+			double droneHAG; //meters
+			if (TryGetDroneTelemetry(drone, dronePos_LLA, dronePos_ECEF, droneVel_ENU, droneYaw, droneHAG, 4.0)) {
+				//If we are supposed to fly at the deck, try to update the target HAD
+				if (myState.m_flyAtDeck) {
+					double MSA;
+					Eigen::Vector2d Position_NM = LatLonToNM(Eigen::Vector2d(dronePos_LLA(0), dronePos_LLA(1)));
+					if (Maps::DataTileProvider::Instance()->TryGetData(Position_NM, Maps::DataLayer::MinSafeAltitude, MSA)) {
+						double groundAlt = dronePos_LLA(2) - droneHAG;
+						double minSafeHAG = MSA - groundAlt;
+						double targetHAG = minSafeHAG + 1.0; //Fly 1 meter above MSA to avoid triggering watchdog alarms
+						myState.m_targetHAGFeet = targetHAG*3.280839895;
+					}
+				}
+				
+				if (std::isnan(myState.m_targetLatLon(0)) || std::isnan(myState.m_targetLatLon(1))) {
+					//This shouldn't happen, but in this case we have no target position. Hover
+					if (! myState.m_LastCommandWasHover) {
+						drone->Hover();
+						myState.m_LastCommandWasHover = true;
+					}
+				}
+				else {
+					//Check if we are at our target state and update state fields accordingly
+					if (AtTargetState(dronePos_LLA, dronePos_ECEF, droneVel_ENU, droneYaw, droneHAG, myState)) {
+						if (! myState.m_AtTargetState)
+							myState.m_TimeAtWhichWeReachedTargetState = std::chrono::steady_clock::now();
+						myState.m_AtTargetState = true;
+					}
+					else
+						myState.m_AtTargetState = false;
+					
+					if (myState.m_AtTargetState && (SecondsElapsed(myState.m_TimeAtWhichWeReachedTargetState) > 2.0)) {
+						//We have been at our target state for enough time - switch to hover
+						if (! myState.m_LastCommandWasHover) {
+							drone->Hover();
+							myState.m_LastCommandWasHover = true;
+						}
+					}
 					else {
-						//Compute 2D distance from target and unit vector in EN from current position to target position
-						Eigen::Vector3d curentPos_ECEF = positionLLA2ECEF(Latitude, Longitude, Altitude);
-						Eigen::Vector3d targetPos_ECEF = positionLLA2ECEF(myState.m_targetLatLon(0), myState.m_targetLatLon(1), Altitude);
-						Eigen::Vector3d delta_ECEF     = targetPos_ECEF - curentPos_ECEF;
-						Eigen::Matrix3d C_ECEF_ENU     = latLon_2_C_ECEF_ENU(Latitude, Longitude);
+						//We need to command the drone in virtualstick mode - Compute the East-North velocity we need
+						double currentSpeed2D = std::sqrt(droneVel_ENU(0)*droneVel_ENU(0) + droneVel_ENU(1)*droneVel_ENU(1));
+						Eigen::Vector3d targetPos_LLA(myState.m_targetLatLon(0), myState.m_targetLatLon(1), dronePos_LLA(2));
+						Eigen::Vector3d targetPos_ECEF = LLA2ECEF(targetPos_LLA);
+						Eigen::Vector3d delta_ECEF     = targetPos_ECEF - dronePos_ECEF;
+						Eigen::Matrix3d C_ECEF_ENU     = latLon_2_C_ECEF_ENU(dronePos_LLA(0), dronePos_LLA(1));
 						Eigen::Vector3d delta_ENU      = C_ECEF_ENU * delta_ECEF;
 						Eigen::Vector2d v_EN(delta_ENU(0), delta_ENU(1));
 						double distFromTarget          = v_EN.norm();
+						//TODO: Latancy adjustment is turned off right now because our bad V telemetry bug
+						//distFromTarget = std::max(distFromTarget - currentSpeed2D*0.15, 0.0); //Account for command latancy
 						v_EN.normalize();
 						
 						//We will set our East-North velocity to a multiple of v_EN... we just need to scale it appropriately
@@ -245,48 +330,47 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 						if (distFromTarget > stoppingDist)
 							v_EN *= maxSpeed_mps;
 						else {
-							//On final approach - slowing down (we command < the speed corresponding to a perfect stop to get ahead of system latency)
-							v_EN *= 0.9*std::sqrt(2.0 * maxDecel * distFromTarget);
-							
-							//Re-shape and soften commanded V near target to avoid oscillations
-							double wellRadius = 2.0;
-							if (distFromTarget < wellRadius) {
-								double a = 0.9*std::sqrt(2.0 * maxDecel * wellRadius);
-								double b = v_EN.norm() / a;
-								double c = b*b*a; //New speed
-								v_EN.normalize();
-								v_EN *= c;
-							}
-							
-							//Re-shape and soften commanded V near 0 to avoid oscillations
-							//if (v_EN.norm() < 1.0)
-							//	v_EN = v_EN * v_EN.norm();
+							//Slowing down on final approach - we shape target speed towards 0 to mitigate oscillations
+							double targetSpeed = std::sqrt(2.0 * maxDecel * distFromTarget);
+							if (targetSpeed < 1.0)
+								targetSpeed = targetSpeed * targetSpeed;
+							v_EN *= targetSpeed;
 						}
+						
+						//Execute using Mode A
+						/*DroneInterface::VirtualStickCommand_ModeA command;
+						command.Yaw     = myState.m_targetYawDeg*PI/180.0;
 						command.V_North = v_EN(1);
 						command.V_East  = v_EN(0);
+						command.HAG     = myState.m_targetHAGFeet/3.280839895;
+						command.timeout = std::max(2.0, 10.0*approxLoopPeriod);
+						drone->IssueVirtualStickCommand(command);
+						myState.m_LastCommandWasHover = false;*/
 						
-						//If we are currently being told to fly at the deck, set HAG based on MSA
-						if (myState.m_flyAtDeck) {
-							double MSA;
-							Eigen::Vector2d Position_NM = LatLonToNM(Eigen::Vector2d(Latitude, Longitude));
-							if (Maps::DataTileProvider::Instance()->TryGetData(Position_NM, Maps::DataLayer::MinSafeAltitude, MSA)) {
-								DroneInterface::Drone::TimePoint HAGTimestamp;
-								double HAG;
-								if (drone->GetHAG(HAG, HAGTimestamp) && (SecondsElapsed(HAGTimestamp, std::chrono::steady_clock::now()) < 4.0)) {
-									double groundAlt = Altitude - HAG;
-									double minSafeHAG = MSA - groundAlt;
-									double targetHAG = minSafeHAG + 1.0; //Fly 1 meter above MSA to avoid triggering watchdog alarms
-									myState.m_targetHAGFeet = targetHAG*3.280839895;
-									command.HAG = targetHAG;
-								}
-							}
-						}
+						//Execute using Mode B
+						Eigen::Matrix2d C_EN_Vehicle;
+						C_EN_Vehicle << cos(droneYaw), -1.0*sin(droneYaw),
+							           sin(droneYaw),      cos(droneYaw);
+						Eigen::Vector2d V_Target_Vehicle = C_EN_Vehicle * v_EN;
+						
+						DroneInterface::VirtualStickCommand_ModeB command;
+						command.Yaw       = myState.m_targetYawDeg*PI/180.0;
+						command.V_Forward = V_Target_Vehicle(1);
+						command.V_Right   = V_Target_Vehicle(0);
+						command.HAG       = myState.m_targetHAGFeet/3.280839895;
+						command.timeout   = std::max(2.0, 10.0*approxLoopPeriod);
+						drone->IssueVirtualStickCommand(command);
+						myState.m_LastCommandWasHover = false;
 					}
 				}
 			}
-			
-			//Issue the virtual stick command
-			drone->IssueVirtualStickCommand(command);
+			else {
+				//I have invalid or out-of-date telemetry - Hover
+				if (! myState.m_LastCommandWasHover) {
+					drone->Hover();
+					myState.m_LastCommandWasHover = true;
+				}
+			}
 		}
 		m_dronesAndStatesMutex.unlock();
 		
@@ -602,8 +686,9 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 						//If "auto yaw on move" is enabled, set the yaw
 						if (state->m_autoYawOnMove) {
 							//Compute vector in ENU from current position to target position
-							Eigen::Vector3d curentPos_ECEF = positionLLA2ECEF(Latitude, Longitude, Altitude);
-							Eigen::Vector3d targetPos_ECEF = positionLLA2ECEF(state->m_targetLatLon(0), state->m_targetLatLon(1), Altitude);
+							Eigen::Vector3d targetPos_LLA(state->m_targetLatLon(0), state->m_targetLatLon(1), Altitude);
+							Eigen::Vector3d curentPos_ECEF = LLA2ECEF(Eigen::Vector3d(Latitude, Longitude, Altitude));
+							Eigen::Vector3d targetPos_ECEF = LLA2ECEF(targetPos_LLA);
 							Eigen::Vector3d delta_ECEF     = targetPos_ECEF - curentPos_ECEF;
 							Eigen::Matrix3d C_ECEF_ENU     = latLon_2_C_ECEF_ENU(Latitude, Longitude);
 							Eigen::Vector3d delta_ENU      = C_ECEF_ENU * delta_ECEF;
@@ -884,6 +969,18 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 						ImGui::EndMenu();
 					}
 				}
+				//TODO - this should be removed once waypoint mission functionality is tested
+				if (ImGui::BeginMenu("Start Waypoint Mission")) {
+					if (ImGui::MenuItem("Short Mission - Point 2 Point")) {
+						state->m_userControlEnabled = false;
+						drone->StartSampleWaypointMission(10, false, false, Eigen::Vector2d(5.0, 50.0), 30.0);
+					}
+					if (ImGui::MenuItem("Short Mission - Round Corners")) {
+						state->m_userControlEnabled = false;
+						drone->StartSampleWaypointMission(10, true, false, Eigen::Vector2d(5.0, 50.0), 30.0);
+					}
+					ImGui::EndMenu();
+				}
 			}
 			
 			ImGui::EndPopup();
@@ -893,22 +990,6 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 	//We need to return true if the map widget still needs to process mouse inputs (i.e. if we haven't stolen them)
 	return (! ImGui::IsPopupOpen("Drone Control Popup")) && (m_indexOfDroneUnderDrag < 0);
 }
-
-//Get the path of the first .MOV file in the first sim data set folder in "Simulation-Data-Sets" ("first" in a number-aware lexicographical sense)
-/*inline std::filesystem::path VehicleControlWidget::GetPathForSimVideoInput(void) {
-	auto datasetDirs = Handy::SubDirectories(Handy::Paths::ThisExecutableDirectory().parent_path() / "Simulation-Data-Sets"s);
-	std::sort(datasetDirs.begin(), datasetDirs.end(), [](std::string const & A, std::string const & B) -> bool { return StringNumberAwareCompare_LessThan(A, B); });
-	if (datasetDirs.empty())
-		return std::filesystem::path();
-	std::vector<std::filesystem::path> files = GetNormalFilesInDirectory(datasetDirs[0]);
-	std::sort(files.begin(), files.end(), [](std::string const & A, std::string const & B) -> bool { return StringNumberAwareCompare_LessThan(A, B); });
-	for (auto const & file : files) {
-		std::string ext = file.extension().string();
-		if ((ext == ".mov"s) || (ext == ".MOV") || (ext == ".Mov"))
-			return file;
-	}
-	return std::filesystem::path();
-}*/
 
 inline void VehicleControlWidget::AllDronesStopAndHover(void) {
 	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
@@ -944,17 +1025,29 @@ inline void VehicleControlWidget::StopCommandingDrone(std::string const & Serial
 //Set/Clear Hazard lets the vehicle control widget decide on how to respond to a hazard instead of requiring the command module to make the call.
 //This is needed so that the vehicle control widget can react by stopping the vehicle only if it isn't already in a hazardous state. If already in a
 //hazardous state we don't want to stop the drone again since it would interfere with our ability to command the vehicle out of the hazardous state.
-inline void VehicleControlWidget::SetHazardCondition(std::string Serial, bool PauseOnHazard) {
+//There are two flags that can be set: StopOnHazard and DodgeUpOnHazard.
+//If either of these are set when a hazard condition begins, the vehicle control widget will take control of the corresponding drone.
+//If StopOnHazard is set, the drone will be commanded to hold it's current position.
+//If DodgeUpOnHazard is set, the drone will hold it's current horizontal position, but will ascend a few meters as well.
+//Setting both to true has the same behavior as just setting DodgeUpOnHazard to true.
+//Dodging up is a reasonable action if two drones are on a collision course - even if they can't be stopped in time, moving the upper drone higher
+//in altitude can avoid a collision.
+inline void VehicleControlWidget::SetHazardCondition(std::string Serial, bool StopOnHazard, bool DodgeUpOnHazard) {
 	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
 	
 	//Iterate through each connected drone - if the serial matches, start manual control of the drone and return true.
 	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
 		if (m_currentDroneSerials[n] == Serial) {
 			vehicleState & state(m_vehicleStates.at(Serial));
-			if (PauseOnHazard && (! state.m_hazard)) {
+			if ((StopOnHazard || DodgeUpOnHazard) && (! state.m_hazard)) {
 				DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
-				if (drone != nullptr)
+				if (drone != nullptr) {
 					StartManualControl(*drone, state);
+					if (DodgeUpOnHazard) {
+						std::cerr << "Drone with serial " << Serial << " is dodging up.\r\n";
+						state.m_targetHAGFeet += 12.0;
+					}
+				}
 			}
 			state.m_hazard = true;
 			return;
@@ -1004,6 +1097,8 @@ inline void VehicleControlWidget::StartManualControl(DroneInterface::Drone & Dro
 		std::cerr << "Warning: Starting manual control without full & current telemetry. Defaulting yaw to 0 degrees.\r\n";
 	State.m_flyAtDeck = FlyAtDeck;
 	State.m_userControlEnabled = true;
+	State.m_LastCommandWasHover = false;
+	State.m_AtTargetState = false;
 }
 
 inline void VehicleControlWidget::DroneCommand_Hover(DroneInterface::Drone & Drone, vehicleState & State) {
@@ -1081,6 +1176,18 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 				}
 				ImGui::EndMenu();
 			}
+		}
+		//TODO - this should be removed once waypoint mission functionality is tested
+		if (ImGui::BeginMenu("Start Waypoint Mission")) {
+			if (ImGui::MenuItem("Short Mission - Point 2 Point")) {
+				myState.m_userControlEnabled = false;
+				drone.StartSampleWaypointMission(10, false, false, Eigen::Vector2d(5.0, 50.0), 30.0);
+			}
+			if (ImGui::MenuItem("Short Mission - Round Corners")) {
+				myState.m_userControlEnabled = false;
+				drone.StartSampleWaypointMission(10, true, false, Eigen::Vector2d(5.0, 50.0), 30.0);
+			}
+			ImGui::EndMenu();
 		}
 		
 		ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();

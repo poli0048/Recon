@@ -323,6 +323,7 @@ namespace DroneInterface {
 			}
 			case 4U: {
 				if (this->m_packet_ms.Deserialize(*m_packet_fragment)) {
+					std::cout << "Message String Packet received.\r\n";
 					std::cout << this->m_packet_ms;
 					return true;
 				}
@@ -401,6 +402,13 @@ namespace DroneInterface {
 	//NED velocity vector (m/s)
 	bool RealDrone::GetVelocity(double & V_North, double & V_East, double & V_Down, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
+		Eigen::Vector3d V_NED(this->m_packet_ct.V_N, this->m_packet_ct.V_E, this->m_packet_ct.V_D);
+		//Sanitize velocity based on max vehicle speed of 28 m/s (shouldn't need this but in case velocity is bad, we don't want to cause problems elsewhere)
+		if (V_NED.norm() > 28.0) {
+			std::cerr << "Warning: Sanitizing unreasonable velocity vector. Speed = " << V_NED.norm() << " m/s\r\n";
+			V_NED.normalize();
+			V_NED *= 28.0;
+		}
 		V_North   = this->m_packet_ct.V_N;
 		V_East    = this->m_packet_ct.V_E;
 		V_Down    = this->m_packet_ct.V_D;
@@ -657,7 +665,7 @@ namespace DroneInterface {
 		
 		//Tell the vehicle control widget and the guidance module to stop commanding this drone.
 		std::string droneSerial = GetDroneSerial();
-		VehicleControlWidget::Instance().StopCommandingDrone(droneSerial);
+		//VehicleControlWidget::Instance().StopCommandingDrone(droneSerial); //Initiated by vehicle control widget, so it does this
 		Guidance::GuidanceEngine::Instance().RemoveLowFlier(droneSerial);
 		
 		//Get drone's current position and the ground altitude

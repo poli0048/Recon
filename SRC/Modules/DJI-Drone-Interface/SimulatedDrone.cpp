@@ -391,6 +391,7 @@ namespace DroneInterface {
 	
 	//Put in virtualStick Mode and send command (stop mission if running)
 	void SimulatedDrone::IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command) {
+		//std::cerr << "Virtual Stick Mode A\r\n";
 		std::scoped_lock lock(m_mutex);
 		m_flightMode = 3;
 		m_LastVSCommand_ModeA = Command;
@@ -399,6 +400,7 @@ namespace DroneInterface {
 	
 	//Put in virtualStick Mode and send command (stop mission if running)
 	void SimulatedDrone::IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command) {
+		//std::cerr << "Virtual Stick Mode B\r\n";
 		std::scoped_lock lock(m_mutex);
 		m_flightMode = 4;
 		m_LastVSCommand_ModeB = Command;
@@ -407,6 +409,7 @@ namespace DroneInterface {
 	
 	//Stop any running missions an leave virtualStick mode (if in it) and hover in place (P mode)
 	void SimulatedDrone::Hover(void) {
+		//std::cerr << "Hover\r\n";
 		std::scoped_lock lock(m_mutex);
 		if (m_flightMode == 0)
 			m_flightMode = 5; //Takeoff
@@ -961,7 +964,7 @@ namespace DroneInterface {
 		
 		//Tell the vehicle control widget and the guidance module to stop commanding this drone.
 		std::string droneSerial = GetDroneSerial();
-		VehicleControlWidget::Instance().StopCommandingDrone(droneSerial);
+		//VehicleControlWidget::Instance().StopCommandingDrone(droneSerial); //Initiated by vehicle control widget, so it does this
 		Guidance::GuidanceEngine::Instance().RemoveLowFlier(droneSerial);
 		
 		//Get drone's current position and the ground altitude

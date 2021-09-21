@@ -68,6 +68,7 @@ namespace DroneInterface {
 						RealDrone * drone = m_droneRealHoldingPool[n];
 						if (drone->IsDead()) {
 							//This drone has taken possession of an existing drone - we can delete this object
+							std::cerr << "Drone in holding pool has taken possession of existing drone. Destroying dead drone.\r\n";
 							delete drone;
 							m_droneRealHoldingPool.erase(m_droneRealHoldingPool.begin() + n);
 						}
@@ -76,6 +77,7 @@ namespace DroneInterface {
 							RealDrone * mergeTarget = nullptr;
 							for (RealDrone * existingDrone : m_droneRealVector) {
 								if (existingDrone->GetDroneSerial() == drone->GetDroneSerial()) {
+									std::cerr << "Target for possession set for drone in holding pool.\r\n";
 									mergeTarget = existingDrone;
 									break;
 								}
@@ -87,6 +89,7 @@ namespace DroneInterface {
 							}
 							else {
 								//There is no existing drone with the same serial number as the new drone
+								std::cerr << "No existing drone with serial " << drone->GetDroneSerial() << ". Moving drone from holding pool.\r\n";
 								m_droneRealVector.push_back(drone);
 								m_droneRealHoldingPool.erase(m_droneRealHoldingPool.begin() + n);
 							}
