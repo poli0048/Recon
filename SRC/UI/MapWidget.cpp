@@ -464,6 +464,7 @@ void MapWidget::Draw(void) {
 		}
 		m_SurveyRegionsTool.Draw_Overlay(mousePosScreenSpace, mousePosNM, draw_list, mouseInBounds);
 		m_shadowMapOverlay.Draw_Overlay(mousePosNM, draw_list, mouseInBounds);
+		m_TAOverlay.Draw_Overlay(mousePosNM, draw_list, mouseInBounds);
 		m_guidanceOverlay.Draw_Overlay(mousePosNM, draw_list, mouseInBounds);
 	}
 	

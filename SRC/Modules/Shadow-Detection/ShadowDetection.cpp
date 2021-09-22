@@ -164,19 +164,16 @@ namespace ShadowDetection {
 		
 		//getECEFCentroid(LLA, centroid_ECEF)
 		Eigen::MatrixXd ECEF_points(rows, 3);
-		for (int row = 0; row < rows; row++) {
-			//Eigen::Vector3d  LLA = std::get<1>Fiducials[row];
-			cv::Point3d ECEF_point = positionLLA2ECEF(std::get<1>(m_Fiducials[row])(0), std::get<1>(m_Fiducials[row])(1), std::get<1>(m_Fiducials[row])(2));
-			ECEF_points.row(row) = Eigen::Vector3d(ECEF_point.x, ECEF_point.y, ECEF_point.z);
-		}
+		for (int row = 0; row < rows; row++)
+			ECEF_points.row(row) = LLA2ECEF(std::get<1>(m_Fiducials[row]));
 		Eigen::Vector3d centroid_temp = ECEF_points.colwise().mean();
 		centroid_ECEF = cv::Point3d(centroid_temp[0], centroid_temp[1], centroid_temp[2]);
 		
 		//multLLA2LEA(LLA, LEA, ECEF)
 		for (int row = 0; row < rows; row++) {
-			cv::Point3d ECEF_point = positionLLA2ECEF(std::get<1>(m_Fiducials[row])(0), std::get<1>(m_Fiducials[row])(1), std::get<1>(m_Fiducials[row])(2));
+			Eigen::Vector3d ECEF_Point_Vec3 = ECEF_points.row(row);
+			cv::Point3d ECEF_point(ECEF_Point_Vec3(0), ECEF_Point_Vec3(1), ECEF_Point_Vec3(2));
 			cv::Mat LEA_point = cv::Mat(ECEF_point - centroid_ECEF).t();
-			//LEA_point.copyTo(Fiducials_LEA[row]);
 			Fiducials_LEA[row] << LEA_point.at<double>(0),  LEA_point.at<double>(1), LEA_point.at<double>(2);
 			Fiducials_PX[row] << (double)std::get<0>(m_Fiducials[row])(0), (double)std::get<0>(m_Fiducials[row])(1);
 		}

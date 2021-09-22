@@ -25,6 +25,7 @@
 #include "SurveyRegionTool.hpp"
 #include "GuidanceOverlay.hpp"
 #include "ShadowMapOverlay.hpp"
+#include "TimeAvailableOverlay.hpp"
 
 class MapWidget {
 		using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
@@ -89,10 +90,12 @@ class MapWidget {
 		friend class VehicleControlWidget;
 		friend class GuidanceOverlay;
 		friend class ShadowMapOverlay;
+		friend class TimeAvailableOverlay;
 		
 		//Public overlays
 		GuidanceOverlay m_guidanceOverlay;
 		ShadowMapOverlay m_shadowMapOverlay;
+		TimeAvailableOverlay m_TAOverlay;
 		
 		static MapWidget & Instance() { static MapWidget widget; return widget; }
 		

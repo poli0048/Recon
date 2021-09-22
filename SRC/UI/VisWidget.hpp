@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <memory>
 #include <chrono>
+#include <algorithm>
 
 //External Includes
 #include "../HandyImGuiInclude.hpp"
@@ -32,6 +33,7 @@ class VisWidget {
 		bool LayerVisible_SurveyRegion;
 		bool LayerVisible_GuidanceOverlay;
 		bool LayerVisible_ShadowMapOverlay;
+		bool LayerVisible_TimeAvailableOverlay;
 		
 		//All opacities are in the range 0 to 100
 		float Opacity_MSA;
@@ -40,6 +42,7 @@ class VisWidget {
 		float Opacity_SurveyRegion;
 		float Opacity_GuidanceOverlay;
 		float Opacity_ShadowMapOverlay;
+		float Opacity_TimeAvailableOverlay;
 		
 		float MSA_CmapMinVal;    //MSA corresponding to low end of colormap (m)
 		float MSA_CmapMaxVal;    //MSA corresponding to high end of colormap (m)
@@ -68,12 +71,14 @@ class VisWidget {
 			        CEREAL_NVP(LayerVisible_SurveyRegion),
 			        CEREAL_NVP(LayerVisible_GuidanceOverlay),
 			        CEREAL_NVP(LayerVisible_ShadowMapOverlay),
+			        CEREAL_NVP(LayerVisible_TimeAvailableOverlay),
 			        CEREAL_NVP(Opacity_MSA),
 			        CEREAL_NVP(Opacity_AvoidanceZones),
 			        CEREAL_NVP(Opacity_SafeLandingZones),
 			        CEREAL_NVP(Opacity_SurveyRegion),
 			        CEREAL_NVP(Opacity_GuidanceOverlay),
 			        CEREAL_NVP(Opacity_ShadowMapOverlay),
+			        CEREAL_NVP(Opacity_TimeAvailableOverlay),
 			        CEREAL_NVP(MSA_CmapMinVal),
 			        CEREAL_NVP(MSA_CmapMaxVal),
 			        CEREAL_NVP(MSA_NoFlyDrawMode),
@@ -132,19 +137,21 @@ inline void VisWidget::LoadFromDisk(void) {
 
 //Set all parameters to defaults (good fallback if file loading fails)
 inline void VisWidget::LoadDefaults(void) {
-	LayerVisible_MSA              = false;
-	LayerVisible_AvoidanceZones   = false;
-	LayerVisible_SafeLandingZones = false;
-	LayerVisible_SurveyRegion     = false;
-	LayerVisible_GuidanceOverlay  = false;
-	LayerVisible_ShadowMapOverlay = false;
+	LayerVisible_MSA                  = false;
+	LayerVisible_AvoidanceZones       = false;
+	LayerVisible_SafeLandingZones     = false;
+	LayerVisible_SurveyRegion         = false;
+	LayerVisible_GuidanceOverlay      = false;
+	LayerVisible_ShadowMapOverlay     = false;
+	LayerVisible_TimeAvailableOverlay = false;
 	
-	Opacity_MSA              = 100.0f;
-	Opacity_AvoidanceZones   = 100.0f;
-	Opacity_SafeLandingZones = 100.0f;
-	Opacity_SurveyRegion     = 100.0f;
-	Opacity_GuidanceOverlay  = 100.0f;
-	Opacity_ShadowMapOverlay = 100.0f;
+	Opacity_MSA                  = 100.0f;
+	Opacity_AvoidanceZones       = 100.0f;
+	Opacity_SafeLandingZones     = 100.0f;
+	Opacity_SurveyRegion         = 100.0f;
+	Opacity_GuidanceOverlay      = 100.0f;
+	Opacity_ShadowMapOverlay     = 100.0f;
+	Opacity_TimeAvailableOverlay = 100.0f;
 	
 	MSA_CmapMinVal = 0.0f;
 	MSA_CmapMaxVal = 400.0f;
@@ -162,26 +169,27 @@ inline void VisWidget::LoadDefaults(void) {
 
 //Make sure all vis parameters are reasonable
 inline void VisWidget::SanitizeState(void) {
-	Opacity_MSA              = std::max(std::min(Opacity_MSA,              100.0f), 0.0f);
-	Opacity_AvoidanceZones   = std::max(std::min(Opacity_AvoidanceZones,   100.0f), 0.0f);
-	Opacity_SafeLandingZones = std::max(std::min(Opacity_SafeLandingZones, 100.0f), 0.0f);
-	Opacity_SurveyRegion     = std::max(std::min(Opacity_SurveyRegion,     100.0f), 0.0f);
-	Opacity_GuidanceOverlay  = std::max(std::min(Opacity_GuidanceOverlay,  100.0f), 0.0f);
-	Opacity_ShadowMapOverlay = std::max(std::min(Opacity_ShadowMapOverlay, 100.0f), 0.0f);
+	Opacity_MSA                  = std::clamp(Opacity_MSA,                  0.0f, 100.0f);
+	Opacity_AvoidanceZones       = std::clamp(Opacity_AvoidanceZones,       0.0f, 100.0f);
+	Opacity_SafeLandingZones     = std::clamp(Opacity_SafeLandingZones,     0.0f, 100.0f);
+	Opacity_SurveyRegion         = std::clamp(Opacity_SurveyRegion,         0.0f, 100.0f);
+	Opacity_GuidanceOverlay      = std::clamp(Opacity_GuidanceOverlay,      0.0f, 100.0f);
+	Opacity_ShadowMapOverlay     = std::clamp(Opacity_ShadowMapOverlay,     0.0f, 100.0f);
+	Opacity_TimeAvailableOverlay = std::clamp(Opacity_TimeAvailableOverlay, 0.0f, 100.0f);
 	
-	MSA_CmapMinVal = std::max(std::min(MSA_CmapMinVal, 10000.0f), -1000.0f);
-	MSA_CmapMaxVal = std::max(std::min(MSA_CmapMaxVal, 10000.0f), -1000.0f);
-	MSA_NoFlyDrawMode = std::max(std::min(MSA_NoFlyDrawMode, 1), 0);
+	MSA_CmapMinVal    = std::clamp(MSA_CmapMinVal, -1000.0f, 10000.0f);
+	MSA_CmapMaxVal    = std::clamp(MSA_CmapMaxVal, -1000.0f, 10000.0f);
+	MSA_NoFlyDrawMode = std::clamp(MSA_NoFlyDrawMode, 0, 1);
 	
-	SurveyRegionColor[0] = std::max(std::min(SurveyRegionColor[0], 1.0f), 0.0f);
-	SurveyRegionColor[1] = std::max(std::min(SurveyRegionColor[1], 1.0f), 0.0f);
-	SurveyRegionColor[2] = std::max(std::min(SurveyRegionColor[2], 1.0f), 0.0f);
-	SurveyRegionVertexRadius = std::max(std::min(SurveyRegionVertexRadius, 20.0f), 1.0f);
-	SurveyRegionEdgeThickness = std::max(std::min(SurveyRegionEdgeThickness, 10.0f), 1.0f);
+	SurveyRegionColor[0]      = std::clamp(SurveyRegionColor[0],      0.0f, 1.0f);
+	SurveyRegionColor[1]      = std::clamp(SurveyRegionColor[1],      0.0f, 1.0f);
+	SurveyRegionColor[2]      = std::clamp(SurveyRegionColor[2],      0.0f, 1.0f);
+	SurveyRegionVertexRadius  = std::clamp(SurveyRegionVertexRadius,  1.0f, 20.0f);
+	SurveyRegionEdgeThickness = std::clamp(SurveyRegionEdgeThickness, 1.0f, 10.0f);
 	
-	ShadowMapColor[0] = std::max(std::min(ShadowMapColor[0], 1.0f), 0.0f);
-	ShadowMapColor[1] = std::max(std::min(ShadowMapColor[1], 1.0f), 0.0f);
-	ShadowMapColor[2] = std::max(std::min(ShadowMapColor[2], 1.0f), 0.0f);
+	ShadowMapColor[0] = std::clamp(ShadowMapColor[0], 0.0f, 1.0f);
+	ShadowMapColor[1] = std::clamp(ShadowMapColor[1], 0.0f, 1.0f);
+	ShadowMapColor[2] = std::clamp(ShadowMapColor[2], 0.0f, 1.0f);
 }
 
 inline void VisWidget::Draw() {
@@ -376,6 +384,27 @@ inline void VisWidget::Draw() {
 			ImGui::TextUnformatted(label.c_str());
 			ImGui::SameLine(col2Start);
 			ImGui::ColorEdit3("##ShadowMapColor", &(ShadowMapColor[0]), ImGuiColorEditFlags_NoInputs);
+			
+			ImGui::EndPopup();
+		}
+	}
+	
+	ImGui::TextUnformatted("Time Available Overlay");
+	ImGui::SameLine(checkBoxXPos);
+	ImGui::Checkbox("##Time Available Overlay", &LayerVisible_TimeAvailableOverlay);
+	ImGui::SameLine(settingsButtonXPos);
+	if (ImGui::Button("\uf013##Time Available Overlay Settings"))
+		ImGui::OpenPopup("Time Available Overlay Settings");
+	{
+		ImExt::Style styleSitter(StyleVar::WindowPadding, Math::Vector2(4.0f));
+		if (ImGui::BeginPopup("Time Available Overlay Settings", ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize)) {
+			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Opacity  ").x;
+			std::string label = "Opacity  "s;
+			ImGui::SetCursorPosX(col2Start - ImGui::CalcTextSize(label.c_str()).x);
+			ImGui::TextUnformatted(label.c_str());
+			ImGui::SameLine(col2Start);
+			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
+			ImGui::SliderFloat("##Opacity_TimeAvailableOverlay", &Opacity_TimeAvailableOverlay, 0.0f, 100.0f, "%.0f");
 			
 			ImGui::EndPopup();
 		}
