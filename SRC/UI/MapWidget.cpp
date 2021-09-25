@@ -463,6 +463,8 @@ void MapWidget::Draw(void) {
 			m_MSATool.Draw_Overlay(mousePosNM, draw_list, mouseInBounds);
 		}
 		m_SurveyRegionsTool.Draw_Overlay(mousePosScreenSpace, mousePosNM, draw_list, mouseInBounds);
+		m_shadowMapOverlay.Draw_Overlay(mousePosNM, draw_list, mouseInBounds);
+		m_TAOverlay.Draw_Overlay(mousePosNM, draw_list, mouseInBounds);
 		m_guidanceOverlay.Draw_Overlay(mousePosNM, draw_list, mouseInBounds);
 	}
 	
@@ -513,7 +515,7 @@ void MapWidget::Draw(void) {
 			else {
 				std::ostringstream outSS;
 				outSS << std::fixed << std::setprecision(1) << MSAValue;
-				tooltipText += "Min Safe Altitude: " + outSS.str();
+				tooltipText += "Min Safe Altitude: "s + outSS.str() + " m"s;
 			}
 			if ((! std::isnan(AvoidanceZonesValue)) && (AvoidanceZonesValue > 0.5))
 				tooltipText += "\r\nAvoidance Zone";

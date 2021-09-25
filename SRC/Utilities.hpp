@@ -9,6 +9,10 @@
 
 //External Includes
 #include "../../handycpp/Handy.hpp"
+#include <opencv2/core.hpp>
+
+//Project Includes
+#include "EigenAliases.h"
 
 inline double FractionalPart(double x) { return x - std::floor(x); }
 
@@ -172,15 +176,13 @@ inline bool str2int(std::string str, int & Value) {
 	}
 }
 
+cv::Mat GetRefFrame(std::filesystem::path const & DatasetPath);
 
+//Return the path of the first .MOV file in the given folder (lexicographically)
+std::filesystem::path GetSimVideoFilePath(std::filesystem::path const & DatasetPath);
 
-
-
-
-
-
-
-
-
+//Load GCPs from the file GCP.txt in the given folder - we also adjust them from file native res (4K) to 720p
+//Returned fiducials are in form needed by Shadow Detection Engine.
+std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> LoadFiducialsFromFile(std::filesystem::path const & DatasetPath);
 
 

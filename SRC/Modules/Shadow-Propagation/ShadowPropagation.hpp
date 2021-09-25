@@ -51,11 +51,17 @@ namespace ShadowPropagation {
 			bool              m_running;
 			std::atomic<bool> m_abort;
 			std::mutex        m_mutex;
+<<<<<<< HEAD
 			int               m_callbackHandle;
 			static const int  TARGET_INPUT_LENGTH = 10;
 			static const int  TIME_HORIZON = 10;
 			static constexpr double OUTPUT_THRESHOLD = 0.4;
 
+=======
+			int               m_callbackHandle; //Handle for this objects shadow detection engine callback
+			std::unordered_map<int, std::function<void(TimeAvailableFunction const & TA)>> m_callbacks;
+			
+>>>>>>> origin/master
 			std::Evector<ShadowDetection::InstantaneousShadowMap> m_unprocessedShadowMaps;
 			TimeAvailableFunction m_TimeAvail; //Most recent time available function
             torch::jit::script::Module m_module; // TorchScript Model
@@ -83,6 +89,10 @@ namespace ShadowPropagation {
 			inline void Start(void);     //Start or restart continuous processing of new shadow maps
 			inline void Stop(void);      //Stop processing
 			inline bool IsRunning(void); //Returns true if running, false if stopped
+			
+			//Callback access
+			inline int  RegisterCallback(std::function<void(TimeAvailableFunction const & TA)> Callback); //Regester callback for new TA functions
+			inline void UnRegisterCallback(int Handle); //Unregister callback for new TA functions (input is token returned by RegisterCallback()
 			
 			//Accessors - Each returns false if no Time Available functions have been computed yet
 			inline bool GetTimestampOfMostRecentTimeAvailFun(TimePoint & Timestamp);
@@ -115,6 +125,22 @@ namespace ShadowPropagation {
 	inline bool ShadowPropagationEngine::IsRunning(void) {
 		std::scoped_lock lock(m_mutex);
 		return m_running;
+	}
+	
+	//Regester callback for new TA functions (returns handle)
+	inline int ShadowPropagationEngine::RegisterCallback(std::function<void(TimeAvailableFunction const & TA)> Callback) {
+		std::scoped_lock lock(m_mutex);
+		int token = 0;
+		while (m_callbacks.count(token) > 0U)
+			token++;
+		m_callbacks[token] = Callback;
+		return token;
+	}
+	
+	//Unregister callback for new TA functions (input is token returned by RegisterCallback()
+	inline void ShadowPropagationEngine::UnRegisterCallback(int Handle) {
+		std::scoped_lock lock(m_mutex);
+		m_callbacks.erase(Handle);
 	}
 	
 	//If this function gets large (and it easily could), drop the "inline" specifier and move it to a CPP file.
@@ -230,6 +256,11 @@ namespace ShadowPropagation {
             // Scales up localTimeAvailable
             cv::resize(localTimeAvailable, m_TimeAvail.TimeAvailable, cv::Size(512, 512), cv::INTER_LINEAR);
             m_TimeAvail.Timestamp = map.Timestamp;
+
+			//Call any registered callbacks
+			for (auto const & kv : m_callbacks)
+				kv.second(m_TimeAvail);
+			
 			m_unprocessedShadowMaps.erase(m_unprocessedShadowMaps.begin()); //Will cause re-allocation but the buffer is small so don't worry about it
 			//TODO: *********************************************************************************
 			//TODO: *********************************************************************************

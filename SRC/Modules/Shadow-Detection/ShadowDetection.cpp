@@ -73,33 +73,34 @@ namespace ShadowDetection {
 		frame_orig = Frame;
 
 		getOrbRotation(ref_descriptors, keypoints_ref, Frame, H_out);
-		
+
 		cv::warpAffine(Frame, img_rot, H_out, m_ReferenceFrame.size());
 		getBinaryCloudMask(img_rot, brightest, binary);
 		cv::medianBlur(binary, binary, MEDIAN_BLUR_RADIUS);
-		
+
 		cv::cvtColor(binary, binary, cv::COLOR_GRAY2RGB);
-            
-            
+
 		sampleENUSquare(binary, o, R_cam_ENU, t_cam_ENU, center, max_extent, OUTPUT_RESOLUTION_PX, false, binary_sampled);
 		sampleENUSquare(img_rot, o, R_cam_ENU, t_cam_ENU, center, max_extent, OUTPUT_RESOLUTION_PX, false, img_rot_sampled);
 		sampleENUSquare(frame_orig, o, R_cam_ENU, t_cam_ENU, center, max_extent, OUTPUT_RESOLUTION_PX, false, frame_sampled);
-		
+
 		getApertureMask(img_rot_sampled, mask);
 		img_rot_sampled.copyTo(img_masked, mask);
-		
+
 		cv::cvtColor(binary_sampled, binary_sampled, cv::COLOR_RGB2GRAY);
 		create_masked_binary((uint) binary_sampled.cols, (uint) binary_sampled.rows, mask, binary_sampled);
-		imshow("Frame Stabilized", img_rot_sampled);
-		cv::waitKey(1);
+		//imshow("Frame Stabilized", img_rot_sampled);
+		//cv::waitKey(1);
+		
 		//Update m_ShadowMap
+		std::scoped_lock lock(m_mutex); //Lock now after processing but before saving and executing callbacks
 		m_ShadowMap.Map = binary_sampled; //Shadow map based on most recently processed frame
 		m_ShadowMap.Timestamp = Timestamp;
-			
+
 		//Update m_History (Essentially a vector of ShadowMap Histories)
 		m_History.back().Maps.push_back(binary_sampled); //Record of all computed shadow maps - add new element when ref frame changes (since registration changes)
 		m_History.back().Timestamps.push_back(Timestamp);
-		
+
 		//Call any registered callbacks
 		for (auto const & kv : m_callbacks)
 			kv.second(m_ShadowMap);
@@ -108,7 +109,17 @@ namespace ShadowDetection {
 	//Set the reference frame to be used for registration and stabilization (all other frames are aligned to the reference frame)
 	//While we are setting up the reference frame, we will generate brightest, since we will need that for the binary cloud mask
 	void ShadowDetectionEngine::SetReferenceFrame(cv::Mat const & RefFrame) {
+		if ((RefFrame.rows == 0) || (RefFrame.cols == 0)) {
+			std::cerr << "Error in ShadowDetectionEngine::SetReferenceFrame(): Given ref frame is empty.\r\n";
+			return;
+		}
+		
 		std::scoped_lock lock(m_mutex);
+		if (m_running) {
+			std::cerr << "Error in ShadowDetectionEngine::SetReferenceFrame(): Module is currently running.\r\n";
+			return;
+		}
+		
 		RefFrame.copyTo(m_ReferenceFrame);
 		
 		std::vector<cv::Mat> hsv_channels;
@@ -116,41 +127,11 @@ namespace ShadowDetection {
 
 		cv::cvtColor(m_ReferenceFrame, hsv, cv::COLOR_BGR2HSV);
 		cv::split(hsv, hsv_channels);
-		Eigen::Vector2d UL_LL, UR_LL, LL_LL, LR_LL;
 		brightest = hsv_channels[2];
 
 		getRefDescriptors(m_ReferenceFrame, ref_descriptors, keypoints_ref);	
 		
-		//set up new element of shadowMapHistory by adding an empty shadowMap to m_History
-		ShadowMapHistory new_History;
-		m_History.push_back(new_History);
-
-		// Set up points
-		Eigen::Vector2d UL(0, 0);
-		Eigen::Vector2d UR(OUTPUT_RESOLUTION_PX - 1, 0);
-		Eigen::Vector2d LR(OUTPUT_RESOLUTION_PX - 1, OUTPUT_RESOLUTION_PX - 1);
-		Eigen::Vector2d LL(0, OUTPUT_RESOLUTION_PX - 1);
-		Eigen::Vector3d UL_LLA, LR_LLA, UR_LLA, LL_LLA;
-
-		positionPX2LLA(m_ReferenceFrame, UL, centroid_ECEF, center, max_extent, OUTPUT_RESOLUTION_PX, UL_LLA, R_cam_ENU, t_cam_ENU, o);
-		positionPX2LLA(m_ReferenceFrame, LL, centroid_ECEF, center, max_extent, OUTPUT_RESOLUTION_PX, LL_LLA, R_cam_ENU, t_cam_ENU, o);
-		positionPX2LLA(m_ReferenceFrame, LR, centroid_ECEF, center, max_extent, OUTPUT_RESOLUTION_PX, LR_LLA, R_cam_ENU, t_cam_ENU, o);
-		positionPX2LLA(m_ReferenceFrame, UR, centroid_ECEF, center, max_extent, OUTPUT_RESOLUTION_PX, UR_LLA, R_cam_ENU, t_cam_ENU, o);
-
-		UL_LL << UL_LLA(0), UL_LLA(1);
-		UR_LL << UR_LLA(0), UR_LLA(1);
-		LL_LL << LL_LLA(0), LL_LLA(1);
-		LR_LL << LR_LLA(0), LR_LLA(1);
-
-		m_History.back().UL_LL = UL_LL;
-		m_History.back().UR_LL = UR_LL;
-		m_History.back().LL_LL = LL_LL;
-		m_History.back().LR_LL = LL_LL;
-		
-		m_ShadowMap.UL_LL = UL_LL;
-		m_ShadowMap.UR_LL = UR_LL;
-		m_ShadowMap.LL_LL = LL_LL;
-		m_ShadowMap.LR_LL = LL_LL;
+		TryInitShadowMapAndHistory();
 	}
 	
 	//Set the fiducials used for registration. Each fiducial is a tuple of the form <PixCoords, LLA> where:
@@ -158,7 +139,17 @@ namespace ShadowDetection {
 	//LLA are the WGS84 latitude (radians), longitude (radians), and altitude (m) of the fiducial, in that order.
 	//No need to convert to radians since testbench already does so
 	void ShadowDetectionEngine::SetFiducials(std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> const & Fiducials) {
+		if (Fiducials.size() < 3U) {
+			std::cerr << "Error in ShadowDetectionEngine::SetFiducials(): Fewer than 3 fiducials provided.\r\n";
+			return;
+		}
+		
 		std::scoped_lock lock(m_mutex);
+		if (m_running) {
+			std::cerr << "Error in ShadowDetectionEngine::SetFiducials(): Module is currently running.\r\n";
+			return;
+		}
+		
 		m_Fiducials = Fiducials;
 		int rows = m_Fiducials.size();
 		
@@ -173,29 +164,55 @@ namespace ShadowDetection {
 		
 		//getECEFCentroid(LLA, centroid_ECEF)
 		Eigen::MatrixXd ECEF_points(rows, 3);
-		for (int row = 0; row < rows; row++) {
-			//Eigen::Vector3d  LLA = std::get<1>Fiducials[row];
-			cv::Point3d ECEF_point = positionLLA2ECEF(std::get<1>(m_Fiducials[row])(0), std::get<1>(m_Fiducials[row])(1), std::get<1>(m_Fiducials[row])(2));
-			ECEF_points.row(row) = Eigen::Vector3d(ECEF_point.x, ECEF_point.y, ECEF_point.z);
-		}
+		for (int row = 0; row < rows; row++)
+			ECEF_points.row(row) = LLA2ECEF(std::get<1>(m_Fiducials[row]));
 		Eigen::Vector3d centroid_temp = ECEF_points.colwise().mean();
 		centroid_ECEF = cv::Point3d(centroid_temp[0], centroid_temp[1], centroid_temp[2]);
 		
 		//multLLA2LEA(LLA, LEA, ECEF)
 		for (int row = 0; row < rows; row++) {
-			cv::Point3d ECEF_point = positionLLA2ECEF(std::get<1>(m_Fiducials[row])(0), std::get<1>(m_Fiducials[row])(1), std::get<1>(m_Fiducials[row])(2));
+			Eigen::Vector3d ECEF_Point_Vec3 = ECEF_points.row(row);
+			cv::Point3d ECEF_point(ECEF_Point_Vec3(0), ECEF_Point_Vec3(1), ECEF_Point_Vec3(2));
 			cv::Mat LEA_point = cv::Mat(ECEF_point - centroid_ECEF).t();
-			//LEA_point.copyTo(Fiducials_LEA[row]);
 			Fiducials_LEA[row] << LEA_point.at<double>(0),  LEA_point.at<double>(1), LEA_point.at<double>(2);
 			Fiducials_PX[row] << (double)std::get<0>(m_Fiducials[row])(0), (double)std::get<0>(m_Fiducials[row])(1);
-			}
+		}
 		get_ocam_model(&o, file);
 		findPose(Fiducials_PX, Fiducials_LEA, o, R_cam_LEA, t_cam_LEA); //ECHAI: Still editing findPose
 
 		poseLEA2ENU(centroid_ECEF, R_cam_LEA, t_cam_LEA, R_cam_ENU, t_cam_ENU);
 
     		get_centered_extent(centroid_ECEF, APERTURE_DISTANCE_PX, FINAL_SIZE, R_cam_ENU, t_cam_ENU, t_cam_LEA, o, center, max_extent);
-
+    		
+    		TryInitShadowMapAndHistory();
+	}
+	
+	//Sets the corner coords in both m_ShadowMap and m_History if GCPs and a ref frame are set
+	void ShadowDetectionEngine::TryInitShadowMapAndHistory(void) {
+		if ((! m_ReferenceFrame.empty()) && (! m_Fiducials.empty())) {
+			Eigen::Vector2d UL(0, 0);
+			Eigen::Vector2d UR(OUTPUT_RESOLUTION_PX - 1, 0);
+			Eigen::Vector2d LR(OUTPUT_RESOLUTION_PX - 1, OUTPUT_RESOLUTION_PX - 1);
+			Eigen::Vector2d LL(0, OUTPUT_RESOLUTION_PX - 1);
+			Eigen::Vector3d UL_LLA, LR_LLA, UR_LLA, LL_LLA;
+			
+			positionPX2LLA(m_ReferenceFrame, UL, centroid_ECEF, center, max_extent, OUTPUT_RESOLUTION_PX, UL_LLA, R_cam_ENU, t_cam_ENU, o);
+			positionPX2LLA(m_ReferenceFrame, LL, centroid_ECEF, center, max_extent, OUTPUT_RESOLUTION_PX, LL_LLA, R_cam_ENU, t_cam_ENU, o);
+			positionPX2LLA(m_ReferenceFrame, LR, centroid_ECEF, center, max_extent, OUTPUT_RESOLUTION_PX, LR_LLA, R_cam_ENU, t_cam_ENU, o);
+			positionPX2LLA(m_ReferenceFrame, UR, centroid_ECEF, center, max_extent, OUTPUT_RESOLUTION_PX, UR_LLA, R_cam_ENU, t_cam_ENU, o);
+			
+			m_ShadowMap.UL_LL << UL_LLA(0), UL_LLA(1);
+			m_ShadowMap.UR_LL << UR_LLA(0), UR_LLA(1);
+			m_ShadowMap.LL_LL << LL_LLA(0), LL_LLA(1);
+			m_ShadowMap.LR_LL << LR_LLA(0), LR_LLA(1);
+			
+			//set up new element of shadowMapHistory and set the corners
+			m_History.emplace_back();
+			m_History.back().UL_LL << UL_LLA(0), UL_LLA(1);
+			m_History.back().UR_LL << UR_LLA(0), UR_LLA(1);
+			m_History.back().LL_LL << LL_LLA(0), LL_LLA(1);
+			m_History.back().LR_LL << LR_LLA(0), LR_LLA(1);
+		}
 	}
 }
 

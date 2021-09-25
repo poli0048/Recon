@@ -12,16 +12,131 @@
 
 //Project Includes
 #include "Drone.hpp"
+#include "../../Utilities.hpp"
+#include "../../UI/VehicleControlWidget.hpp"
+#include "../Guidance/Guidance.hpp"
+#include "DroneUtils.hpp"
 
 #define PI 3.14159265358979
 
 namespace DroneInterface {
-	RealDrone::RealDrone(tacopie::tcp_client & client) {
-		m_client = &client;
+	RealDrone::RealDrone(const std::shared_ptr<tacopie::tcp_client> & client) {
+		m_client = client.get();
+		m_TimestampOfLastFPSReport = std::chrono::steady_clock::now();
+		
+		//Kick off reading from socket
+		client->async_read({ 1024, bind(&RealDrone::DataReceivedHandler, this, client, std::placeholders::_1) });
 	}
 	
-	RealDrone::~RealDrone() {
-		m_client->disconnect(true);
+	RealDrone::~RealDrone() { }
+	
+	void RealDrone::LoadTestWaypointMission(WaypointMission & testMission){
+
+	    testMission.Waypoints.clear();
+	    testMission.Waypoints.emplace_back();
+	    testMission.Waypoints.back().Latitude     =  44.237308 * PI/180.0; // radians
+	    testMission.Waypoints.back().Longitude    = -95.307433  * PI/180.0; // radians
+	    testMission.Waypoints.back().Altitude     =  466.0; // m
+	    testMission.Waypoints.back().CornerRadius =  0.0f;  // m (Not used since we aren't using curved trajectories)
+	    testMission.Waypoints.back().Speed        =  16.0f;  // m/s
+	    testMission.Waypoints.back().LoiterTime   = std::nanf("");
+	    testMission.Waypoints.back().GimbalPitch  = std::nanf("");
+
+	    testMission.Waypoints.emplace_back();
+	    testMission.Waypoints.back().Latitude     =  44.237308 * PI/180.0; // radians
+	    testMission.Waypoints.back().Longitude    = -95.309309 * PI/180.0; // radians
+	    testMission.Waypoints.back().Altitude     =  466.0; // m
+	    testMission.Waypoints.back().CornerRadius = 0.2f;   // m (Not used since we aren't using curved trajectories)
+	    testMission.Waypoints.back().Speed        = 9.5f;   // m/s
+	    testMission.Waypoints.back().LoiterTime   = std::nanf("");
+	    testMission.Waypoints.back().GimbalPitch  = std::nanf("");
+
+	    testMission.Waypoints.emplace_back();
+	    testMission.Waypoints.back().Latitude     =  44.237819 * PI/180.0; // radians
+	    testMission.Waypoints.back().Longitude    = -95.309309 * PI/180.0; // radians
+	    testMission.Waypoints.back().Altitude     =  466.0; // m
+	    testMission.Waypoints.back().CornerRadius = 0.2f;   // m (Not used since we aren't using curved trajectories)
+	    testMission.Waypoints.back().Speed        = 9.5f;   // m/s
+	    testMission.Waypoints.back().LoiterTime   = std::nanf("");
+	    testMission.Waypoints.back().GimbalPitch  = std::nanf("");
+
+	    testMission.Waypoints.emplace_back();
+	    testMission.Waypoints.back().Latitude     =  44.237819 * PI/180.0; // radians
+	    testMission.Waypoints.back().Longitude    = -95.307433 * PI/180.0; // radians
+	    testMission.Waypoints.back().Altitude     =  466.0; // m
+	    testMission.Waypoints.back().CornerRadius = 0.2f;   // m (Not used since we aren't using curved trajectories)
+	    testMission.Waypoints.back().Speed        = 9.5f;   // m/s
+	    testMission.Waypoints.back().LoiterTime   = std::nanf("");
+	    testMission.Waypoints.back().GimbalPitch  = std::nanf("");
+
+	    testMission.Waypoints.emplace_back();
+	    testMission.Waypoints.back().Latitude     =  44.238344 * PI/180.0; // radians
+	    testMission.Waypoints.back().Longitude    = -95.307433 * PI/180.0; // radians
+	    testMission.Waypoints.back().Altitude     =  466.0; // m
+	    testMission.Waypoints.back().CornerRadius = 0.2f;   // m (Not used since we aren't using curved trajectories)
+	    testMission.Waypoints.back().Speed        = 9.5f;   // m/s
+	    testMission.Waypoints.back().LoiterTime   = std::nanf("");
+	    testMission.Waypoints.back().GimbalPitch  = std::nanf("");
+
+	    testMission.Waypoints.emplace_back();
+	    testMission.Waypoints.back().Latitude     =  44.238344 * PI/180.0; // radians
+	    testMission.Waypoints.back().Longitude    = -95.309309 * PI/180.0; // radians
+	    testMission.Waypoints.back().Altitude     =  466.0; // m
+	    testMission.Waypoints.back().CornerRadius = 0.2f; // m (Not used since we aren't using curved trajectories)
+	    testMission.Waypoints.back().Speed        = 9.5f; // m/s
+	    testMission.Waypoints.back().LoiterTime   = std::nanf("");
+	    testMission.Waypoints.back().GimbalPitch  = std::nanf("");
+
+	    testMission.LandAtLastWaypoint = false;
+	    testMission.CurvedTrajectory = false;
+
+	    //m_flightMode = 1;
+	}
+
+	void RealDrone::SendTestVirtualStickPacketA(){
+
+
+	    DroneInterface::Packet packet;
+	    DroneInterface::Packet_VirtualStickCommand PacketA;
+	    /*
+	    PacketA.Mode    = 0U;    //Mode A (V_x is V_North, and V_y is V_East)
+	    PacketA.Yaw     = 31.0f; //degrees, relative to true north (positive yaw is clockwise rotation)
+	    PacketA.V_x     = 1.2f;  //m/s
+	    PacketA.V_y     = -0.7f; //m/s
+	    PacketA.HAG     = 39.5f; //m
+	    PacketA.timeout = 5.0f;  //s
+        */
+	    // Diabolical Case. Testing clamp functions
+	    PacketA.Mode    = 0U;    //Mode A (V_x is V_North, and V_y is V_East)
+	    PacketA.Yaw     = 200.0f; //degrees, relative to true north (positive yaw is clockwise rotation)
+	    PacketA.V_x     = 30.0f;  //m/s
+	    PacketA.V_y     = -20.0f; //m/s
+	    PacketA.HAG     = -10.0f; //m
+	    PacketA.timeout = 5.0f;  //s
+
+	    PacketA.Serialize(packet);
+
+	    this->SendPacket(packet);
+
+
+
+	}
+	void RealDrone::SendTestVirtualStickPacketB(){
+
+
+	    DroneInterface::Packet packet;
+	    DroneInterface::Packet_VirtualStickCommand PacketB;
+
+	    PacketB.Mode    = 1U;    //Mode B
+	    PacketB.Yaw     = 31.0f; //degrees, relative to true north (positive yaw is clockwise rotation)
+	    PacketB.V_x     = 1.2f;  //m/s
+	    PacketB.V_y     = -0.7f; //m/s
+	    PacketB.HAG     = 39.5f; //m
+	    PacketB.timeout = 5.0f;  //s
+
+	    PacketB.Serialize(packet);
+
+	    this->SendPacket(packet);
 	}
 
 	void RealDrone::DataReceivedHandler(const std::shared_ptr<tacopie::tcp_client> & client, const tacopie::tcp_client::read_result & res) {
@@ -59,11 +174,86 @@ namespace DroneInterface {
 				}
 			}
 			
-			client->async_read({ 1024, bind(&RealDrone::DataReceivedHandler, this, client, std::placeholders::_1) });
+			//If we have been instructed to take possession of another object, transfer our state to it here and set up the client to
+			//call the target objects receive handler instead of our own. Otherwise, trigger the next read.
+			if (m_possessionTarget != nullptr) {
+				TransferStateToTargetObject();
+				client->async_read({ 1024, bind(&RealDrone::DataReceivedHandler, m_possessionTarget, client, std::placeholders::_1) });
+			}
+			else
+				client->async_read({ 1024, bind(&RealDrone::DataReceivedHandler, this, client, std::placeholders::_1) });
 		}
 		else {
 			std::cout << "Client disconnected" << std::endl;
 			client->disconnect();
+		}
+	}
+	
+	//Transfer state to another RealDrone Object on the next opportunity, leaving this object dead
+	void RealDrone::Possess(RealDrone * Target) {
+		std::scoped_lock lock(m_mutex);
+		m_possessionTarget = Target;
+	}
+	
+	//Returns true if state has been transferred to another object. Can safely be destroyed if dead.
+	bool RealDrone::IsDead(void) {
+		std::scoped_lock lock(m_mutex);
+		return m_isDead;
+	}
+	
+	void RealDrone::TransferStateToTargetObject(void) {
+		if (m_possessionTarget != nullptr) {
+			std::scoped_lock lock_A(m_mutex);
+			std::scoped_lock lock_B(m_possessionTarget->m_mutex);
+			
+			m_possessionTarget->m_client = this->m_client;
+			m_possessionTarget->m_packet_fragment = this->m_packet_fragment;
+			
+			//Transfer Core Telemetry data
+			if (this->m_packet_ct_received) {
+				if ((! m_possessionTarget->m_packet_ct_received) || (this->m_PacketTimestamp_ct > m_possessionTarget->m_PacketTimestamp_ct)) {
+					m_possessionTarget->m_packet_ct          = this->m_packet_ct;
+					m_possessionTarget->m_PacketTimestamp_ct = this->m_PacketTimestamp_ct;
+					m_possessionTarget->m_packet_ct_received = this->m_packet_ct_received;
+				}
+			}
+			
+			//Transfer Extended Telemetry data
+			if (this->m_packet_et_received) {
+				if ((! m_possessionTarget->m_packet_et_received) || (this->m_PacketTimestamp_et > m_possessionTarget->m_PacketTimestamp_et)) {
+					m_possessionTarget->m_packet_et          = this->m_packet_et;
+					m_possessionTarget->m_PacketTimestamp_et = this->m_PacketTimestamp_et;
+					m_possessionTarget->m_packet_et_received = this->m_packet_et_received;
+				}
+			}
+			
+			//Transfer Imagery data
+			if (this->m_frame_num >= 0) {
+				if ((m_possessionTarget->m_frame_num < 0) || (this->m_PacketTimestamp_imagery > m_possessionTarget->m_PacketTimestamp_imagery)) {
+					m_possessionTarget->m_PacketTimestamp_imagery = this->m_PacketTimestamp_imagery;
+					m_possessionTarget->m_frame_num = std::max(m_possessionTarget->m_frame_num + 1, this->m_frame_num);
+					m_possessionTarget->m_MostRecentFrame = this->m_MostRecentFrame;
+					m_possessionTarget->m_receivedImageTimestamps = this->m_receivedImageTimestamps;
+					m_possessionTarget->m_TimestampOfLastFPSReport = this->m_TimestampOfLastFPSReport;
+				}
+			}
+			
+			//Transfer Image callbacks - this is a bit sketchy since both objects may have issued the same callback handle to two different requests.
+			//We will try to merge and skip any items that conflict. This shouldn't be a problem in practice since this is primarily used to support
+			//re-activating a drone object if the connection is lost and re-established, in which case typically only the old object will have callbacks.
+			for (auto const & kv : this->m_ImageryCallbacks) {
+				if (m_possessionTarget->m_ImageryCallbacks.count(kv.first) > 0U)
+					std::cerr << "Warning in RealDrone::TransferStateToTargetObject(): Dropping Image callback due to conflicting handle.\r\n";
+				else
+					m_possessionTarget->m_ImageryCallbacks[kv.first] = kv.second;
+			}
+			
+			//Make sure the target of posession doesn't have it's own target
+			m_possessionTarget->m_possessionTarget = nullptr;
+			m_possessionTarget->m_isDead = false;
+			
+			//Mark this object as dead
+			m_isDead = true;
 		}
 	}
 	
@@ -104,6 +294,7 @@ namespace DroneInterface {
 					this->m_MostRecentFrame = this->m_packet_img.Frame;
 					this->m_frame_num++;
 					this->m_PacketTimestamp_imagery = std::chrono::steady_clock::now();
+					AddImageTimestampToLogAndFPSReport(this->m_PacketTimestamp_imagery);
 					for (auto const & kv : m_ImageryCallbacks)
 						kv.second(m_MostRecentFrame, m_PacketTimestamp_imagery);
 
@@ -118,8 +309,12 @@ namespace DroneInterface {
 			}
 			case 3U: {
 				if (this->m_packet_ack.Deserialize(*m_packet_fragment)) {
-					std::cout << this->m_packet_ack;
-					return true;
+					if ((this->m_packet_ack.Positive == uint8_t(1)) && (this->m_packet_ack.SourcePID == uint8_t(252)))
+						return true;
+					else {
+						std::cout << this->m_packet_ack;
+						return true;
+					}
 				}
 				else {
 					std::cerr << "Error: Tried to deserialize invalid Acknowledgment packet." << std::endl;
@@ -128,6 +323,7 @@ namespace DroneInterface {
 			}
 			case 4U: {
 				if (this->m_packet_ms.Deserialize(*m_packet_fragment)) {
+					std::cout << "Message String Packet received.\r\n";
 					std::cout << this->m_packet_ms;
 					return true;
 				}
@@ -142,6 +338,7 @@ namespace DroneInterface {
 					this->m_MostRecentFrame = this->m_packet_compressedImg.Frame;
 					this->m_frame_num++;
 					this->m_PacketTimestamp_imagery = std::chrono::steady_clock::now();
+					AddImageTimestampToLogAndFPSReport(this->m_PacketTimestamp_imagery);
 					for (auto const & kv : m_ImageryCallbacks)
 						kv.second(m_MostRecentFrame, m_PacketTimestamp_imagery);
 					return true;
@@ -154,6 +351,29 @@ namespace DroneInterface {
 			default: {
 				std::cerr << "Error: Unrecognized PID - failed to decode packet from drone." << std::endl;
 				return false;
+			}
+		}
+	}
+	
+	void RealDrone::AddImageTimestampToLogAndFPSReport(TimePoint Timestamp) {
+		m_receivedImageTimestamps.push_back(Timestamp);
+		
+		//If desired, print out the effective frame rate over the last few seconds
+		//Just replace true with false to turn this off - this is really just for development so this should suffice.
+		if (true) {
+			double timeAverageInterval = 10.0; //Time interval to estimate average frame rate over (seconds)
+			double reportingInterval   = 2.0;  //Minimum amount of time between FPS printout to stderr (seconds)
+			
+			if (SecondsElapsed(m_TimestampOfLastFPSReport, std::chrono::steady_clock::now()) >= reportingInterval) {
+				double imageCount = 0.0;
+				for (auto riter = m_receivedImageTimestamps.rbegin(); riter != m_receivedImageTimestamps.rend(); riter++) {
+					if (SecondsElapsed(*riter, Timestamp) < timeAverageInterval)
+						imageCount += 1.0;
+					else
+						break;
+				}
+				std::cerr << "Average framerate over last " << timeAverageInterval << " seconds: " << imageCount/timeAverageInterval << " fps\r\n";
+				m_TimestampOfLastFPSReport = std::chrono::steady_clock::now();
 			}
 		}
 	}
@@ -173,7 +393,7 @@ namespace DroneInterface {
 	bool RealDrone::GetPosition(double & Latitude, double & Longitude, double & Altitude, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
 		Latitude  = this->m_packet_ct.Latitude  * (PI/180.0);
-		Latitude  = this->m_packet_ct.Longitude * (PI/180.0);
+		Longitude  = this->m_packet_ct.Longitude * (PI/180.0);
 		Altitude  = this->m_packet_ct.Altitude;
 		Timestamp = this->m_PacketTimestamp_ct;
 		return this->m_packet_ct_received;
@@ -182,6 +402,13 @@ namespace DroneInterface {
 	//NED velocity vector (m/s)
 	bool RealDrone::GetVelocity(double & V_North, double & V_East, double & V_Down, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
+		Eigen::Vector3d V_NED(this->m_packet_ct.V_N, this->m_packet_ct.V_E, this->m_packet_ct.V_D);
+		//Sanitize velocity based on max vehicle speed of 28 m/s (shouldn't need this but in case velocity is bad, we don't want to cause problems elsewhere)
+		if (V_NED.norm() > 28.0) {
+			std::cerr << "Warning: Sanitizing unreasonable velocity vector. Speed = " << V_NED.norm() << " m/s\r\n";
+			V_NED.normalize();
+			V_NED *= 28.0;
+		}
 		V_North   = this->m_packet_ct.V_N;
 		V_East    = this->m_packet_ct.V_E;
 		V_Down    = this->m_packet_ct.V_D;
@@ -313,6 +540,7 @@ namespace DroneInterface {
 	bool RealDrone::IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
 		Result = (this->m_packet_ct.IsFlying == uint8_t(1));
+		Timestamp = this->m_PacketTimestamp_ct;
 		return this->m_packet_ct_received;
 	}
 
@@ -374,6 +602,7 @@ namespace DroneInterface {
 	bool RealDrone::IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
 		Result = (this->m_packet_et.FlightMode == uint8_t(10));
+		Timestamp = this->m_PacketTimestamp_et;
 		return this->m_packet_et_received;
 	}
 
@@ -403,6 +632,18 @@ namespace DroneInterface {
 	//Stop any running missions an leave virtualStick mode (if in it) and hover in place (P mode)
 	void RealDrone::Hover(void) {
 		std::scoped_lock lock(m_mutex);
+
+		/*
+		 * These are function calls to send test packets to DJI-Interface for Waypoint Mission and Virtual Stick
+        WaypointMission testMission;
+        std::cout<<"Loading waypoint mission"<<std::endl;
+
+        this->LoadTestWaypointMission(testMission);
+        std::cout<<"Executing waypoint mission with "<<testMission.Waypoints.size() <<" waypoints now"<<std::endl;
+        this->SendPacket_ExecuteWaypointMission(testMission.LandAtLastWaypoint, testMission.CurvedTrajectory, testMission.Waypoints);
+        std::cout<<"Finished executing waypoint mission"<<std::endl;
+        */
+		//this->SendTestVirtualStickPacketB();
 		this->SendPacket_EmergencyCommand(0);
 	}
 	
@@ -416,6 +657,42 @@ namespace DroneInterface {
 	void RealDrone::GoHomeAndLand(void) {
 		std::scoped_lock lock(m_mutex);
 		this->SendPacket_EmergencyCommand(2);
+	}
+	
+	void RealDrone::StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd,
+	                                           Eigen::Vector2d const & StartOffset_EN, double HAG) {
+		std::cerr << "Starting sample waypoint mission.\r\n";
+		
+		//Tell the vehicle control widget and the guidance module to stop commanding this drone.
+		std::string droneSerial = GetDroneSerial();
+		//VehicleControlWidget::Instance().StopCommandingDrone(droneSerial); //Initiated by vehicle control widget, so it does this
+		Guidance::GuidanceEngine::Instance().RemoveLowFlier(droneSerial);
+		
+		//Get drone's current position and the ground altitude
+		DroneInterface::Drone::TimePoint Timestamp;
+		double Latitude, Longitude, Altitude, currentHAG;
+		if (! this->GetPosition(Latitude, Longitude, Altitude, Timestamp)) {
+			std::cerr << "Error in StartSampleWaypointMission(): Failed to get drone's current position. Aborting.\r\n";
+			return;
+		}
+		if (! this->GetHAG(currentHAG, Timestamp)) {
+			std::cerr << "Error in StartSampleWaypointMission(): Failed to get drone's HAG. Aborting.\r\n";
+			return;
+		}
+		double groundAlt = Altitude - currentHAG;
+		std::cerr << "groundAlt: " << groundAlt << "\r\n";
+		
+		Eigen::Matrix3d C_ECEF_ENU = latLon_2_C_ECEF_ENU(Latitude, Longitude);
+		Eigen::Vector3d currentPos_ECEF = LLA2ECEF(Eigen::Vector3d(Latitude, Longitude, Altitude));
+		Eigen::Vector3d StartOffset_ENU(StartOffset_EN(0), StartOffset_EN(1), 0.0);
+		Eigen::Vector3d FirstWaypoint_ECEF = currentPos_ECEF + C_ECEF_ENU.transpose()*StartOffset_ENU;
+		Eigen::Vector3d FirstWaypoint_LLA = ECEF2LLA(FirstWaypoint_ECEF);
+		Eigen::Vector2d FirstWaypoint_LL(FirstWaypoint_LLA(0), FirstWaypoint_LLA(1));
+		
+		DroneInterface::WaypointMission mission = CreateSampleWaypointMission(NumWaypoints, CurvedTrajectories, LandAtEnd,
+		                                                                      FirstWaypoint_LL, groundAlt, HAG);
+		
+		this->ExecuteWaypointMission(mission);
 	}
 	
 	void RealDrone::SendPacket(DroneInterface::Packet &packet) {

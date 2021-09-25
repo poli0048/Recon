@@ -311,20 +311,44 @@ namespace Guidance {
 				std::vector<std::string> partitionLabels;
 				for (int n = 0; n < (int) Partition.size(); n++)
 					partitionLabels.push_back(std::to_string(n));
+
+
 				MapWidget::Instance().m_guidanceOverlay.SetPartitionLabels(partitionLabels);
 				
 				//Create a sample vector of triangles to give to the guidance overlay
+
 				PolygonCollection tempPolyCollection;
 				vertices_NM.clear();
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239494, -95.310018)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246525, -95.309825)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246628, -95.309994)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246645, -95.314757)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243130, -95.314805)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239528, -95.314901)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241568, -95.314818)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241568, -95.319818)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243568, -95.319818)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243568, -95.314818)*PI/180.0));
 				tempPolyCollection.m_components.emplace_back();
 				tempPolyCollection.m_components.back().m_boundary.SetBoundary(vertices_NM);
-				
+				/*
+				vertices_NM.clear();
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239568, -95.314818)*PI/180.0));//
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246525, -95.314818)*PI/180.0));//
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246525, -95.309865)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245743, -95.309865)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245481, -95.312265)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244821, -95.312381)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244752, -95.309884)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244191, -95.309865)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243392, -95.312117)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.242719, -95.312117)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.242281, -95.309865)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239568, -95.309865)*PI/180.0));
+				tempPolyCollection.m_components.emplace_back();
+				tempPolyCollection.m_components.back().m_boundary.SetBoundary(vertices_NM);
+				vertices_NM.clear();
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241568, -95.314818)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.242568, -95.324818)*PI/180.0));
+				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243568, -95.314818)*PI/180.0));
+				tempPolyCollection.m_components.emplace_back();
+				tempPolyCollection.m_components.back().m_boundary.SetBoundary(vertices_NM);
+
+
 				vertices_NM.clear();
 				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244209, -95.308160)*PI/180.0));
 				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245130, -95.306817)*PI/180.0));
@@ -334,7 +358,9 @@ namespace Guidance {
 				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241886, -95.304733)*PI/180.0));
 				tempPolyCollection.m_components.emplace_back();
 				tempPolyCollection.m_components.back().m_boundary.SetBoundary(vertices_NM);
-				
+				 */
+				//MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
+                /*
 				std::Evector<Triangle> triangles;
 				tempPolyCollection.Triangulate(triangles);
 				MapWidget::Instance().m_guidanceOverlay.SetTriangles(triangles);
@@ -344,8 +370,9 @@ namespace Guidance {
 				for (int n = 0; n < (int) triangles.size(); n++)
 					triangleLabels.push_back(std::to_string(n));
 				MapWidget::Instance().m_guidanceOverlay.SetTriangleLabels(triangleLabels);
-				
+                */
 				//Create some lines and circles (vertices) to give to the guidance overlay
+				/*
 				{
 					std::Evector<std::tuple<LineSegment, float, Eigen::Vector3f>> lineSegments;
 					std::Evector<std::tuple<Eigen::Vector2d, float, Eigen::Vector3f>> circles;
@@ -373,7 +400,22 @@ namespace Guidance {
 					MapWidget::Instance().m_guidanceOverlay.SetLineSegments(lineSegments);
 					MapWidget::Instance().m_guidanceOverlay.SetCircles(circles);
 				}
-				
+				*/
+				//std::Evector<PolygonCollection> vectorP;
+			    //vectorP.push_back(tempPolyCollection);
+			    //MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(vectorP);
+
+
+				ImagingRequirements ImagingReqs;
+			    DroneInterface::WaypointMission Mission;
+			    ImagingReqs.TargetSpeed = 9.39;
+			    ImagingReqs.HAG = 60.96;
+			    ImagingReqs.HFOV = 0.61087;
+			    ImagingReqs.SidelapFraction = 0.7;
+			    double TargetFlightTime = 100;
+
+				PlanMission(tempPolyCollection, Mission, ImagingReqs);
+                m_dronesUnderCommand[0]->ExecuteWaypointMission(Mission);
 				m_missionPrepDone = true; //Mark the prep work as done
 			}
 			

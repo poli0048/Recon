@@ -5,6 +5,7 @@
 
 //External Includes
 #include "../HandyImGuiInclude.hpp"
+#include <opencv2/core.hpp>
 
 //Project Includes
 #include "ReconUI.hpp"
@@ -159,18 +160,29 @@ inline void MainMenu::Draw() {
 						for (std::string serial : DroneSerialsWithDJICams) {
 							//std::string menuItemText = "Start using drone: "s + serial;
 							if (ImGui::MenuItem(("Start using drone: "s + serial).c_str())) {
-								//Start (or restart) the cam feed with the specified frame rate
+								//If the drone is simulated, load the ref frame and GCPs corresponding to the chosen video feed
+								//If the drone is real, launch the fiducial marking tool to select a reference frame and mark GCPs
 								DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(serial);
+								DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(drone);
+								if (mySimDrone != nullptr) {
+									mySimDrone->SetRealTime(true);
+									std::filesystem::path datasetPath = mySimDrone->GetSourceVideoFile().parent_path();
+									cv::Mat refFrame = GetRefFrame(datasetPath);
+									std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> GCPs = LoadFiducialsFromFile(datasetPath);
+									ShadowDetection::ShadowDetectionEngine::Instance().SetReferenceFrame(refFrame);
+									ShadowDetection::ShadowDetectionEngine::Instance().SetFiducials(GCPs);
+								}
+								else {
+									//TODO - this tool doesn't exist yet
+								}
+								
+								//Start (or restart) the cam feed with the specified frame rate
 								if (drone->IsCamImageFeedOn())
 									drone->StopDJICamImageFeed();
 								drone->StartDJICamImageFeed(m_shadowDetectionModuleVidFeedFPS);
 								
 								//Instruct the shadow detection module to start (using this drone serial)
 								ShadowDetection::ShadowDetectionEngine::Instance().Start(serial);
-								
-								//TODO: Open a new tool for selecting a reference frame and maring fiducials
-								//This tool needs to call SetReferenceFrame() and SetFiducials() on the shadow detection engine
-								//in order to actually start that module processing.
 							}
 						}
 					}
@@ -193,6 +205,51 @@ inline void MainMenu::Draw() {
 				ImGui::EndMenu();
 			}
 			
+			ImGui::EndMenu();
+		}
+		
+		if (ImGui::BeginMenu("Simulator")) {
+			double PI = 3.14159265358979;
+			double const eps = 0.00004; //Radians... used for zooming to drones
+			std::filesystem::path DatasetFolder = Handy::Paths::ThisExecutableDirectory().parent_path() / "Simulation-Data-Sets";
+			if (MyGui::MenuItem(u8"\uf04b", labelMargin, "Becker (1 Drone)")) {
+				double lat = 45.344097*PI/180.0;
+				double lon = -93.858990*PI/180.0;
+				double alt = 289.56;
+				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
+				auto dronePtr = DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation A1"s, Eigen::Vector3d(lat, lon, alt));
+				if (dronePtr != nullptr)
+					dronePtr->SetSourceVideoFile(GetSimVideoFilePath(DatasetFolder / "Dataset-1 (Becker 7-24-2020)"));
+				MapWidget::Instance().StartAnimation(lat - eps, lat + eps, lon - eps, lon + eps);
+			}
+			if (MyGui::MenuItem(u8"\uf04b", labelMargin, "Lamberton (1 Drone)")) {
+				double lat = 44.236124*PI/180.0;
+				double lon = -95.308418*PI/180.0;
+				double alt = 345.03;
+				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation A2"s, Eigen::Vector3d(lat, lon, alt));
+				MapWidget::Instance().StartAnimation(lat - eps, lat + eps, lon - eps, lon + eps);
+			}
+			if (MyGui::MenuItem(u8"\uf04b", labelMargin, "Lamberton (3 Drones)")) {
+				double lat = 44.236124*PI/180.0;
+				double lon = -95.308418*PI/180.0;
+				double alt = 345.03;
+				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation A3"s, Eigen::Vector3d(lat, lon, alt));
+				
+				lat = 44.236120*PI/180.0;
+				lon = -95.308018*PI/180.0;
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation B3"s, Eigen::Vector3d(lat, lon, alt));
+				
+				lat = 44.236544*PI/180.0;
+				lon = -95.307398*PI/180.0;
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation C3"s, Eigen::Vector3d(lat, lon, alt));
+				MapWidget::Instance().StartAnimation(lat - eps, lat + eps, lon - eps, lon + eps);
+			}
+			unsigned int NumSimDrones = DroneInterface::DroneManager::Instance().NumSimulatedDrones();
+			ImGui::Separator();
+			if (MyGui::MenuItem(u8"\uf04d", labelMargin, "End Simulation (Destroy all sim drones)", NULL, false, (NumSimDrones > 0)))
+				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
 			ImGui::EndMenu();
 		}
 		

@@ -33,7 +33,7 @@ namespace ShadowDetection {
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 			
-			cv::Mat Map;           //fixed-size (512 x 512) shadow map image. Use uint8_t type with 0-127 = unshadowed, and 128-256 = shadowed
+			cv::Mat Map;           //fixed-size (512 x 512) shadow map image. Use uint8_t type with 0-127 = unshadowed, and 128-254 = shadowed, 255 = Masked
 			Eigen::Vector2d UL_LL; //(Latitude, Longitude) of center of upper-left pixel, in radians
 			Eigen::Vector2d UR_LL; //(Latitude, Longitude) of center of upper-right pixel, in radians
 			Eigen::Vector2d LL_LL; //(Latitude, Longitude) of center of lower-left pixel, in radians
@@ -66,29 +66,34 @@ namespace ShadowDetection {
 			std::mutex        m_mutex;
 			std::unordered_map<int, std::function<void(InstantaneousShadowMap const & ShadowMap)>> m_callbacks;
 			
+			//These are not directly accessed in ProcessFrame()
 			std::string m_ImageProviderDroneSerial; //Empty if none
 			DroneInterface::Drone * m_ImageProviderDrone = nullptr; //Pointer to image provider drone
 			int m_DroneImageCallbackHandle = -1;    //Handle for image callback (if registered). -1 if none registered.
-			
-			cv::Mat m_ReferenceFrame;
-			std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> m_Fiducials; //See SetFiducials() for structure
-			
 			std::vector<std::tuple<cv::Mat, TimePoint>> m_unprocessedFrames;
+			
+			//These variables are modified in ProcessFrame()
+			//std::mutex m_processingMutex; //Protects the fields in this block
 			InstantaneousShadowMap m_ShadowMap; //Shadow map based on most recently processed frame
 			std::Evector<ShadowMapHistory> m_History; //Record of all computed shadow maps - add new element when ref frame changes (since registration changes)
 			
-			// This will be needed by setRefenceFrame to set UL_LLA, LL_LLA, LR_LLA, UR_LLA
-			cv::Point3d centroid_ECEF;
-			Eigen::Vector2d center;
-    			double max_extent;
-			Eigen::Matrix3d R_cam_ENU;
-    			Eigen::Vector3d t_cam_ENU;
-			struct ocam_model o;
-			cv::Mat ref_descriptors, brightest;
-			std::vector<cv::KeyPoint> keypoints_ref;
-
+			//These variables can safely be accessed in ProcessFrame without locking since the other methods that modify them fail if module is running
+			cv::Mat m_ReferenceFrame;  //Computed in SetReferenceFrame()
+			std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> m_Fiducials; //Set in SetFiducials() - see method for structure
+			cv::Point3d centroid_ECEF; //Computed in SetFiducials()
+			Eigen::Vector2d center;    //Computed in SetFiducials()
+    			double max_extent;         //Computed in SetFiducials()
+			Eigen::Matrix3d R_cam_ENU; //Computed in SetFiducials()
+    			Eigen::Vector3d t_cam_ENU; //Computed in SetFiducials()
+			struct ocam_model o;       //Set in SetFiducials()
+			cv::Mat ref_descriptors;   //Computed in SetReferenceFrame()
+			std::vector<cv::KeyPoint> keypoints_ref; //Computed in SetReferenceFrame()
+			cv::Mat brightest; //Computed in SetReferenceFrame(), updated in ProcessFrame()
+			
 			inline void ModuleMain(void);
 			void ProcessFrame(cv::Mat const & Frame, TimePoint const & Timestamp);
+			
+			void TryInitShadowMapAndHistory(void); //Sets the corner coords in both m_ShadowMap and m_History if GCPs and a ref frame are provided
 			
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -100,7 +105,7 @@ namespace ShadowDetection {
 				m_engineThread = std::thread(&ShadowDetectionEngine::ModuleMain, this);
 			}
 			~ShadowDetectionEngine() {
-				Stop();
+				//Don't call Stop() since this unregisters a callback with the shadow detection module, which may already be destroyed.
 				m_abort = true;
 				if (m_engineThread.joinable())
 					m_engineThread.join();
@@ -216,12 +221,27 @@ namespace ShadowDetection {
 				}
 				
 				if ((! m_unprocessedFrames.empty()) && (! m_ReferenceFrame.empty()) && (m_Fiducials.size() >= 3U)) {
-					//Process the first unprocessed frame and pop it from m_unprocessedFrames.
-					ProcessFrame(std::get<0>(m_unprocessedFrames[0]), std::get<1>(m_unprocessedFrames[0]));
+					//Get the first unprocessed frame and timestamp - remove from queue.
+					cv::Mat frame = std::get<0>(m_unprocessedFrames[0]);
+					TimePoint timestamp = std::get<1>(m_unprocessedFrames[0]);
 					m_unprocessedFrames.erase(m_unprocessedFrames.begin()); //Will cause vector re-allocation but it's actually not a big deal
+					//Due to OpenCV ref counting this doesn't copy the image... it takes ownership of it
 					
-					//We did useful work so unlock the mutex but dont snooze
+					bool realtime = true;
+					if (m_unprocessedFrames.size() > 0U) {
+						realtime = false;
+						std::cerr << "Warning: Shadow Detection module falling behind real-time. ";
+						std::cerr << (unsigned int) m_unprocessedFrames.size() << " frames buffered.\r\n"; 
+					}
+					
+					//This is somewhat unorthodox, but we unlock the mutex here and require ProcessFrame to lock when modifying m_ShadowMap and m_History
 					m_mutex.unlock();
+					
+					//Process the first unprocessed frame and pop it from m_unprocessedFrames.
+					ProcessFrame(frame, timestamp);
+					
+					if (! realtime)
+						std::cerr << "Frame processed.\r\n";
 				}
 				else {
 					m_mutex.unlock();

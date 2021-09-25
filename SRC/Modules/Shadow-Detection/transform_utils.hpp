@@ -4,17 +4,8 @@
 #include <random>
 #include <chrono>
 
-//Return ECEF position corresponding to given lat (rad), lon (rad), and alt (m)
-inline cv::Point3d positionLLA2ECEF(double lat, double lon, double alt) {
-	double a = 6378137.0;           //Semi-major axis of reference ellipsoid
-	double ecc = 0.081819190842621; //First eccentricity of the reference ellipsoid
-	double eccSquared = ecc * ecc;
-	double N = a / sqrt(1.0 - eccSquared * sin(lat) * sin(lat));
-	double X = (N + alt) * cos(lat) * cos(lon);
-	double Y = (N + alt) * cos(lat) * sin(lon);
-	double Z = (N * (1 - eccSquared) + alt) * sin(lat);
-	return(cv::Point3d(X, Y, Z));
-}
+//Project Includes
+#include "../../Maps/MapUtils.hpp"
 
 inline void multCam2World(std::Evector<Eigen::Vector2d>& pixel_coords, std::vector<cv::Point3d>& backprojected, ocam_model& o) {
 	for (int i = 0; i < (int) pixel_coords.size(); i++) {
@@ -59,22 +50,6 @@ inline void getPoseInputMatrices(std::Evector<Eigen::Vector3d>& world, std::vect
 	sampleMatrix(bp_matrix, bp_matrix.size(), seed, bearing_vec); // ECHAI: remove rows, move to vector<Point3d to keep consistent>
 	sampleMatrix(world, world.size(), seed, world_vec); 
 }
-/*
-inline void multENU2CAM(Mat& enu, Mat& cam, Eigen::Matrix3d R, Eigen::Vector3d t, ocam_model& o) {
-	cam = Mat(enu.rows, 2, CV_64F);
-	for (int row = 0; row < enu.rows; row++) {
-		Eigen::Vector3d v(enu.at<double>(row, 0), enu.at<double>(row, 1), enu.at<double>(row, 2));
-		Eigen::Vector3d v_cam = R.inverse() * (v - t);
-		double point3D[3] = { v_cam(0), v_cam(1), v_cam(2) };
-		double point2D[2];
-
-		world2cam(point2D, point3D, &o);
-
-		cam.at<double>(row, 0) = point2D[1];
-		cam.at<double>(row, 1) = point2D[0];
-	}
-}
-*/
 
 inline void multENU2CAM(std::Evector<Eigen::Vector3d>& enu, cv::Mat& cam, Eigen::Matrix3d R, Eigen::Vector3d t, ocam_model& o) {
 	cam = cv::Mat(enu.size(), 2, CV_64F);
@@ -99,9 +74,7 @@ inline double reprojectionError(cv::Mat &orig_PX, std::Evector<Eigen::Vector3d>&
 	int end = percent_include * norm.rows;
 	cv::Mat subMatrix = cv::Mat(norm, cv::Range(0, end), cv::Range::all());
 	return cv::sum(subMatrix)[0];
-	}
-
-
+}
 
 inline void findPose(std::Evector<Eigen::Vector2d>& fiducials_PX, std::Evector<Eigen::Vector3d>&fiducials_LEA, ocam_model &o, Eigen::Matrix3d &R_cam_LEA, Eigen::Vector3d &t_cam_LEA) {
 	std::vector<cv::Point3d> fiducials_BACKPROJ;
@@ -143,89 +116,16 @@ inline void findPose(std::Evector<Eigen::Vector2d>& fiducials_PX, std::Evector<E
 	//std::cout << "Pose estimated." << std::endl;
 }
 
-inline cv::Mat latLon_2_C_ECEF_NED(double lat, double lon) {
-	//Compute matrix components
-	double C11 = -sin(lat) * cos(lon);
-	double C12 = -sin(lat) * sin(lon);
-	double C13 = cos(lat);
-	double C21 = -sin(lon);
-	double C22 = cos(lon);
-	double C23 = 0.0;
-	double C31 = -cos(lat) * cos(lon);
-	double C32 = -cos(lat) * sin(lon);
-	double C33 = -sin(lat);
-
-	cv::Mat C_ECEF_NED = (cv::Mat_<double>(3, 3) << C11, C12, C13, C21, C22, C23, C31, C32, C33); // every three is one row
-
-	////Populate C_ECEF_NED
-	//Eigen::Matrix3d C_ECEF_NED;
-	//C_ECEF_NED(0, 0) = C11; C_ECEF_NED(0, 1) = C12; C_ECEF_NED(0, 2) = C13;
-	//C_ECEF_NED(1, 0) = C21; C_ECEF_NED(1, 1) = C22; C_ECEF_NED(1, 2) = C23;
-	//C_ECEF_NED(2, 0) = C31; C_ECEF_NED(2, 1) = C32; C_ECEF_NED(2, 2) = C33;
-
-	return(C_ECEF_NED);
-}
-
 //Compute latitude (radians), longitude (radians), and altitude (height above WGS84 ref. elipsoid, in meters) from ECEF position (in meters)
 //Latitude and longitude are also both given with respect to the WGS84 reference elipsoid.
-inline void positionECEF2LLA(cv::Point3d const& Position, double& lat, double& lon, double& alt) {
-	double x = Position.x;
-	double y = Position.y;
-	double z = Position.z;
-
-	//Set constants
-	double R_0 = 6378137.0;
-	double R_P = 6356752.314;
-	double ecc = 0.081819190842621;
-
-	//Calculate longitude (radians)
-	lon = atan2(y, x);
-
-	//Compute intermediate values needed for lat and alt
-	double eccSquared = ecc * ecc;
-	double p = sqrt(x * x + y * y);
-	double E = sqrt(R_0 * R_0 - R_P * R_P);
-	double F = 54.0 * (R_P * z) * (R_P * z);
-	double G = p * p + (1.0 - eccSquared) * z * z - eccSquared * E * E;
-	double c = pow(ecc, 4.0) * F * p * p / pow(G, 3.0);
-	double s = pow(1.0 + c + sqrt(c * c + 2.0 * c), 1.0 / 3.0);
-	double P = (F / (3.0 * G * G)) / ((s + (1.0 / s) + 1.0) * (s + (1.0 / s) + 1.0));
-	double Q = sqrt(1.0 + 2.0 * pow(ecc, 4.0) * P);
-	double k_1 = -1.0 * P * eccSquared * p / (1.0 + Q);
-	double k_2 = 0.5 * R_0 * R_0 * (1.0 + 1.0 / Q);
-	double k_3 = -1.0 * P * (1.0 - eccSquared) * z * z / (Q * (1.0 + Q));
-	double k_4 = -0.5 * P * p * p;
-	double r_0 = k_1 + sqrt(k_2 + k_3 + k_4);
-	double k_5 = (p - eccSquared * r_0);
-	double U = sqrt(k_5 * k_5 + z * z);
-	double V = sqrt(k_5 * k_5 + (1.0 - eccSquared) * z * z);
-
-	double z_0 = (R_P * R_P * z) / (R_0 * V);
-	double e_p = (R_0 / R_P) * ecc;
-
-	//Calculate latitude (radians)
-	lat = atan((z + z_0 * e_p * e_p) / p);
-
-	//Calculate Altitude (m)
-	alt = U * (1.0 - (R_P * R_P / (R_0 * V)));
+//This is a wrapper for the function in MapUtils, but accepting openCV structures for input
+inline void positionECEF2LLA(cv::Point3d const & Position, double & lat, double & lon, double & alt) {
+	Eigen::Vector3d Position_ECEF(Position.x, Position.y, Position.z);
+	Eigen::Vector3d Position_LLA = ECEF2LLA(Position_ECEF);
+	lat = Position_LLA(0);
+	lon = Position_LLA(1);
+	alt = Position_LLA(2);
 }
-
-inline cv::Mat latLon_2_C_ECEF_ENU(double lat, double lon) {
-	cv::Mat C_ECEF_NED = latLon_2_C_ECEF_NED(lat, lon);
-	cv::Mat C_NED_ENU = (cv::Mat_<double>(3, 3) << 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, -1.0);
-	cv::Mat C_ECEF_ENU = C_NED_ENU * C_ECEF_NED;
-	return(C_ECEF_ENU);
-}
-
-inline void matToMatrix3d(cv::Mat &in, Eigen::Matrix3d &out) {
-	for (int i = 0; i < 3; i++) {
-		for (int j = 0; j < 3; j++) {
-			out(i, j) = in.at<double>(i, j);
-		}
-	}
-}
-
-
 
 inline cv::Point3d positionECEF2LLA_construct(cv::Point3d const& PositionECEF) {
 	double lat = 0.0;
@@ -240,11 +140,6 @@ inline Eigen::Vector2d PixCoordsToRefCoords(Eigen::Vector2d const& PixCoords, do
 	return(Eigen::Vector2d(GSD * PixCoords(0) + EastBounds(0), GSD * (double(N - 1) - PixCoords(1)) + NorthBounds(0)));
 }
 
-
-//Convert an LLA vector: <Latitude (radians), Longitude (radians), Altitude (m)> to an ECEF position
-inline cv::Point3d positionLLA2ECEF_construct(cv::Point3d const& PositionLLA) {
-	return positionLLA2ECEF(PositionLLA.x, PositionLLA.y, PositionLLA.z);
-}
 inline void poseLEA2ENU(cv::Point3d &centroid_ECEF, Eigen::Matrix3d& R_cam_LEA, Eigen::Vector3d &t_cam_LEA, Eigen::Matrix3d& R_cam_ENU, Eigen::Vector3d& t_cam_ENU) {
 	Eigen::Vector3d centroid_vec_ECEF(centroid_ECEF.x, centroid_ECEF.y, centroid_ECEF.z);
 	Eigen::Vector3d cam_center_ECEF = t_cam_LEA + centroid_vec_ECEF;
@@ -253,15 +148,11 @@ inline void poseLEA2ENU(cv::Point3d &centroid_ECEF, Eigen::Matrix3d& R_cam_LEA, 
 	cv::Point3d centroid_LLA = positionECEF2LLA_construct(centroid_ECEF);
 	cv::Point3d origin_enu_LLA = cv::Point3d(cam_center_LLA.x, cam_center_LLA.y, centroid_LLA.z);
 
-	cv::Mat C_ECEF_ENU = latLon_2_C_ECEF_ENU(origin_enu_LLA.x, origin_enu_LLA.y);
-	Eigen::Matrix3d C_Matrix3d_ECEF_ENU;
-	matToMatrix3d(C_ECEF_ENU, C_Matrix3d_ECEF_ENU);
+	Eigen::Matrix3d C_ECEF_ENU = latLon_2_C_ECEF_ENU(origin_enu_LLA.x, origin_enu_LLA.y);
+	Eigen::Vector3d origin_enu_ECEF = LLA2ECEF(Eigen::Vector3d(origin_enu_LLA.x, origin_enu_LLA.y, origin_enu_LLA.z));
 
-	cv::Point3d origin_enu_pt_ECEF = positionLLA2ECEF(origin_enu_LLA.x, origin_enu_LLA.y, origin_enu_LLA.z);
-	Eigen::Vector3d origin_enu_ECEF = Eigen::Vector3d(origin_enu_pt_ECEF.x, origin_enu_pt_ECEF.y, origin_enu_pt_ECEF.z);
-
-	R_cam_ENU = C_Matrix3d_ECEF_ENU * R_cam_LEA;
-	t_cam_ENU = C_Matrix3d_ECEF_ENU * (cam_center_ECEF - origin_enu_ECEF);
+	R_cam_ENU = C_ECEF_ENU * R_cam_LEA;
+	t_cam_ENU = C_ECEF_ENU * (cam_center_ECEF - origin_enu_ECEF);
 }
 
 
