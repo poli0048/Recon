@@ -86,102 +86,102 @@ namespace DroneInterface {
         virtual void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG) = 0;
     };
 
-    //The RealDrone class provides an interface to interact with a single real drone
-    class RealDrone : public Drone {
-    public:
-        RealDrone() = delete;
-        RealDrone(const std::shared_ptr<tacopie::tcp_client> & client);
-        ~RealDrone();
+	//The RealDrone class provides an interface to interact with a single real drone
+	class RealDrone : public Drone {
+	public:
+		RealDrone() = delete;
+		RealDrone(const std::shared_ptr<tacopie::tcp_client> & client);
+		~RealDrone();
 
-        bool Ready(void) override;
+		bool Ready(void) override;
 
-        std::string GetDroneSerial(void) override;
+		std::string GetDroneSerial(void) override;
 
-        bool GetPosition(double & Latitude, double & Longitude, double & Altitude, TimePoint & Timestamp) override;
-        bool GetVelocity(double & V_North, double & V_East, double & V_Down, TimePoint & Timestamp)       override;
-        bool GetOrientation(double & Yaw, double & Pitch, double & Roll, TimePoint & Timestamp)           override;
-        bool GetHAG(double & HAG, TimePoint & Timestamp)                                                  override;
+		bool GetPosition(double & Latitude, double & Longitude, double & Altitude, TimePoint & Timestamp) override;
+		bool GetVelocity(double & V_North, double & V_East, double & V_Down, TimePoint & Timestamp)       override;
+		bool GetOrientation(double & Yaw, double & Pitch, double & Roll, TimePoint & Timestamp)           override;
+		bool GetHAG(double & HAG, TimePoint & Timestamp)                                                  override;
 
-        bool GetVehicleBatteryLevel(double & BattLevel, TimePoint & Timestamp)                   override;
-        bool GetActiveLimitations(bool & MaxHAG, bool & MaxDistFromHome, TimePoint & Timestamp)  override;
-        bool GetActiveWarnings(std::vector<std::string> & ActiveWarnings, TimePoint & Timestamp) override;
-        bool GetGNSSStatus(unsigned int & SatCount, int & SignalLevel, TimePoint & Timestamp)    override;
+		bool GetVehicleBatteryLevel(double & BattLevel, TimePoint & Timestamp)                   override;
+		bool GetActiveLimitations(bool & MaxHAG, bool & MaxDistFromHome, TimePoint & Timestamp)  override;
+		bool GetActiveWarnings(std::vector<std::string> & ActiveWarnings, TimePoint & Timestamp) override;
+		bool GetGNSSStatus(unsigned int & SatCount, int & SignalLevel, TimePoint & Timestamp)    override;
 
-        bool IsDJICamConnected(void)                                                                            override;
-        bool IsCamImageFeedOn(void)                                                                             override;
-        void StartDJICamImageFeed(double TargetFPS)                                                             override;
-        void StopDJICamImageFeed(void)                                                                          override;
-        bool GetMostRecentFrame(cv::Mat & Frame, unsigned int & FrameNumber, TimePoint & Timestamp)             override;
-        int  RegisterCallback(std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)> Callback) override;
-        void UnRegisterCallback(int Handle)                                                                     override;
+		bool IsDJICamConnected(void)                                                                            override;
+		bool IsCamImageFeedOn(void)                                                                             override;
+		void StartDJICamImageFeed(double TargetFPS)                                                             override;
+		void StopDJICamImageFeed(void)                                                                          override;
+		bool GetMostRecentFrame(cv::Mat & Frame, unsigned int & FrameNumber, TimePoint & Timestamp)             override;
+		int  RegisterCallback(std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)> Callback) override;
+		void UnRegisterCallback(int Handle)                                                                     override;
 
-        bool IsCurrentlyFlying(bool & Result, TimePoint & Timestamp)                   override;
-        bool GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp)         override;
-        void ExecuteWaypointMission(WaypointMission & Mission)                         override;
-        bool IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) override;
-        bool GetCurrentWaypointMission(WaypointMission & Mission)                      override;
-        void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command)       override;
-        void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command)       override;
+		bool IsCurrentlyFlying(bool & Result, TimePoint & Timestamp)                   override;
+		bool GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp)         override;
+		void ExecuteWaypointMission(WaypointMission & Mission)                         override;
+		bool IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) override;
+		bool GetCurrentWaypointMission(WaypointMission & Mission)                      override;
+		void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command)       override;
+		void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command)       override;
 
-        void Hover(void)         override;
-        void LandNow(void)       override;
-        void GoHomeAndLand(void) override;
-        
-        //Dev and Testing Methods
-        void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG) override;
+		void Hover(void)         override;
+		void LandNow(void)       override;
+		void GoHomeAndLand(void) override;
 
-        //RealDrone-specific methods
-        void DisconnectHandler(void);
-        void DataReceivedHandler(const std::shared_ptr<tacopie::tcp_client>& client, const tacopie::tcp_client::read_result& res);
-        void Possess(RealDrone * Target); //Transfer state to another RealDrone Object on the next opportunity, leaving this object dead
-        bool IsDead(void); //Returns true if state has been transferred to another object. Can safely be destroyed if dead.
-        
-        // test functions
-        void LoadTestWaypointMission(WaypointMission & testMission);
-        void SendTestVirtualStickPacketA();
-        void SendTestVirtualStickPacketB();
+		//Dev and Testing Methods
+		void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG) override;
 
-    private:
-        tacopie::tcp_client * m_client;
-        std::vector<uint8_t> m_buffer; //Only used in DataReceivedHandler
+		//RealDrone-specific methods
+		void DisconnectHandler(void);
+		void DataReceivedHandler(const std::shared_ptr<tacopie::tcp_client>& client, const tacopie::tcp_client::read_result& res);
+		void Possess(RealDrone * Target); //Transfer state to another RealDrone Object on the next opportunity, leaving this object dead
+		bool IsDead(void); //Returns true if state has been transferred to another object. Can safely be destroyed if dead.
 
-        void SendPacket(Packet & packet);
-        void SendPacket_EmergencyCommand(uint8_t Action);
-        void SendPacket_CameraControl(uint8_t Action, double TargetFPS);
-        void SendPacket_ExecuteWaypointMission(uint8_t LandAtEnd, uint8_t CurvedFlight, std::vector<Waypoint> Waypoints);
-        void SendPacket_VirtualStickCommand(uint8_t Mode, float Yaw, float V_x, float V_y, float HAG, float timeout);
+		// test functions
+		void LoadTestWaypointMission(WaypointMission & testMission);
+		void SendTestVirtualStickPacketA();
+		void SendTestVirtualStickPacketB();
 
-        Packet * m_packet_fragment = new Packet();     //Only used in DataReceivedHandler and ProcessFullReceivedPacket
-        bool ProcessFullReceivedPacket(void);          //Process a full packet. Returns true on success and false on failure (likily hash check fail)
+	private:
+		void SendPacket(Packet & packet, tacopie::tcp_client * TCPClient);
+		void SendPacket_EmergencyCommand(uint8_t Action);
+		void SendPacket_CameraControl(uint8_t Action, double TargetFPS);
+		void SendPacket_ExecuteWaypointMission(uint8_t LandAtEnd, uint8_t CurvedFlight, std::vector<Waypoint> Waypoints);
+		void SendPacket_VirtualStickCommand(uint8_t Mode, float Yaw, float V_x, float V_y, float HAG, float timeout);
 
-        void AddImageTimestampToLogAndFPSReport(TimePoint Timestamp);
-        bool TransferStateToTargetObject(void); //Used for possession
-
-        std::mutex               m_mutex;               //All fields in this block are protected by this mutex
-        Packet_CoreTelemetry     m_packet_ct;           //Data is retrieved from this packet in access methods
-        Packet_ExtendedTelemetry m_packet_et;           //Data is retrieved from this packet in access methods
-        TimePoint                m_PacketTimestamp_ct;
-        TimePoint                m_PacketTimestamp_et;
-        TimePoint                m_PacketTimestamp_imagery;
-        bool                     m_packet_ct_received = false;
-        bool                     m_packet_et_received = false;
-        int                      m_frame_num = -1;
-        cv::Mat                  m_MostRecentFrame;
-        std::unordered_map<int, std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)>> m_ImageryCallbacks;
-        std::vector<TimePoint>   m_receivedImageTimestamps; //Log of timestamps for received imagery
-        TimePoint                m_TimestampOfLastFPSReport;
-        RealDrone *              m_possessionTarget = nullptr; //Nullptr if no possession requested
-        bool                     m_isDead = false; //Set to true after possessing another object. Can be destroyed safely.
-        
-        std::atomic<bool> m_isConnected;
-        
-        Packet_Image m_packet_img;                     //Only used in ProcessFullReceivedPacket
-        Packet_CompressedImage m_packet_compressedImg; //Only used in ProcessFullReceivedPacket
-        Packet_Acknowledgment m_packet_ack;            //Only used in ProcessFullReceivedPacket
-        Packet_MessageString m_packet_ms;              //Only used in ProcessFullReceivedPacket
-
-        WaypointMission m_currentWaypointMission;
-    };
+		bool ProcessFullReceivedPacket(void); //Process a full packet. Returns true on success and false on failure (likily hash check fail)
+		void AddImageTimestampToLogAndFPSReport(TimePoint Timestamp);
+		bool TransferStateToTargetObject(void); //Used for possession
+		
+		std::mutex               m_mutex_A;             //All fields in this block are protected by this mutex
+		tacopie::tcp_client *    m_client;
+		std::vector<uint8_t>     m_buffer;
+		Packet *                 m_packet_fragment = new Packet();
+		
+		std::mutex               m_mutex_B;             //All fields in this block are protected by this mutex
+		Packet_CoreTelemetry     m_packet_ct;           //Data is retrieved from this packet in access methods
+		Packet_ExtendedTelemetry m_packet_et;           //Data is retrieved from this packet in access methods
+		TimePoint                m_PacketTimestamp_ct;
+		TimePoint                m_PacketTimestamp_et;
+		TimePoint                m_PacketTimestamp_imagery;
+		bool                     m_packet_ct_received = false;
+		bool                     m_packet_et_received = false;
+		int                      m_frame_num = -1;
+		cv::Mat                  m_MostRecentFrame;
+		std::unordered_map<int, std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)>> m_ImageryCallbacks;
+		std::vector<TimePoint>   m_receivedImageTimestamps; //Log of timestamps for received imagery
+		TimePoint                m_TimestampOfLastFPSReport;
+		RealDrone *              m_possessionTarget = nullptr; //Nullptr if no possession requested
+		bool                     m_isDead = false; //Set to true after possessing another object. Can be destroyed safely.
+		WaypointMission          m_currentWaypointMission;
+		
+		std::atomic<bool> m_isConnected;
+		
+		//These fields are used exclusively for deserialization in ProcessFullReceivedPacket. They are not mutex-protected.
+		Packet_Image m_packet_img;                     //Only used in ProcessFullReceivedPacket
+		Packet_CompressedImage m_packet_compressedImg; //Only used in ProcessFullReceivedPacket
+		Packet_Acknowledgment m_packet_ack;            //Only used in ProcessFullReceivedPacket
+		Packet_MessageString m_packet_ms;              //Only used in ProcessFullReceivedPacket
+	};
 
     //The SimulatedDrone class provides an interface to interact with a single virtual/simulated drone.
     //Imagery is pulled from a video file and dispatched either at real-time speed or as fast as possible, depending on the configuration.

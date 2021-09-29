@@ -34,6 +34,7 @@ namespace DroneInterface {
 	}
 	
 	RealDrone::~RealDrone() {
+		std::scoped_lock lock(m_mutex_A, m_mutex_B);
 		if (m_packet_fragment != nullptr)
 			delete m_packet_fragment;
 	}
@@ -107,49 +108,49 @@ namespace DroneInterface {
 	}
 
 	void RealDrone::SendTestVirtualStickPacketA(){
+		DroneInterface::Packet packet;
+		DroneInterface::Packet_VirtualStickCommand PacketA;
+		/*
+		PacketA.Mode    = 0U;    //Mode A (V_x is V_North, and V_y is V_East)
+		PacketA.Yaw     = 31.0f; //degrees, relative to true north (positive yaw is clockwise rotation)
+		PacketA.V_x     = 1.2f;  //m/s
+		PacketA.V_y     = -0.7f; //m/s
+		PacketA.HAG     = 39.5f; //m
+		PacketA.timeout = 5.0f;  //s
+		*/
+		// Diabolical Case. Testing clamp functions
+		PacketA.Mode    = 0U;    //Mode A (V_x is V_North, and V_y is V_East)
+		PacketA.Yaw     = 200.0f; //degrees, relative to true north (positive yaw is clockwise rotation)
+		PacketA.V_x     = 30.0f;  //m/s
+		PacketA.V_y     = -20.0f; //m/s
+		PacketA.HAG     = -10.0f; //m
+		PacketA.timeout = 5.0f;  //s
 
+		PacketA.Serialize(packet);
 
-	    DroneInterface::Packet packet;
-	    DroneInterface::Packet_VirtualStickCommand PacketA;
-	    /*
-	    PacketA.Mode    = 0U;    //Mode A (V_x is V_North, and V_y is V_East)
-	    PacketA.Yaw     = 31.0f; //degrees, relative to true north (positive yaw is clockwise rotation)
-	    PacketA.V_x     = 1.2f;  //m/s
-	    PacketA.V_y     = -0.7f; //m/s
-	    PacketA.HAG     = 39.5f; //m
-	    PacketA.timeout = 5.0f;  //s
-        */
-	    // Diabolical Case. Testing clamp functions
-	    PacketA.Mode    = 0U;    //Mode A (V_x is V_North, and V_y is V_East)
-	    PacketA.Yaw     = 200.0f; //degrees, relative to true north (positive yaw is clockwise rotation)
-	    PacketA.V_x     = 30.0f;  //m/s
-	    PacketA.V_y     = -20.0f; //m/s
-	    PacketA.HAG     = -10.0f; //m
-	    PacketA.timeout = 5.0f;  //s
-
-	    PacketA.Serialize(packet);
-
-	    this->SendPacket(packet);
-
-
-
+		m_mutex_A.lock();
+		tacopie::tcp_client * TCPClient = m_client;
+		m_mutex_A.unlock();
+		this->SendPacket(packet, TCPClient);
 	}
+	
 	void RealDrone::SendTestVirtualStickPacketB(){
+		DroneInterface::Packet packet;
+		DroneInterface::Packet_VirtualStickCommand PacketB;
 
+		PacketB.Mode    = 1U;    //Mode B
+		PacketB.Yaw     = 31.0f; //degrees, relative to true north (positive yaw is clockwise rotation)
+		PacketB.V_x     = 1.2f;  //m/s
+		PacketB.V_y     = -0.7f; //m/s
+		PacketB.HAG     = 39.5f; //m
+		PacketB.timeout = 5.0f;  //s
 
-	    DroneInterface::Packet packet;
-	    DroneInterface::Packet_VirtualStickCommand PacketB;
+		PacketB.Serialize(packet);
 
-	    PacketB.Mode    = 1U;    //Mode B
-	    PacketB.Yaw     = 31.0f; //degrees, relative to true north (positive yaw is clockwise rotation)
-	    PacketB.V_x     = 1.2f;  //m/s
-	    PacketB.V_y     = -0.7f; //m/s
-	    PacketB.HAG     = 39.5f; //m
-	    PacketB.timeout = 5.0f;  //s
-
-	    PacketB.Serialize(packet);
-
-	    this->SendPacket(packet);
+		m_mutex_A.lock();
+		tacopie::tcp_client * TCPClient = m_client;
+		m_mutex_A.unlock();
+		this->SendPacket(packet, TCPClient);
 	}
 
 	void RealDrone::DataReceivedHandler(const std::shared_ptr<tacopie::tcp_client> & client, const tacopie::tcp_client::read_result & res) {
@@ -159,30 +160,9 @@ namespace DroneInterface {
 			return;
 		}
 		
-		std::scoped_lock lock(m_mutex);
-		//if (m_client != client.get()) {
-			//This is an orphaned callback from a possessed drone object. We need to return without triggering a new read since
-			//the read cycle has already been started by the drone that possessed us.
-		//	std::cerr << "Orphaned DataReceivedHandler terminating read loop.\r\n";
-		//	client->disconnect();
-		//	return;
-		//}
-		
-		/*m_mutex.lock();
-		auto myClientPtr = m_client;
-		m_mutex.unlock();
-		if (myClientPtr != client.get()) {
-			//This is an orphaned callback from a possessed drone object. We need to return without triggering a new read since
-			//the read cycle has already been started by the drone that possessed us.
-			std::cerr << "Orphaned DataReceivedHandler terminating read loop.\r\n";
-			client->disconnect();
-			return;
-		}*/
+		std::scoped_lock lock_A(m_mutex_A);
 		if (res.success) {
-			//std::cerr << "DataReceivedHandler called from client: " << client.get() << " on object " << this << "\r\n";
-			
 			//Copy all the received data to our buffer
-			//std::cerr << "buf size on entry: " << m_buffer.size();
 			m_buffer.insert(m_buffer.end(), res.buffer.begin(), res.buffer.end());
 			
 			//Process received data
@@ -215,10 +195,9 @@ namespace DroneInterface {
 				}
 			}
 			
-			//std::cerr << " on exit: " << m_buffer.size() << "\r\n";
-			
 			//If we have been instructed to take possession of another object, transfer our state to it here and set up the client to
 			//call the target objects receive handler instead of our own. Otherwise, trigger the next read.
+			std::scoped_lock lock_B(m_mutex_B);
 			if ((m_possessionTarget != nullptr) && TransferStateToTargetObject()) {
 				client->set_on_disconnection_handler(std::bind(&RealDrone::DisconnectHandler, m_possessionTarget));
 				client->async_read({ 1024, bind(&RealDrone::DataReceivedHandler, m_possessionTarget, client, std::placeholders::_1) });
@@ -234,13 +213,13 @@ namespace DroneInterface {
 	
 	//Transfer state to another RealDrone Object on the next opportunity, leaving this object dead
 	void RealDrone::Possess(RealDrone * Target) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		m_possessionTarget = Target;
 	}
 	
 	//Returns true if state has been transferred to another object. Can safely be destroyed if dead.
 	bool RealDrone::IsDead(void) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		return m_isDead;
 	}
 	
@@ -252,8 +231,8 @@ namespace DroneInterface {
 			}
 			
 			std::cerr << "Taking possession of target drone object.\r\n";
-			//std::scoped_lock lock_A(m_mutex);
-			std::scoped_lock lock_B(m_possessionTarget->m_mutex);
+			//Locks are already held by the caller on this objects A and B mutexes.
+			std::scoped_lock lock_TargetObs(m_possessionTarget->m_mutex_A, m_possessionTarget->m_mutex_B);
 			
 			m_possessionTarget->m_client = this->m_client;
 			m_possessionTarget->m_buffer = this->m_buffer;
@@ -300,11 +279,15 @@ namespace DroneInterface {
 					m_possessionTarget->m_ImageryCallbacks[kv.first] = kv.second;
 			}
 			
+			//Transfer waypoint mission data
+			if (! this->m_currentWaypointMission.empty())
+				m_possessionTarget->m_currentWaypointMission = this->m_currentWaypointMission;
+			
 			//Make sure the target of posession doesn't have it's own target
 			m_possessionTarget->m_possessionTarget = nullptr;
 			m_possessionTarget->m_isDead = false;
 			
-			//Mark this object as dead
+			//Mark this object as dead and the possessed object as having an active connection
 			m_isDead = true;
 			m_possessionTarget->m_isConnected = true;
 			return true;
@@ -319,7 +302,7 @@ namespace DroneInterface {
 
 		switch (PID) {
 			case 0U: {
-				//std::scoped_lock lock(m_mutex);
+				std::scoped_lock lock(m_mutex_B);
 				if (this->m_packet_ct.Deserialize(*m_packet_fragment)) {
 					//std::cout << this->m_packet_ct;
 					this->m_packet_ct_received = true;
@@ -332,7 +315,7 @@ namespace DroneInterface {
 				}
 			}
 			case 1U: {
-				//std::scoped_lock lock(m_mutex);
+				std::scoped_lock lock(m_mutex_B);
 				if (this->m_packet_et.Deserialize(*m_packet_fragment)) {
 					//std::cout << this->m_packet_et;
 					this->m_packet_et_received = true;
@@ -346,16 +329,13 @@ namespace DroneInterface {
 			}
 			case 2U: {
 				if (this->m_packet_img.Deserialize(*m_packet_fragment)) {
-					//std::scoped_lock lock(m_mutex);
+					std::scoped_lock lock(m_mutex_B);
 					this->m_MostRecentFrame = this->m_packet_img.Frame;
 					this->m_frame_num++;
 					this->m_PacketTimestamp_imagery = std::chrono::steady_clock::now();
 					AddImageTimestampToLogAndFPSReport(this->m_PacketTimestamp_imagery);
 					for (auto const & kv : m_ImageryCallbacks)
 						kv.second(m_MostRecentFrame, m_PacketTimestamp_imagery);
-
-					//cv::imshow("frame", this->m_packet_img.Frame);
-					//cv::waitKey(0);
 					return true;
 				}
 				else {
@@ -366,7 +346,7 @@ namespace DroneInterface {
 			case 3U: {
 				if (this->m_packet_ack.Deserialize(*m_packet_fragment)) {
 					if ((this->m_packet_ack.Positive == uint8_t(1)) && (this->m_packet_ack.SourcePID == uint8_t(252)))
-						return true;
+						return true; //Don't spam terminal with positive acks from virtualStick commands
 					else {
 						std::cout << this->m_packet_ack;
 						return true;
@@ -390,7 +370,7 @@ namespace DroneInterface {
 			}
 			case 5U: {
 				if (this->m_packet_compressedImg.Deserialize(*m_packet_fragment)) {
-					//std::scoped_lock lock(m_mutex);
+					std::scoped_lock lock(m_mutex_B);
 					this->m_MostRecentFrame = this->m_packet_compressedImg.Frame;
 					this->m_frame_num++;
 					this->m_PacketTimestamp_imagery = std::chrono::steady_clock::now();
@@ -412,6 +392,8 @@ namespace DroneInterface {
 	}
 	
 	void RealDrone::AddImageTimestampToLogAndFPSReport(TimePoint Timestamp) {
+		//A lock should already be held on m_mutex_B by the caller of this function
+		
 		m_receivedImageTimestamps.push_back(Timestamp);
 		
 		//If desired, print out the effective frame rate over the last few seconds
@@ -435,19 +417,19 @@ namespace DroneInterface {
 	}
 	
 	bool RealDrone::Ready(void) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		return (m_packet_ct_received && m_packet_et_received);
 	}
 	
 	//Get drone serial number as a string (should be available on construction)
 	std::string RealDrone::GetDroneSerial(void) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		return this->m_packet_et.DroneSerial; 
 	}
 	
 	//Lat & Lon (radians) and WGS84 Altitude (m)
 	bool RealDrone::GetPosition(double & Latitude, double & Longitude, double & Altitude, TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		Latitude  = this->m_packet_ct.Latitude  * (PI/180.0);
 		Longitude  = this->m_packet_ct.Longitude * (PI/180.0);
 		Altitude  = this->m_packet_ct.Altitude;
@@ -457,7 +439,7 @@ namespace DroneInterface {
 	
 	//NED velocity vector (m/s)
 	bool RealDrone::GetVelocity(double & V_North, double & V_East, double & V_Down, TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		Eigen::Vector3d V_NED(this->m_packet_ct.V_N, this->m_packet_ct.V_E, this->m_packet_ct.V_D);
 		//Sanitize velocity based on max vehicle speed of 28 m/s (shouldn't need this but in case velocity is bad, we don't want to cause problems elsewhere)
 		if (V_NED.norm() > 28.0) {
@@ -474,7 +456,7 @@ namespace DroneInterface {
 	
 	//Yaw, Pitch, Roll (radians) using DJI definitions
 	bool RealDrone::GetOrientation(double & Yaw, double & Pitch, double & Roll, TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		Yaw       = this->m_packet_ct.Yaw   * (PI/180.0);
 		Pitch     = this->m_packet_ct.Pitch * (PI/180.0);
 		Roll      = this->m_packet_ct.Roll  * (PI/180.0);
@@ -484,7 +466,7 @@ namespace DroneInterface {
 	
 	//Barometric height above ground (m) - Drone altitude minus takeoff altitude
 	bool RealDrone::GetHAG(double & HAG, TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		HAG = this->m_packet_ct.HAG;
 		Timestamp = this->m_PacketTimestamp_ct;
 		return this->m_packet_ct_received;
@@ -492,7 +474,7 @@ namespace DroneInterface {
 	
 	//Drone Battery level (0 = Empty, 1 = Full)
 	bool RealDrone::GetVehicleBatteryLevel(double & BattLevel, TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		BattLevel = double(this->m_packet_et.BatLevel) / 100.0;
 		Timestamp = this->m_PacketTimestamp_et;
 		return this->m_packet_et_received;
@@ -500,7 +482,7 @@ namespace DroneInterface {
 	
 	//Whether the drone has hit height or radius limits
 	bool RealDrone::GetActiveLimitations(bool & MaxHAG, bool & MaxDistFromHome, TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		MaxHAG = (this->m_packet_et.MaxHeight == uint8_t(1));
 		MaxDistFromHome = (this->m_packet_et.MaxDist == uint8_t(1));
 		Timestamp = this->m_PacketTimestamp_et;
@@ -509,7 +491,7 @@ namespace DroneInterface {
 	
 	//Wind & other vehicle warnings as strings
 	bool RealDrone::GetActiveWarnings(std::vector<std::string> & ActiveWarnings, TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		
 		//Interpret battery warning field
 		if (this->m_packet_et.BatWarning == uint8_t(1))
@@ -533,7 +515,7 @@ namespace DroneInterface {
 	
 	//GNSS status (-1 for none, 0-5: DJI definitions)
 	bool RealDrone::GetGNSSStatus(unsigned int & SatCount, int & SignalLevel, TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		SatCount = this->m_packet_et.GNSSSatCount;
 		SignalLevel = this->m_packet_et.GNSSSignal;
 		Timestamp = this->m_PacketTimestamp_et;
@@ -542,30 +524,30 @@ namespace DroneInterface {
 	
 	//Returns true if recognized DJI camera is present - Should be available on construction
 	bool RealDrone::IsDJICamConnected(void) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		return ((this->m_packet_et.DJICam == 1) || (this->m_packet_et.DJICam == 2));
 	}
 
 	//True if receiving imagery from drone, false otherwise (valid on construction... initially returns false)
 	bool RealDrone::IsCamImageFeedOn(void) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		return (this->m_packet_et.DJICam == 2);
 	}
 
 	//Start sending frames of live video (as close as possible to the given framerate (frame / s))
 	void RealDrone::StartDJICamImageFeed(double TargetFPS) { 
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		this->SendPacket_CameraControl(1, TargetFPS);
 	}
 	
 	//Stop sending frames of live video
 	void RealDrone::StopDJICamImageFeed(void) { 
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		this->SendPacket_CameraControl(0, 0);
 	}
 	
 	bool RealDrone::GetMostRecentFrame(cv::Mat & Frame, unsigned int & FrameNumber, TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		if (this->m_frame_num < 0)
 			return false;
 		else {
@@ -578,7 +560,7 @@ namespace DroneInterface {
 	
 	//Register callback for new frames
 	int RealDrone::RegisterCallback(std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)> Callback) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		int token = 0;
 		while (m_ImageryCallbacks.count(token) > 0U)
 			token++;
@@ -588,13 +570,13 @@ namespace DroneInterface {
 
 	//Unregister callback for new frames (input is token returned by RegisterCallback()
 	void RealDrone::UnRegisterCallback(int Handle) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		m_ImageryCallbacks.erase(Handle);
 	}
 	
 	//Populate Result with whether or not the drone is currently flying (in any mode)
 	bool RealDrone::IsCurrentlyFlying(bool & Result, TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		Result = (this->m_packet_ct.IsFlying == uint8_t(1));
 		Timestamp = this->m_PacketTimestamp_ct;
 		return this->m_packet_ct_received;
@@ -602,7 +584,7 @@ namespace DroneInterface {
 
 	//Get flight mode as a human-readable string
 	bool RealDrone::GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		if (this->m_packet_et_received) {
 			switch (this->m_packet_et.FlightMode) {
 				case uint8_t(0):  FlightModeStr = "Manual"s;                 break;
@@ -642,7 +624,7 @@ namespace DroneInterface {
 	
 	//Stop current mission, if running. Then load, verify, and start new waypoint mission.
 	void RealDrone::ExecuteWaypointMission(WaypointMission & Mission) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		//The iOS App should handle any necessary state change, like cancelling a current mission. In any event we certainly don't want to issue an RTL command
 		/*bool isExecuting;
 		TimePoint timestamp;
@@ -656,7 +638,7 @@ namespace DroneInterface {
 	
 	//Populate Result with whether or not a waypoint mission is currently being executed
 	bool RealDrone::IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		Result = (this->m_packet_et.FlightMode == uint8_t(10));
 		Timestamp = this->m_PacketTimestamp_et;
 		return this->m_packet_et_received;
@@ -664,7 +646,7 @@ namespace DroneInterface {
 
 	//Populate arg with current mission (returns false if not flying waypoint mission)
 	bool RealDrone::GetCurrentWaypointMission(WaypointMission & Mission) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		if (this->m_packet_et.FlightMode == uint8_t(10)) {
 			Mission = m_currentWaypointMission;
 			return true;
@@ -675,19 +657,19 @@ namespace DroneInterface {
 
 	//Put in virtualStick Mode and send command (stop mission if running)
 	void RealDrone::IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command) { 
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		this->SendPacket_VirtualStickCommand(0, Command.Yaw, Command.V_North, Command.V_East, Command.HAG, Command.timeout);
 	}
 	
 	//Put in virtualStick Mode and send command (stop mission if running)
 	void RealDrone::IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command) { 
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		this->SendPacket_VirtualStickCommand(1, Command.Yaw, Command.V_Forward, Command.V_Right, Command.HAG, Command.timeout);
 	}
 	
 	//Stop any running missions an leave virtualStick mode (if in it) and hover in place (P mode)
 	void RealDrone::Hover(void) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 
 		/*
 		 * These are function calls to send test packets to DJI-Interface for Waypoint Mission and Virtual Stick
@@ -705,13 +687,13 @@ namespace DroneInterface {
 	
 	//Initiate landing sequence immediately at current vehicle location
 	void RealDrone::LandNow(void) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		this->SendPacket_EmergencyCommand(1);
 	}
 	
 	//Initiate a Return-To-Home sequence that lands the vehicle at it's take-off location
 	void RealDrone::GoHomeAndLand(void) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_mutex_B);
 		this->SendPacket_EmergencyCommand(2);
 	}
 	
@@ -751,10 +733,10 @@ namespace DroneInterface {
 		this->ExecuteWaypointMission(mission);
 	}
 	
-	void RealDrone::SendPacket(DroneInterface::Packet &packet) {
+	void RealDrone::SendPacket(DroneInterface::Packet & packet, tacopie::tcp_client * TCPClient) {
 		std::vector<char> ch_data(packet.m_data.begin(), packet.m_data.end()); //Is this copy necessary?
 		try {
-			m_client->async_write({ ch_data, nullptr });
+			TCPClient->async_write({ ch_data, nullptr });
 		}
 		catch (...) {
 			std::cerr << "Error in RealDrone::SendPacket(): writing to socket failed.\r\n";
@@ -768,7 +750,11 @@ namespace DroneInterface {
 		packet_ec.Action = Action;
 		
 		packet_ec.Serialize(packet);
-		this->SendPacket(packet);
+		
+		m_mutex_A.lock();
+		tacopie::tcp_client * TCPClient = m_client;
+		m_mutex_A.unlock();
+		this->SendPacket(packet, TCPClient);
 	}
 	
 	void RealDrone::SendPacket_CameraControl(uint8_t Action, double TargetFPS) {
@@ -779,7 +765,11 @@ namespace DroneInterface {
 		packet_cc.TargetFPS = TargetFPS;
 
 		packet_cc.Serialize(packet);
-		this->SendPacket(packet);
+		
+		m_mutex_A.lock();
+		tacopie::tcp_client * TCPClient = m_client;
+		m_mutex_A.unlock();
+		this->SendPacket(packet, TCPClient);
 	}
 	
 	void RealDrone::SendPacket_ExecuteWaypointMission(uint8_t LandAtEnd, uint8_t CurvedFlight, std::vector<Waypoint> Waypoints) {
@@ -791,8 +781,11 @@ namespace DroneInterface {
 		packet_ewm.Waypoints = Waypoints;
 
 		packet_ewm.Serialize(packet);
-		this->SendPacket(packet);
-
+		
+		m_mutex_A.lock();
+		tacopie::tcp_client * TCPClient = m_client;
+		m_mutex_A.unlock();
+		this->SendPacket(packet, TCPClient);
 	}
 	
 	void RealDrone::SendPacket_VirtualStickCommand(uint8_t Mode, float Yaw, float V_x, float V_y, float HAG, float timeout) {
@@ -807,7 +800,11 @@ namespace DroneInterface {
 		packet_vsc.timeout = timeout;
 
 		packet_vsc.Serialize(packet);
-		this->SendPacket(packet);
+		
+		m_mutex_A.lock();
+		tacopie::tcp_client * TCPClient = m_client;
+		m_mutex_A.unlock();
+		this->SendPacket(packet, TCPClient);
 	}
 }
 

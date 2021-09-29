@@ -127,6 +127,8 @@ namespace DroneInterface {
 		WaypointMission() = default;
 		~WaypointMission() = default;
 		
+		bool empty() { return Waypoints.empty(); }
+		
 		//If switching to C++20, default this
 		bool operator==(WaypointMission const & Other) const {
 			if ((this->LandAtLastWaypoint != Other.LandAtLastWaypoint) || (this->CurvedTrajectory != Other.CurvedTrajectory))
