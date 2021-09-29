@@ -131,6 +131,7 @@ namespace DroneInterface {
         void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG) override;
 
         //RealDrone-specific methods
+        void DisconnectHandler(void);
         void DataReceivedHandler(const std::shared_ptr<tacopie::tcp_client>& client, const tacopie::tcp_client::read_result& res);
         void Possess(RealDrone * Target); //Transfer state to another RealDrone Object on the next opportunity, leaving this object dead
         bool IsDead(void); //Returns true if state has been transferred to another object. Can safely be destroyed if dead.
@@ -154,7 +155,7 @@ namespace DroneInterface {
         bool ProcessFullReceivedPacket(void);          //Process a full packet. Returns true on success and false on failure (likily hash check fail)
 
         void AddImageTimestampToLogAndFPSReport(TimePoint Timestamp);
-        void TransferStateToTargetObject(void); //Used for possession
+        bool TransferStateToTargetObject(void); //Used for possession
 
         std::mutex               m_mutex;               //All fields in this block are protected by this mutex
         Packet_CoreTelemetry     m_packet_ct;           //Data is retrieved from this packet in access methods
@@ -171,7 +172,9 @@ namespace DroneInterface {
         TimePoint                m_TimestampOfLastFPSReport;
         RealDrone *              m_possessionTarget = nullptr; //Nullptr if no possession requested
         bool                     m_isDead = false; //Set to true after possessing another object. Can be destroyed safely.
-
+        
+        std::atomic<bool> m_isConnected;
+        
         Packet_Image m_packet_img;                     //Only used in ProcessFullReceivedPacket
         Packet_CompressedImage m_packet_compressedImg; //Only used in ProcessFullReceivedPacket
         Packet_Acknowledgment m_packet_ack;            //Only used in ProcessFullReceivedPacket

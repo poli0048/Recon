@@ -264,16 +264,24 @@ namespace DroneInterface {
 		for (size_t newHeadIndex = 1U; newHeadIndex + 1U < m_data.size(); newHeadIndex++) {
 			if ((m_data[newHeadIndex] == (uint8_t) 218) && (m_data[newHeadIndex + 1] == (uint8_t) 167)) {
 				//We found the sync field
+				std::cerr << "Forward scan successful.\r\n";
+				std::cerr << "newHeadIndex: " << newHeadIndex << "\r\n";
+				std::cerr << "m_data.size(): " << m_data.size() << "\r\n";
+				std::cerr << "m_data[newHeadIndex]: " << (unsigned int) m_data[newHeadIndex] << "\r\n";
+				std::cerr << "m_data[newHeadIndex + 1]: " << (unsigned int) m_data[newHeadIndex + 1] << "\r\n";
 				m_data.erase(m_data.begin(), m_data.begin() + newHeadIndex);
+				M_highLevelFieldsValid = false;
 				return;
 			}
 		}
 		if ((m_data.size() > 1U) && (m_data.back() == (uint8_t) 218)) {
 			//The last byte might be the start of a sync field
-			m_data.erase(m_data.begin(), m_data.begin() + m_data.size() - 1U);
+			m_data = std::vector<uint8_t>(1, (uint8_t) 218);
+			M_highLevelFieldsValid = false;
 			return;
 		}
 		m_data.clear();
+		M_highLevelFieldsValid = false;
 	}
 
 	//Take total packet size and PID and add sync, size, and PID fields to m_data
@@ -735,7 +743,16 @@ namespace DroneInterface {
 		TargetPacket.Clear();
 		TargetPacket.AddHeader(uint32_t(9U + 21U), uint8_t(252U));
 		encodeField_uint8  (TargetPacket.m_data, Mode);
-		encodeField_float32(TargetPacket.m_data, Yaw);
+		
+		//Map to degrees in the range [-180, 180]
+		float yaw_deg = Yaw*180.0/PI;
+		yaw_deg = fmod(yaw_deg, 360.0);
+		if (yaw_deg < 0.0)
+			yaw_deg += 360.0;
+		if (yaw_deg > 180.0)
+			yaw_deg -= 360.0;
+		
+		encodeField_float32(TargetPacket.m_data, yaw_deg);
 		encodeField_float32(TargetPacket.m_data, V_x);
 		encodeField_float32(TargetPacket.m_data, V_y);
 		encodeField_float32(TargetPacket.m_data, HAG);
@@ -751,7 +768,7 @@ namespace DroneInterface {
 		
 		auto iter = SourcePacket.m_data.cbegin() + 7U; //Const iterater to begining of payload
 		Mode    = decodeField_uint8(iter);
-		Yaw     = decodeField_float32(iter);
+		Yaw     = decodeField_float32(iter) * PI/180.0;
 		V_x     = decodeField_float32(iter);
 		V_y     = decodeField_float32(iter);
 		HAG     = decodeField_float32(iter);

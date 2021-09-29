@@ -24,11 +24,24 @@ namespace DroneInterface {
 		m_client = client.get();
 		m_TimestampOfLastFPSReport = std::chrono::steady_clock::now();
 		
+		//Set disconnection handler
+		client->set_on_disconnection_handler(std::bind(&RealDrone::DisconnectHandler, this));
+		
 		//Kick off reading from socket
 		client->async_read({ 1024, bind(&RealDrone::DataReceivedHandler, this, client, std::placeholders::_1) });
+		
+		m_isConnected = true;
 	}
 	
-	RealDrone::~RealDrone() { }
+	RealDrone::~RealDrone() {
+		if (m_packet_fragment != nullptr)
+			delete m_packet_fragment;
+	}
+	
+	void RealDrone::DisconnectHandler(void) {
+		std::cerr << "Drone socket disconnected.\r\n";
+		m_isConnected = false;
+	}
 	
 	void RealDrone::LoadTestWaypointMission(WaypointMission & testMission){
 
@@ -140,8 +153,36 @@ namespace DroneInterface {
 	}
 
 	void RealDrone::DataReceivedHandler(const std::shared_ptr<tacopie::tcp_client> & client, const tacopie::tcp_client::read_result & res) {
+		//If this callback is called after disconnection, return without starting a new read (breaking read loop)
+		if (! m_isConnected) {
+			std::cerr << "DataReceivedHandler() called after disconnection. Stopping read loop.\r\n";
+			return;
+		}
+		
+		std::scoped_lock lock(m_mutex);
+		//if (m_client != client.get()) {
+			//This is an orphaned callback from a possessed drone object. We need to return without triggering a new read since
+			//the read cycle has already been started by the drone that possessed us.
+		//	std::cerr << "Orphaned DataReceivedHandler terminating read loop.\r\n";
+		//	client->disconnect();
+		//	return;
+		//}
+		
+		/*m_mutex.lock();
+		auto myClientPtr = m_client;
+		m_mutex.unlock();
+		if (myClientPtr != client.get()) {
+			//This is an orphaned callback from a possessed drone object. We need to return without triggering a new read since
+			//the read cycle has already been started by the drone that possessed us.
+			std::cerr << "Orphaned DataReceivedHandler terminating read loop.\r\n";
+			client->disconnect();
+			return;
+		}*/
 		if (res.success) {
+			//std::cerr << "DataReceivedHandler called from client: " << client.get() << " on object " << this << "\r\n";
+			
 			//Copy all the received data to our buffer
+			//std::cerr << "buf size on entry: " << m_buffer.size();
 			m_buffer.insert(m_buffer.end(), res.buffer.begin(), res.buffer.end());
 			
 			//Process received data
@@ -174,10 +215,12 @@ namespace DroneInterface {
 				}
 			}
 			
+			//std::cerr << " on exit: " << m_buffer.size() << "\r\n";
+			
 			//If we have been instructed to take possession of another object, transfer our state to it here and set up the client to
 			//call the target objects receive handler instead of our own. Otherwise, trigger the next read.
-			if (m_possessionTarget != nullptr) {
-				TransferStateToTargetObject();
+			if ((m_possessionTarget != nullptr) && TransferStateToTargetObject()) {
+				client->set_on_disconnection_handler(std::bind(&RealDrone::DisconnectHandler, m_possessionTarget));
 				client->async_read({ 1024, bind(&RealDrone::DataReceivedHandler, m_possessionTarget, client, std::placeholders::_1) });
 			}
 			else
@@ -201,13 +244,22 @@ namespace DroneInterface {
 		return m_isDead;
 	}
 	
-	void RealDrone::TransferStateToTargetObject(void) {
+	bool RealDrone::TransferStateToTargetObject(void) {
 		if (m_possessionTarget != nullptr) {
-			std::scoped_lock lock_A(m_mutex);
+			if (m_possessionTarget->m_isConnected) {
+				std::cerr << "Can't take possession of target because it has active socket connection.\r\n";
+				return false;
+			}
+			
+			std::cerr << "Taking possession of target drone object.\r\n";
+			//std::scoped_lock lock_A(m_mutex);
 			std::scoped_lock lock_B(m_possessionTarget->m_mutex);
 			
 			m_possessionTarget->m_client = this->m_client;
+			m_possessionTarget->m_buffer = this->m_buffer;
+			delete m_possessionTarget->m_packet_fragment;
 			m_possessionTarget->m_packet_fragment = this->m_packet_fragment;
+			this->m_packet_fragment = nullptr; //Make sure when the dead drone is destroyed that we don't kill the packet fragment
 			
 			//Transfer Core Telemetry data
 			if (this->m_packet_ct_received) {
@@ -254,7 +306,11 @@ namespace DroneInterface {
 			
 			//Mark this object as dead
 			m_isDead = true;
+			m_possessionTarget->m_isConnected = true;
+			return true;
 		}
+		else
+			return false;
 	}
 	
 	bool RealDrone::ProcessFullReceivedPacket(void) {
@@ -263,7 +319,7 @@ namespace DroneInterface {
 
 		switch (PID) {
 			case 0U: {
-				std::scoped_lock lock(m_mutex);
+				//std::scoped_lock lock(m_mutex);
 				if (this->m_packet_ct.Deserialize(*m_packet_fragment)) {
 					//std::cout << this->m_packet_ct;
 					this->m_packet_ct_received = true;
@@ -276,7 +332,7 @@ namespace DroneInterface {
 				}
 			}
 			case 1U: {
-				std::scoped_lock lock(m_mutex);
+				//std::scoped_lock lock(m_mutex);
 				if (this->m_packet_et.Deserialize(*m_packet_fragment)) {
 					//std::cout << this->m_packet_et;
 					this->m_packet_et_received = true;
@@ -290,7 +346,7 @@ namespace DroneInterface {
 			}
 			case 2U: {
 				if (this->m_packet_img.Deserialize(*m_packet_fragment)) {
-					std::scoped_lock lock(m_mutex);
+					//std::scoped_lock lock(m_mutex);
 					this->m_MostRecentFrame = this->m_packet_img.Frame;
 					this->m_frame_num++;
 					this->m_PacketTimestamp_imagery = std::chrono::steady_clock::now();
@@ -334,7 +390,7 @@ namespace DroneInterface {
 			}
 			case 5U: {
 				if (this->m_packet_compressedImg.Deserialize(*m_packet_fragment)) {
-					std::scoped_lock lock(m_mutex);
+					//std::scoped_lock lock(m_mutex);
 					this->m_MostRecentFrame = this->m_packet_compressedImg.Frame;
 					this->m_frame_num++;
 					this->m_PacketTimestamp_imagery = std::chrono::steady_clock::now();
@@ -697,7 +753,12 @@ namespace DroneInterface {
 	
 	void RealDrone::SendPacket(DroneInterface::Packet &packet) {
 		std::vector<char> ch_data(packet.m_data.begin(), packet.m_data.end()); //Is this copy necessary?
-		m_client->async_write({ ch_data, nullptr });
+		try {
+			m_client->async_write({ ch_data, nullptr });
+		}
+		catch (...) {
+			std::cerr << "Error in RealDrone::SendPacket(): writing to socket failed.\r\n";
+		}
 	}
 	
 	void RealDrone::SendPacket_EmergencyCommand(uint8_t Action) {

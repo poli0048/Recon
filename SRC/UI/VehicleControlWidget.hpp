@@ -232,9 +232,6 @@ inline bool VehicleControlWidget::AtTargetState(Eigen::Vector3d const & DronePos
 	if (yawDelta > 5.0*PI/180.0)
 		return false;
 	
-	//TODO: We currently skip the speed check only because we haven't tracked down the bad velocity telemetry bug yet
-	return true;
-	
 	//Check 2D Speed (should be small)
 	double speed2D = std::sqrt(DroneVel_ENU(0)*DroneVel_ENU(0) + DroneVel_ENU(1)*DroneVel_ENU(1));
 	if (speed2D > 3.0*0.44704)
@@ -319,8 +316,7 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 						Eigen::Vector3d delta_ENU      = C_ECEF_ENU * delta_ECEF;
 						Eigen::Vector2d v_EN(delta_ENU(0), delta_ENU(1));
 						double distFromTarget          = v_EN.norm();
-						//TODO: Latancy adjustment is turned off right now because our bad V telemetry bug
-						//distFromTarget = std::max(distFromTarget - currentSpeed2D*0.15, 0.0); //Account for command latancy
+						distFromTarget = std::max(distFromTarget - currentSpeed2D*0.15, 0.0); //Account for command latancy
 						v_EN.normalize();
 						
 						//We will set our East-North velocity to a multiple of v_EN... we just need to scale it appropriately
@@ -338,17 +334,17 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 						}
 						
 						//Execute using Mode A
-						/*DroneInterface::VirtualStickCommand_ModeA command;
+						DroneInterface::VirtualStickCommand_ModeA command;
 						command.Yaw     = myState.m_targetYawDeg*PI/180.0;
 						command.V_North = v_EN(1);
 						command.V_East  = v_EN(0);
 						command.HAG     = myState.m_targetHAGFeet/3.280839895;
 						command.timeout = std::max(2.0, 10.0*approxLoopPeriod);
 						drone->IssueVirtualStickCommand(command);
-						myState.m_LastCommandWasHover = false;*/
+						myState.m_LastCommandWasHover = false;
 						
 						//Execute using Mode B
-						Eigen::Matrix2d C_EN_Vehicle;
+						/*Eigen::Matrix2d C_EN_Vehicle;
 						C_EN_Vehicle << cos(droneYaw), -1.0*sin(droneYaw),
 							           sin(droneYaw),      cos(droneYaw);
 						Eigen::Vector2d V_Target_Vehicle = C_EN_Vehicle * v_EN;
@@ -360,7 +356,7 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 						command.HAG       = myState.m_targetHAGFeet/3.280839895;
 						command.timeout   = std::max(2.0, 10.0*approxLoopPeriod);
 						drone->IssueVirtualStickCommand(command);
-						myState.m_LastCommandWasHover = false;
+						myState.m_LastCommandWasHover = false;*/
 					}
 				}
 			}
