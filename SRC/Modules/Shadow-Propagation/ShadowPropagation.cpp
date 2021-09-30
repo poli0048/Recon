@@ -81,8 +81,17 @@ namespace ShadowPropagation {
             cv::Mat cvInput;
             cvInputWithExcess.copyTo(cvInput, mask);
 
+//            if (cvInput.isContinuous()) {
+//                std::cout << "Memory is contiguous." << std::endl;
+//            } else {
+//                std::cout << "Memory is NOT contiguous." << std::endl;
+//            }
             torch::Tensor inputTensorCompressed = torch::from_blob(cvInput.data, {64, 64}, torch::kFloat32);
             torch::Tensor inputTensor = inputTensorCompressed.unsqueeze(0).unsqueeze(0);
+            if (at::isnan(inputTensor).any().item<bool>()) {
+                std::cerr << "Input Tensor has a NaN value." << std::endl;
+            }
+
             m_prevInputs.push_back(inputTensor);
             if (m_prevInputs.size() > TARGET_INPUT_LENGTH) {
                 m_prevInputs.pop_front();
@@ -114,16 +123,17 @@ namespace ShadowPropagation {
                 auto result = m_module.forward(inputs);
                 // decoder_input, decoder_hidden, output_image, _, _
                 torch::Tensor outputTensor = result.toTuple()->elements()[2].toTensor();
-//                if (at::isnan(outputTensor).all().item<bool>()) {
-//                    if (!isSaved && counter == 0) {
-//                        isSaved = true;
-//                        std::cout << inputTensor << std::endl;
-//                        std::cout << outputTensor << std::endl;
-//                        torch::save(inputTensor, "x.pt");
-//                    }
-//                    counter++;
-//                    std::cout << " ANOMALY ALERT!" << std::endl;
-//                }
+                if (at::isnan(outputTensor).any().item<bool>()) {
+                    if (!isSaved && counter == 0) {
+                        isSaved = true;
+                        std::cout << inputTensor << std::endl;
+                        std::cout << outputTensor << std::endl;
+                        torch::save(inputTensor, "x.pt");
+                    }
+                    counter++;
+                    std::cout << " ANOMALY ALERT!" << std::endl;
+                    return;
+                }
                 auto accessor = outputTensor.accessor<float, 4>();
                 for (int i = 0; i < 64; i++) {
                     for (int j = 0; j < 64; j++) {
