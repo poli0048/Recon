@@ -46,6 +46,7 @@ static bool TestBench20(std::string const & Arg);  static bool TestBench21(std::
 static bool TestBench22(std::string const & Arg);  static bool TestBench23(std::string const & Arg);
 static bool TestBench24(std::string const & Arg);  static bool TestBench25(std::string const & Arg);
 static bool TestBench26(std::string const & Arg);  static bool TestBench27(std::string const & Arg);
+static bool TestBench28(std::string const & Arg);
 
 // ************************************************************************************************************************************************
 // *********************************************************   Public Function Definitions   ******************************************************
@@ -89,7 +90,8 @@ namespace TestBenches {
 			case 25: result = TestBench25(TestBenchArg); break;
 			case 26: result = TestBench26(TestBenchArg); break;
 			case 27: result = TestBench27(TestBenchArg); break;
-			default: break;
+            case 28: result = TestBench28(TestBenchArg); break;
+            default: break;
 		}
 		if (result)
 			std::cerr << "Testbench passed.\r\n";
@@ -667,7 +669,7 @@ static bool TestBench17(std::string const & Arg) {
 	cv::Mat refFrame = GetRefFrame(datasetPath);
 	std::filesystem::path sourceVideoPath = GetSimVideoFilePath(datasetPath);
 	std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> GCPs = LoadFiducialsFromFile(datasetPath);
-	
+
 	//Set up drone sim
 	DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation A"s, Eigen::Vector3d(44.236124*PI/180.0, -95.308418*PI/180.0, 345.03));
 	DroneInterface::Drone * myDrone = DroneInterface::DroneManager::Instance().GetDrone("Simulation A"s);
@@ -751,12 +753,13 @@ static bool TestBench17(std::string const & Arg) {
 	
 	//Stop the shadow propagation module
 	std::cerr << "Stopping the shadow propagation module.\r\n";
-	ShadowPropagation::ShadowPropagationEngine::Instance().Stop();
+    std::cerr << "NUM IMAGES: " << ShadowPropagation::ShadowPropagationEngine::Instance().numImagesProcessed << std::endl;
+    std::cerr << "ELAPSED MICROSECONDS: " << ShadowPropagation::ShadowPropagationEngine::Instance().numMicroseconds << std::endl;
+    ShadowPropagation::ShadowPropagationEngine::Instance().Stop();
 	
 	//Stop the shadow detection engine
 	ShadowDetection::ShadowDetectionEngine::Instance().Stop();
-	
-	return true;
+    return true;
 }
 
 static bool TestBench18(std::string const & Arg) { return false; }
@@ -1214,6 +1217,32 @@ static bool TestBench27(std::string const & Arg) {
     return true;
 }
 
-
-
+static bool TestBench28(std::string const & Arg) {
+    std::cerr << "Starting!" << std::endl;
+    std::string baseDirectory = Handy::Paths::ThisExecutableDirectory()
+            .parent_path().string().append("/SRC/Modules/Shadow-Propagation");
+    torch::jit::script::Module dataTensor = torch::jit::load(baseDirectory + "/tensors_c++.pt");
+    torch::Tensor testTensor = dataTensor.attr("data").toTensor();
+    for (int i = 0; i < 100; i++) {
+        cv::Mat input(64, 64, CV_32FC1, testTensor[i][0][0].data_ptr());
+        if (at::isnan(testTensor).all().item<bool>()) {
+            std::cout << "ALL NAN" << std::endl;
+        }
+        cv::imshow("TestImage", input);
+        torch::jit::script::Module module = torch::jit::load(baseDirectory + "/model.pt");
+        std::vector<torch::jit::IValue> inputs;
+        inputs.push_back(testTensor[i]);
+        inputs.push_back(true);
+        auto result = module.forward(inputs);
+        torch::Tensor outputTensor = result.toTuple()->elements()[2].toTensor();
+        cv::Mat output(64, 64, CV_32FC1, outputTensor[0][0].data_ptr());
+        if (at::isnan(outputTensor).all().item<bool>()) {
+            std::cout << "ALL NAN OUTPUT TENSOR" << std::endl;
+        }
+        cv::imshow("OutputImage", output);
+        cv::waitKey(1);
+    }
+    cv::waitKey(0);
+    return true;
+}
 
