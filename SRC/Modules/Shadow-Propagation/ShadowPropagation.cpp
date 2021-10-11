@@ -86,7 +86,7 @@ namespace ShadowPropagation {
 //            } else {
 //                std::cout << "Memory is NOT contiguous." << std::endl;
 //            }
-            torch::Tensor inputTensorCompressed = torch::from_blob(cvInput.data, {64, 64}, torch::kFloat32);
+            torch::Tensor inputTensorCompressed = torch::from_blob(cvInput.data, {64, 64}, torch::kFloat32).to(m_device);
             torch::Tensor inputTensor = inputTensorCompressed.unsqueeze(0).unsqueeze(0);
             if (at::isnan(inputTensor).any().item<bool>()) {
                 std::cerr << "Input Tensor has a NaN value." << std::endl;
@@ -97,74 +97,78 @@ namespace ShadowPropagation {
                 m_prevInputs.pop_front();
             }
 //            allVectors.push_back(inputTensor);
-            for (int i = 0; i < m_prevInputs.size(); i++) {
-                std::vector<torch::jit::IValue> inputs;
-                inputs.push_back(m_prevInputs[i]);
-                inputs.push_back((i ==  0));
+            if (m_prevInputs.size() == TARGET_INPUT_LENGTH) {
+                for (int i = 0; i < m_prevInputs.size(); i++) {
+                    std::vector<torch::jit::IValue> inputs;
+                    std::cout << m_prevInputs[i].sizes() << std::endl;
+                    inputs.push_back(m_prevInputs[i]);
+                    inputs.push_back((i == 0));
 //                if (at::isnan(inputs[0].toTensor()).all().item<bool>()) {
 //                    std::cerr << "PREV INPUT IS A NAN TENSOR!" << std::endl;
-//                }
-                m_module.forward(inputs);
+//                }    std::vector<torch::Tensor> input;
+
+                    m_module.forward(inputs);
 //                cv::Mat input(64, 64, CV_32FC1, m_prevInputs[i][0][0].data_ptr());
 //                cv::imshow("PRE-INPUTs", input);
 //                cv::waitKey(1);
-            }
-            cv::Mat localTimeAvailable(cv::Size(64, 64), CV_16UC1, cv::Scalar(std::numeric_limits<uint16_t>::max()));
-            for (int t = 1; t <= TIME_HORIZON; t++) {
-                std::vector<torch::jit::IValue> inputs;
-                inputs.push_back(inputTensor);
-                inputs.push_back(false);
+                }
+                cv::Mat localTimeAvailable(cv::Size(64, 64), CV_16UC1,
+                                           cv::Scalar(std::numeric_limits<uint16_t>::max()));
+                for (int t = 1; t <= TIME_HORIZON; t++) {
+                    std::vector<torch::jit::IValue> inputs;
+                    inputs.push_back(inputTensor);
+//                inputs.push_back(false);
 //                if (at::isnan(inputs[0].toTensor()).all().item<bool>()) {
 //                    std::cerr << "INPUT IS A NAN TENSOR!" << std::endl;
 //                }
 //                cv::Mat input(64, 64, CV_32FC1, inputTensor[0][0].data_ptr());
 //                cv::imshow("INPUT", input);
 //                cv::waitKey(1);
-                auto result = m_module.forward(inputs);
-                // decoder_input, decoder_hidden, output_image, _, _
-                torch::Tensor outputTensor = result.toTuple()->elements()[2].toTensor();
-                if (at::isnan(outputTensor).any().item<bool>()) {
-                    if (!isSaved && counter == 0) {
-                        isSaved = true;
-                        std::cout << inputTensor << std::endl;
-                        std::cout << outputTensor << std::endl;
-                        torch::save(inputTensor, "x.pt");
-                    }
-                    counter++;
-                    std::cout << " ANOMALY ALERT!" << std::endl;
-                    return;
-                }
-                auto accessor = outputTensor.accessor<float, 4>();
-                for (int i = 0; i < 64; i++) {
-                    for (int j = 0; j < 64; j++) {
-                        if (isnan(accessor[0][0][i][j])) {
-                            accessor[0][0][i][j] = 0;
+                    auto result = m_module.forward(inputs);
+                    // decoder_input, decoder_hidden, output_image, _, _
+                    torch::Tensor outputTensor = result.toTuple()->elements()[2].toTensor();
+                    if (at::isnan(outputTensor).any().item<bool>()) {
+                        if (!isSaved && counter == 0) {
+                            isSaved = true;
+                            std::cout << inputTensor << std::endl;
+                            std::cout << outputTensor << std::endl;
+                            torch::save(inputTensor, "x.pt");
                         }
+                        counter++;
+                        std::cout << " ANOMALY ALERT!" << std::endl;
+                    }
+                    auto accessor = outputTensor.accessor<float, 4>();
+                    for (int i = 0; i < 64; i++) {
+                        for (int j = 0; j < 64; j++) {
+                            if (isnan(accessor[0][0][i][j])) {
+                                accessor[0][0][i][j] = 0;
+                            }
 //                        if (accessor[0][0][i][j] < 0) {
 //                            std::cout << "NEGATIVE" << std::endl;
 //                        }
+                        }
                     }
-                }
 //                cv::Mat output(64, 64, CV_32FC1, outputTensor[0][0].data_ptr());
 //                cv::imshow("OUTPUT!!", output);
 //                cv::waitKey(1);
-                // Iterates over output tensor and then updates localTimeAvailable accordingly
-                for (int i = 0; i < 64; i++) {
-                    for (int j = 0; j < 64; j++) {
-                        if (outputTensor[0][0][i][j].item<float>() > OUTPUT_THRESHOLD &&
-                            localTimeAvailable.at<uint16_t>(i, j) > t) {
-                            localTimeAvailable.at<uint16_t>(i, j) = t;
+                    // Iterates over output tensor and then updates localTimeAvailable accordingly
+                    for (int i = 0; i < 64; i++) {
+                        for (int j = 0; j < 64; j++) {
+                            if (outputTensor[0][0][i][j].item<float>() > OUTPUT_THRESHOLD &&
+                                localTimeAvailable.at<uint16_t>(i, j) > t) {
+                                localTimeAvailable.at<uint16_t>(i, j) = t;
+                            }
                         }
                     }
+                    inputTensor = outputTensor;
                 }
-                inputTensor = outputTensor;
+                // Scales up localTimeAvailable
+                cv::resize(localTimeAvailable, m_TimeAvail.TimeAvailable, cv::Size(512, 512), cv::INTER_LINEAR);
+                m_TimeAvail.Timestamp = map.Timestamp;
+                auto endClock = std::chrono::steady_clock::now();
+                for (auto const & kv : m_callbacks)
+                    kv.second(m_TimeAvail);
             }
-            // Scales up localTimeAvailable
-            cv::resize(localTimeAvailable, m_TimeAvail.TimeAvailable, cv::Size(512, 512), cv::INTER_LINEAR);
-            m_TimeAvail.Timestamp = map.Timestamp;
-            auto endClock = std::chrono::steady_clock::now();
-            for (auto const & kv : m_callbacks)
-                kv.second(m_TimeAvail);
 //            numImagesProcessed++;
 //            numMicroseconds += std::chrono::duration_cast<std::chrono::milliseconds>(endClock - startClock).count();
             m_unprocessedShadowMaps.erase(m_unprocessedShadowMaps.begin()); //Will cause re-allocation but the buffer is small so don't worry about it
