@@ -14,6 +14,7 @@
 #define PI 3.14159265358979
 
 SurveyRegionsTool::SurveyRegionsTool() :
+	m_MessageToken(-1),
 	m_popupDims(200,200),
 	toolActive(false),
 	m_toolState(0)
@@ -170,40 +171,23 @@ static void DrawPlus(ImDrawList * DrawList, Eigen::Vector2d const & Center_Scree
 	//DrawList->AddRectFilled(p_min, p_max, Color, 0.0f, ImDrawCornerFlags_All);
 }
 
-void SurveyRegionsTool::Draw_Instructions(std::string const & Text, ImDrawList * DrawList) {
-	if (Text.empty())
-		return;
-	
-	ImVec2 TextSize = ImGui::CalcTextSize(Text.c_str());
-	ImVec2 BoxSize(TextSize.x + 6.0f*ImGui::GetStyle().FramePadding.x, TextSize.y + 6.0f*ImGui::GetStyle().FramePadding.y);
-	
-	MapWidget & map(MapWidget::Instance());
-	Eigen::Vector2d MapULCorner_ScreenSpace = map.MapWidgetULCorner_ScreenSpace;
-	Eigen::Vector2d MapLRCorner_ScreenSpace = MapULCorner_ScreenSpace + map.MapWidgetDims;
-	
-	float BoxMinX = float(MapULCorner_ScreenSpace(0)) + 6.0f*ImGui::GetStyle().FramePadding.x;
-	float BoxMinY = float(MapLRCorner_ScreenSpace(1)) - BoxSize.y - 6.0f*ImGui::GetStyle().FramePadding.y;
-	
-	float BoxMaxX = BoxMinX + BoxSize.x;
-	float BoxMaxY = BoxMinY + BoxSize.y;
-	
-	ImVec2 BoxMin(BoxMinX, BoxMinY);
-	ImVec2 BoxMax(BoxMaxX, BoxMaxY);
-	ImVec2 TextMin(BoxMin.x + 3.0f*ImGui::GetStyle().FramePadding.x, BoxMin.y + 3.0f*ImGui::GetStyle().FramePadding.y);
-	
-	DrawList->AddRectFilled(BoxMin, BoxMax, IM_COL32(70, 70, 70, 255), 5.0f, ImDrawCornerFlags_All);
-	DrawList->AddText(TextMin, IM_COL32(255, 255, 255, 255), Text.c_str());
-}
-
 void SurveyRegionsTool::Draw_Overlay(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds) {
+	//Get a token from the message box overlay if we haven't gotten one yet - this lets us write messages when needed.
+	if (m_MessageToken == -1)
+		m_MessageToken = MapWidget::Instance().m_messageBoxOverlay.GetAvailableToken();
+	
 	//If the survey region layer isn't supposed to be visible just return now
-	if (! VisWidget::Instance().LayerVisible_SurveyRegion)
+	if (! VisWidget::Instance().LayerVisible_SurveyRegion) {
+		MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_MessageToken);
 		return;
+	}
 	
 	//Get the active survey region. Return if there isn't one and lock it if there is one.
 	SurveyRegion * surveyRegion = SurveyRegionManager::Instance().GetActiveSurveyRegion();
-	if (surveyRegion == nullptr)
+	if (surveyRegion == nullptr) {
+		MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_MessageToken);
 		return;
+	}
 	std::scoped_lock lock(surveyRegion->m_mutex);
 	
 	//Regardless of whether the tool is active, we need to draw the polygon collection
@@ -534,8 +518,10 @@ void SurveyRegionsTool::Draw_Overlay(Eigen::Vector2d const & CursorPos_ScreenSpa
 			}
 		}
 		
-		Draw_Instructions(InstructionsStr, DrawList);
+		MapWidget::Instance().m_messageBoxOverlay.AddMessage(InstructionsStr, m_MessageToken);
 	}
+	else
+		MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_MessageToken);
 }
 
 //Finish a new polygon or hole - update the survey region and tool state accordingly. A lock should already be held on the surveyRegion.

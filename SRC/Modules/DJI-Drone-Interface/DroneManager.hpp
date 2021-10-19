@@ -12,6 +12,8 @@
 
 //Project Includes
 #include "Drone.hpp"
+#include "../../UI/MapWidget.hpp"
+#include "../GNSS-Receiver/GNSSReceiver.hpp"
 
 namespace DroneInterface {
 	//The DroneManager is a singleton class; it provides the main drone interface to other software components
@@ -52,6 +54,7 @@ namespace DroneInterface {
 			tacopie::tcp_server m_server;
 			
 			int m_port;
+			int m_MessageToken;
 			
 			void ManagerMain(void) {
 				while (true) {
@@ -61,6 +64,8 @@ namespace DroneInterface {
 							return;
 						std::this_thread::sleep_for(std::chrono::milliseconds(100));
 					}
+					
+					std::scoped_lock lock(m_mutex);
 					
 					//See if there are any drone objects in the holding pool that are now ready or dead
 					size_t n = 0U;
@@ -97,6 +102,17 @@ namespace DroneInterface {
 						else
 							n++;
 					}
+					
+					//If we have drones connected but don't have a GNSS receiver connected to the GCS, warn user about poor altitude.
+					std::string warningString;
+					if (m_droneRealVector.size() > 0U) {
+						Eigen::Vector3d Pos_LLA;
+						GNSSReceiver::GNSSManager::TimePoint Timestamp;
+						if (! GNSSReceiver::GNSSManager::Instance().GetPosition_LLA(Pos_LLA, Timestamp))
+							warningString = "Warning: No GNSS receiver connected to GCS. DJI drone altitude will be unaided (high error)."s;
+							warningString += "\nRecommend connecting GNSS receiver to GCS or disabling watchdog module (this option is less good)"s;
+					}
+					MapWidget::Instance().m_messageBoxOverlay.AddMessage(warningString, m_MessageToken);
 				}
 			}
 			
@@ -115,6 +131,7 @@ namespace DroneInterface {
 				//     This second option would mean that we would need an option to set the port on the iOS DJI Interface Client
 				// Another option is to have the remote client close the connection instead. This would eliminate the TIME_WAIT requirement
 				m_port = 3001;
+				m_MessageToken = MapWidget::Instance().m_messageBoxOverlay.GetAvailableToken();
 				m_server.start("0.0.0.0", m_port, [this](const std::shared_ptr<tacopie::tcp_client> & client) -> bool {
 					std::string hostname = client->get_host();
 					uint32_t    port     = client->get_port();

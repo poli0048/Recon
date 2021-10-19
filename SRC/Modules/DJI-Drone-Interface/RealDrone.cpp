@@ -16,6 +16,7 @@
 #include "../../UI/VehicleControlWidget.hpp"
 #include "../Guidance/Guidance.hpp"
 #include "DroneUtils.hpp"
+#include "../GNSS-Receiver/GNSSReceiver.hpp"
 
 #define PI 3.14159265358979
 
@@ -432,7 +433,17 @@ namespace DroneInterface {
 		std::scoped_lock lock(m_mutex_B);
 		Latitude  = this->m_packet_ct.Latitude  * (PI/180.0);
 		Longitude  = this->m_packet_ct.Longitude * (PI/180.0);
-		Altitude  = this->m_packet_ct.Altitude;
+		
+		//If a GNSS receiver is connected to the GCS, use that and barometric relative altitude to compute absolute drone altitude.
+		//If not, rely on the drones estimate of absolute altitude (which is often very poor for DJI drones). Note: We don't need
+		//to issue a warning here about poor altitude accuracy since the drone manager handles this and posts a single warning
+		//(instead of 1 per drone) when altitude data is unaided by a GCS-connected GNSS receiver.
+		double GCS_GroundAlt = 0.0;
+		if (GNSSReceiver::GNSSManager::Instance().GetGroundAlt(GCS_GroundAlt))
+			Altitude = GCS_GroundAlt + this->m_packet_ct.HAG;
+		else
+			Altitude  = this->m_packet_ct.Altitude;
+		
 		Timestamp = this->m_PacketTimestamp_ct;
 		return this->m_packet_ct_received;
 	}

@@ -2,7 +2,7 @@
 //This enables the UI to, for instance, indicate the GCS location on the map.
 //We elect to use the UBX protocol as opposed to NMEA so we can easily access proper GPS time
 //Authors: Bryan Poling
-//Copyright (c) 2021 Sentek Systems, LLC. All rights reserved. 
+//Copyright (c) 2021 Sentek Systems, LLC. All rights reserved.
 #pragma once
 
 //System Includes
@@ -39,6 +39,7 @@ namespace GNSSReceiver {
 			
 			//These fields are only updated when the NAV solution is valid
 			Eigen::Vector3d m_pos_ECEF;       //ECEF position (m)
+			Eigen::Vector3d m_pos_LLA;        //LLA position (rad, rad, m)
 			double          m_pos_3DAccuracy; //Receiver-provided 3D position accuracy estimate (m) - no precise definition found
 			double          m_pos_2DAccuracy; //Receiver-provided 2D position accuracy estimate (m) - no precise definition found
 			double          m_pos_VAccuracy;  //Receiver-provided vertical position accuracy estimate (m) - no precise definition found
@@ -46,6 +47,9 @@ namespace GNSSReceiver {
 			double          m_time_GPSTOW;    //GPS TOW
 			TimePoint       m_lastSolution_Timestamp; //Updated only when the NAV solution is valid
 			bool            m_validSolutionReceived;  //Set to true on the first valid NAV solution
+			
+			double m_AveragedAlt;         //Running average of altitude (used for GetGroundAlt()). Updated on each valid NAV solution
+			double m_AveragedAltAccuracy; //Updated on each valid NAV solution
 			
 			//These fields are only updated when the connected receiver supports UBX-NAV-SIG messages (not available on older receivers)
 			int m_satCount_GPS      = -1; //Number of usable GPS     sats being tracked
@@ -72,7 +76,7 @@ namespace GNSSReceiver {
 			GNSSManager() : m_receiverConnected(false), m_reset(false), m_abort(false),
 			                m_pos_ECEF(std::nan(""), std::nan(""), std::nan("")), m_pos_3DAccuracy(std::nan("")), m_pos_2DAccuracy(std::nan("")),
 			                m_pos_VAccuracy(std::nan("")), m_time_GPSWeek(0U), m_time_GPSTOW(std::nan("")),
-			                m_validSolutionReceived(false) {
+			                m_validSolutionReceived(false), m_AveragedAlt(std::nan("")), m_AveragedAltAccuracy(std::nan("")) {
 				m_managerThread = std::thread(&GNSSManager::ModuleMain, this);
 			}
 			~GNSSManager() { Shutdown(); }
@@ -102,6 +106,12 @@ namespace GNSSReceiver {
 			                       int & SatCount_IMES, int & SatCount_QZSS, int & SatCount_GLONASS, int & SatsWithCodeLock,
 			                       int & SatsWithPhaseLock, std::unordered_map<std::tuple<uint8_t,uint8_t>,uint8_t> & CN0s, TimePoint & Timestamp);
 			
+			//Get the altitude of the receiver (assumed to be at approximately ground level). Altitude is height above the WGS84 ellipsoid, in meters.
+			//This field is averaged over time and will remain valid if the receiver is disconnected. This is primarily available for drone objects
+			//to compute their own absolute altitude based on barometric relative altitude in cases where their own estimates of absolute altitude
+			//may be inaccurate or unlreiable (cough... DJI... cough).
+			inline bool GetGroundAlt(double Altitude);
+			
 			//Get the absolute GPS time corresponding to a steady_clock timestamp. Only possible if we got a valid GNSS fix (returns false otherwise)
 			inline bool TimestampToGPSTime(TimePoint const & Timestamp, uint32_t & GPS_Week, double & GPS_TOW);
 	};
@@ -119,7 +129,7 @@ namespace GNSSReceiver {
 		std::scoped_lock lock(m_mutex);
 		if (! m_validSolutionReceived)
 			return false;
-		Pos_LLA = ECEF2LLA(m_pos_ECEF);
+		Pos_LLA = m_pos_LLA;
 		Timestamp = m_lastSolution_Timestamp;
 		return true;
 	}
@@ -128,8 +138,7 @@ namespace GNSSReceiver {
 		std::scoped_lock lock(m_mutex);
 		if (! m_validSolutionReceived)
 			return false;
-		Eigen::Vector3d Pos_LLA = ECEF2LLA(m_pos_ECEF);
-		Pos_NM = LatLonToNM(Eigen::Vector2d(Pos_LLA(0), Pos_LLA(1)));
+		Pos_NM = LatLonToNM(Eigen::Vector2d(m_pos_LLA(0), m_pos_LLA(1)));
 		Timestamp = m_lastSolution_Timestamp;
 		return true;
 	}
@@ -173,6 +182,16 @@ namespace GNSSReceiver {
 		CN0s              = m_CN0s;
 		Timestamp         = m_lastNAV_SIG_Timestamp;
 		return true;
+	}
+	
+	inline bool GNSSManager::GetGroundAlt(double Altitude) {
+		std::scoped_lock lock(m_mutex);
+		if (std::isnan(m_AveragedAlt))
+			return false;
+		else {
+			Altitude = m_AveragedAlt;
+			return true;
+		}
 	}
 
 	inline bool GNSSManager::TimestampToGPSTime(TimePoint const & Timestamp, uint32_t & GPS_Week, double & GPS_TOW) {

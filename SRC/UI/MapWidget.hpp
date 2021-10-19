@@ -26,6 +26,7 @@
 #include "GuidanceOverlay.hpp"
 #include "ShadowMapOverlay.hpp"
 #include "TimeAvailableOverlay.hpp"
+#include "MessageBoxOverlay.hpp"
 
 class MapWidget {
 		using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
@@ -91,8 +92,10 @@ class MapWidget {
 		friend class GuidanceOverlay;
 		friend class ShadowMapOverlay;
 		friend class TimeAvailableOverlay;
+		friend class MessageBoxOverlay;
 		
 		//Public overlays
+		MessageBoxOverlay m_messageBoxOverlay;
 		GuidanceOverlay m_guidanceOverlay;
 		ShadowMapOverlay m_shadowMapOverlay;
 		TimeAvailableOverlay m_TAOverlay;

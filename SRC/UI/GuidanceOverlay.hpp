@@ -1,6 +1,6 @@
 //The guidance overlay is used by the Guidance module to draw guidance-related data on the map widget
 //Author: Bryan Poling
-//Copyright (c) 2021 Sentek Systems, LLC. All rights reserved. 
+//Copyright (c) 2021 Sentek Systems, LLC. All rights reserved.
 #pragma once
 
 //External Includes
@@ -23,10 +23,6 @@ class GuidanceOverlay {
 		std::Evector<std::tuple<LineSegment, float, Eigen::Vector3f>> m_Lines;
 		std::Evector<std::tuple<Eigen::Vector2d, float, Eigen::Vector3f>> m_Circles;
 		
-		std::string m_GuidanceMessage_1;
-		std::string m_GuidanceMessage_2;
-		std::string m_GuidanceMessage_3;
-		
 		static ImU32 IndexToColor(size_t Index, size_t N, float Opacity);
 		
 		void DrawLines(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
@@ -38,13 +34,11 @@ class GuidanceOverlay {
 		
 		//Called in the draw loop for the map widget
 		void Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
-		void Draw_MessageBox(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
 		
 		//Data Setter Methods. Things the overlay can display:
 		//1 - A partition of a survey region (optionally with labels)
 		//2 - A collection of triangles (optionally with labels)
-		//3 - A message box showing up to 3 lines of persistent messages
-		//4 - Lines and circles on top of either the partition or triangle docomposition
+		//3 - Lines and circles on top of either the partition or triangle docomposition
 		//
 		//A partition of a survey region is provided as a vector of polygon collection. Each element in the vector represents a component of the partition.
 		//Item 2 (a collection of triangles) is independent from item 1 (a survey region partition) and the vis widget lets you toggle which is being displayed.
@@ -85,10 +79,6 @@ class GuidanceOverlay {
 		//Note that circles are drawn on top of lines (if specified)
 		void SetCircles(std::Evector<std::tuple<Eigen::Vector2d, float, Eigen::Vector3f>> const & Circles);
 		void ClearCircles();
-		
-		void SetGuidanceMessage1(std::string const & Message); //Display optional message in box on map (give empty string to disable)
-		void SetGuidanceMessage2(std::string const & Message); //Display optional message in box on map (give empty string to disable)
-		void SetGuidanceMessage3(std::string const & Message); //Display optional message in box on map (give empty string to disable)
 };
 
 

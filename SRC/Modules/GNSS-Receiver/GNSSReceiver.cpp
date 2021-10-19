@@ -646,6 +646,7 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 				//Position and velocity are valid
 				std::scoped_lock lock(m_mutex);
 				m_pos_ECEF << double(currentSol.ecefX)/100.0, double(currentSol.ecefY)/100.0, double(currentSol.ecefZ)/100.0;
+				m_pos_LLA = ECEF2LLA(m_pos_ECEF);
 				m_pos_3DAccuracy = double(currentSol.pAcc)/100.0;
 				m_pos_2DAccuracy = double(currentSol.hAcc)/1000.0;
 				m_pos_VAccuracy  = double(currentSol.vAcc)/1000.0;
@@ -661,6 +662,28 @@ void GNSSReceiver::GNSSManager::ModuleMain(void) {
 				
 				m_lastSolution_Timestamp = currentSol.timestamp;
 				m_validSolutionReceived = true;
+				
+				if (std::isnan(m_AveragedAlt)) {
+					m_AveragedAlt = m_pos_LLA(2);
+					m_AveragedAltAccuracy = m_pos_VAccuracy;
+				}
+				else {
+					//Super-simple hueristic filter to combine current estimate with new estimate.
+					//We don't even have a definition for m_pos_VAccuracy so it seems like a proper filter would be overkill.
+					double currentAlt = m_pos_LLA(2);
+					double E_est = m_AveragedAltAccuracy;
+					double E_now = m_pos_VAccuracy;
+					if (E_now < E_est) {
+						//Averaging filter with 10 second response time (based on 5 Hz update rate)
+						m_AveragedAlt = 0.95*m_AveragedAlt + 0.05*currentAlt;
+						m_AveragedAltAccuracy = 0.95*E_est + 0.05*E_now;
+					}
+					else {
+						//Averaging filter with 30 second response time (based on 5 Hz update rate)
+						m_AveragedAlt = 0.98*m_AveragedAlt + 0.02*currentAlt;
+						m_AveragedAltAccuracy = 0.98*E_est + 0.02*E_now;
+					}
+				}
 			}
 			
 			currentSol.reset();

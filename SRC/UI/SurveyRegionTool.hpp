@@ -38,6 +38,7 @@ class SurveyRegionsTool {
 	};
 	
 	private:
+		int m_MessageToken;
 		Eigen::Vector2d m_popupDims;
 		
 		VertexAddress m_editNodeAddress;
@@ -45,7 +46,6 @@ class SurveyRegionsTool {
 
 		void DrawTriangle(Eigen::Vector2d const & p_min, float scale, ImDrawList * DrawList);
 		void Draw_DropDown(Eigen::Vector2d const & PopupULCorner, float PopupWidth);
-		void Draw_Instructions(std::string const & Text, ImDrawList * DrawList);
 		
 		void FinishNewPolyOrHole(SurveyRegion * surveyRegion);
 		

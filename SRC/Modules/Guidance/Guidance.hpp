@@ -40,6 +40,9 @@ namespace Guidance {
 			bool              m_running;
 			std::atomic<bool> m_abort;
 			std::mutex        m_mutex;
+			int               m_MessageToken1;
+			int               m_MessageToken2;
+			int               m_MessageToken3;
 			
 			bool m_missionPrepDone;
 			std::vector<DroneInterface::Drone *> m_dronesUnderCommand; //pointers to the drones we are allowed to command for current mission
@@ -59,6 +62,9 @@ namespace Guidance {
 			
 			//Constructors and Destructors
 			GuidanceEngine() : m_running(false), m_abort(false), m_missionPrepDone(false) {
+				m_MessageToken1 = MapWidget::Instance().m_messageBoxOverlay.GetAvailableToken();
+				m_MessageToken2 = MapWidget::Instance().m_messageBoxOverlay.GetAvailableToken();
+				m_MessageToken3 = MapWidget::Instance().m_messageBoxOverlay.GetAvailableToken();
 				m_engineThread = std::thread(&GuidanceEngine::ModuleMain, this);
 			}
 			~GuidanceEngine() {
@@ -233,6 +239,9 @@ namespace Guidance {
 		while (! m_abort) {
 			m_mutex.lock();
 			if (! m_running) {
+				MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_MessageToken1);
+				MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_MessageToken2);
+				MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_MessageToken3);
 				m_mutex.unlock();
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
 				continue;
@@ -243,10 +252,10 @@ namespace Guidance {
 				//A - Partition the survey region
 				//B - Compute pre-planned waypoint missions for each sub-region
 				
-				//TEMP - Just for testing the Guidance overlay
-				MapWidget::Instance().m_guidanceOverlay.SetGuidanceMessage1("This is a message from the guidance module!");
-				MapWidget::Instance().m_guidanceOverlay.SetGuidanceMessage2("Wow - Another message from the guidance module!");
-				MapWidget::Instance().m_guidanceOverlay.SetGuidanceMessage3("Wow - A third message from the guidance module!");
+				//TEMP - Just for testing the overlay
+				MapWidget::Instance().m_messageBoxOverlay.AddMessage("Error: This is a message from the guidance module!"s, m_MessageToken1);
+				MapWidget::Instance().m_messageBoxOverlay.AddMessage("Warning - Another message from the guidance module!"s, m_MessageToken2);
+				MapWidget::Instance().m_messageBoxOverlay.AddMessage("Wow - A third message from the guidance module!"s, m_MessageToken3);
 				
 				//Create a sample survey region partition to give to the guidance overlay
 				std::Evector<PolygonCollection> Partition;
@@ -415,7 +424,7 @@ namespace Guidance {
 			    double TargetFlightTime = 100;
 
 				PlanMission(tempPolyCollection, Mission, ImagingReqs);
-                m_dronesUnderCommand[0]->ExecuteWaypointMission(Mission);
+                	m_dronesUnderCommand[0]->ExecuteWaypointMission(Mission);
 				m_missionPrepDone = true; //Mark the prep work as done
 			}
 			

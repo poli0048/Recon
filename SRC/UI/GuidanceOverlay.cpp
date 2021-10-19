@@ -235,58 +235,12 @@ void GuidanceOverlay::DrawCircles(Eigen::Vector2d const & CursorPos_NM, ImDrawLi
 	}
 }
 
-void GuidanceOverlay::Draw_MessageBox(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds) {
-	//Nothing to do if the overlay is disabled
-	if (! VisWidget::Instance().LayerVisible_GuidanceOverlay)
-		return;
-	
-	//Don't draw the overlay if the guidance module isn't running
-	if (! Guidance::GuidanceEngine::Instance().IsRunning())
-		return;
-	
-	std::scoped_lock lock(m_mutex);
-	
-	bool somethingToDisplay = (! m_GuidanceMessage_1.empty()) || (! m_GuidanceMessage_2.empty()) || (! m_GuidanceMessage_3.empty());
-	if (VisWidget::Instance().GuidanceOverlay_ShowMessageBox && somethingToDisplay) {
-		std::string text = m_GuidanceMessage_1;
-		if ((! m_GuidanceMessage_1.empty()) && ((! m_GuidanceMessage_2.empty()) || (! m_GuidanceMessage_3.empty())))
-			text += "\n"s;
-		text += m_GuidanceMessage_2;
-		if ((! m_GuidanceMessage_2.empty()) && (! m_GuidanceMessage_3.empty()))
-			text += "\n"s;
-		text += m_GuidanceMessage_3;
-	
-		ImVec2 TextSize = ImGui::CalcTextSize(text.c_str());
-		ImVec2 BoxSize(TextSize.x + 6.0f*ImGui::GetStyle().FramePadding.x, TextSize.y + 6.0f*ImGui::GetStyle().FramePadding.y);
-		
-		MapWidget & map(MapWidget::Instance());
-		Eigen::Vector2d MapULCorner_ScreenSpace = map.MapWidgetULCorner_ScreenSpace;
-		Eigen::Vector2d MapLRCorner_ScreenSpace = MapULCorner_ScreenSpace + map.MapWidgetDims;
-		
-		float BoxMinX = float(MapULCorner_ScreenSpace(0)) + 6.0f*ImGui::GetStyle().FramePadding.x;
-		float BoxMinY = float(MapLRCorner_ScreenSpace(1)) - BoxSize.y - 6.0f*ImGui::GetStyle().FramePadding.y;
-		
-		float BoxMaxX = BoxMinX + BoxSize.x;
-		float BoxMaxY = BoxMinY + BoxSize.y;
-		
-		ImVec2 BoxMin(BoxMinX, BoxMinY);
-		ImVec2 BoxMax(BoxMaxX, BoxMaxY);
-		ImVec2 TextMin(BoxMin.x + 3.0f*ImGui::GetStyle().FramePadding.x, BoxMin.y + 3.0f*ImGui::GetStyle().FramePadding.y);
-		
-		DrawList->AddRectFilled(BoxMin, BoxMax, IM_COL32(70, 70, 70, 255), 5.0f, ImDrawCornerFlags_All);
-		DrawList->AddText(TextMin, IM_COL32(255, 255, 255, 255), text.c_str());
-	}
-}
-
 //Data Setter Methods
 void GuidanceOverlay::Reset() {
 	std::scoped_lock lock(m_mutex);
 	m_SurveyRegionPartition.clear();
 	m_SurveyRegionPartitionTriangulation.clear();
 	m_Triangles.clear();
-	m_GuidanceMessage_1.clear();
-	m_GuidanceMessage_2.clear();
-	m_GuidanceMessage_3.clear();
 }
 
 //Set the partition of the survey region to draw
@@ -368,25 +322,6 @@ void GuidanceOverlay::ClearCircles() {
 	std::scoped_lock lock(m_mutex);
 	m_Circles.clear();
 }
-
-//Display optional message in box on map (give empty string to disable)
-void GuidanceOverlay::SetGuidanceMessage1(std::string const & Message) {
-	std::scoped_lock lock(m_mutex);
-	m_GuidanceMessage_1 = Message;
-}
-
-//Display optional message in box on map (give empty string to disable)
-void GuidanceOverlay::SetGuidanceMessage2(std::string const & Message) {
-	std::scoped_lock lock(m_mutex);
-	m_GuidanceMessage_2 = Message;
-}
-
-//Display optional message in box on map (give empty string to disable)
-void GuidanceOverlay::SetGuidanceMessage3(std::string const & Message) {
-	std::scoped_lock lock(m_mutex);
-	m_GuidanceMessage_3 = Message;
-}
-
 
 
 

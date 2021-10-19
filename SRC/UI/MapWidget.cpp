@@ -464,8 +464,8 @@ void MapWidget::Draw(void) {
 		}
 		m_SurveyRegionsTool.Draw_Overlay(mousePosScreenSpace, mousePosNM, draw_list, mouseInBounds);
 		m_shadowMapOverlay.Draw_Overlay(mousePosNM, draw_list, mouseInBounds);
-		m_TAOverlay.Draw_Overlay(mousePosNM, draw_list, mouseInBounds);
 		m_guidanceOverlay.Draw_Overlay(mousePosNM, draw_list, mouseInBounds);
+		m_TAOverlay.Draw_Overlay(mousePosNM, draw_list, mouseInBounds);
 	}
 	
 	//Draw pass for vehicle widget
@@ -487,11 +487,8 @@ void MapWidget::Draw(void) {
 		MyGui::AddText(draw_list, TextPos_SS, IM_COL32_WHITE, "GCS", NULL, true, false);
 	}
 	
-	//TODO: Break out the message box from the m_SurveyRegionsTool like we did with the guidance overlay. Then call the method to draw the message box down here
-	//so it shows up on top of things instead of potentially under things like the vehicle icons.
-	
-	//Draw message boxes
-	m_guidanceOverlay.Draw_MessageBox(mousePosNM, draw_list, mouseInBounds);
+	//Draw message box overlay
+	m_messageBoxOverlay.Draw_MessageBox(mousePosNM, draw_list, mouseInBounds);
 	
 	ImGui::EndChild();
 	mouseInBounds = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);

@@ -52,7 +52,6 @@ class VisWidget {
 		float SurveyRegionVertexRadius;         //Vertex radius (in pixels) when editing.
 		float SurveyRegionEdgeThickness;        //Edge thickness (in pixels) when editing.
 		
-		bool GuidanceOverlay_ShowMessageBox;
 		bool GuidanceOverlay_ShowTrianglesInsteadOfPartition;
 		
 		std::array<float, 3> ShadowMapColor; //RGB in range 0 to 1
@@ -85,7 +84,6 @@ class VisWidget {
 			        CEREAL_NVP(SurveyRegionColor),
 			        CEREAL_NVP(SurveyRegionVertexRadius),
 			        CEREAL_NVP(SurveyRegionEdgeThickness),
-			        CEREAL_NVP(GuidanceOverlay_ShowMessageBox),
 			        CEREAL_NVP(GuidanceOverlay_ShowTrianglesInsteadOfPartition),
 			        CEREAL_NVP(ShadowMapColor));
 		}
@@ -161,7 +159,6 @@ inline void VisWidget::LoadDefaults(void) {
 	SurveyRegionVertexRadius = 5.0f;
 	SurveyRegionEdgeThickness = 3.0f;
 	
-	GuidanceOverlay_ShowMessageBox = true;
 	GuidanceOverlay_ShowTrianglesInsteadOfPartition = false;
 	
 	ShadowMapColor = {0.4f, 0.4f, 0.7f};
@@ -341,13 +338,9 @@ inline void VisWidget::Draw() {
 			ImGui::SetNextItemWidth(15.0f*ImGui::GetFontSize());
 			ImGui::SliderFloat("##Opacity_GuidanceOverlay", &Opacity_GuidanceOverlay, 0.0f, 100.0f, "%.0f");
 			
-			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Show Region Decomposition  ").x;
-			ImGui::TextUnformatted("Show Message Box ");
-			ImGui::SameLine(col2Start);
-			ImGui::Checkbox("##Show Message Box", &GuidanceOverlay_ShowMessageBox);
-			
 			ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 			
+			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Show Region Decomposition  ").x;
 			ImGui::TextUnformatted("Show Region Partition ");
 			ImGui::SameLine(col2Start);
 			if (ImGui::RadioButton("##Show Partition ", !GuidanceOverlay_ShowTrianglesInsteadOfPartition))
