@@ -179,7 +179,7 @@ namespace ShadowPropagation {
                             }
                         }
                     }
-                    inputTensor = outputTensor;
+                    inputTensor = outputTensor.clone();
                 }
                 // Scales up localTimeAvailable
                 cv::resize(localTimeAvailable, m_TimeAvail.TimeAvailable, cv::Size(512, 512), cv::INTER_LINEAR);
