@@ -107,6 +107,7 @@ namespace ShadowPropagation {
                     std::cout << m_prevInputs[i].sizes() << std::endl;
                     inputs.push_back(m_prevInputs[i]);
                     inputs.push_back((i == 0));
+                    inputs.push_back(false);
 //                if (at::isnan(inputs[0].toTensor()).all().item<bool>()) {
 //                    std::cerr << "PREV INPUT IS A NAN TENSOR!" << std::endl;
 //                }    std::vector<torch::Tensor> input;
@@ -132,6 +133,7 @@ namespace ShadowPropagation {
                 for (int t = 1; t <= TIME_HORIZON; t++) {
                     std::vector<torch::jit::IValue> inputs;
                     inputs.push_back(inputTensor);
+                    inputs.push_back(false);
                     inputs.push_back(false);
 //                if (at::isnan(inputs[0].toTensor()).all().item<bool>()) {
 //                    std::cerr << "INPUT IS A NAN TENSOR!" << std::endl;
