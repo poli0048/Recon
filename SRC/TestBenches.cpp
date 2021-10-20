@@ -1184,9 +1184,11 @@ static bool TestBench27(std::string const & Arg) {
         torch::NoGradGuard no_grad;
         // Narrow slices across dimension 1 from index k to k+INPUT_LENGTH (INPUT_LENGTH many elements)
         torch::Tensor inputTensor = data.narrow(1, k, INPUT_LENGTH);
+        std::cout << inputTensor.sizes() << std::endl;
         torch::Tensor targetTensor = data.narrow(1, k+INPUT_LENGTH, TARGET_LENGTH);
         for (int ei = 0; ei < INPUT_LENGTH - 1; ei++) {
             std::vector<torch::jit::IValue> inputs;
+            std::cout << inputTensor.narrow(1, ei, 1)[0].sizes() << std::endl;
             inputs.push_back(inputTensor.narrow(1, ei, 1)[0]);
             inputs.push_back((ei == 0));
             module.forward(inputs);

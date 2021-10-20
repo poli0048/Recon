@@ -81,21 +81,25 @@ namespace ShadowPropagation {
             cv::Mat cvInput;
             cvInputWithExcess.copyTo(cvInput, mask);
 
-//            if (cvInput.isContinuous()) {
-//                std::cout << "Memory is contiguous." << std::endl;
-//            } else {
-//                std::cout << "Memory is NOT contiguous." << std::endl;
-//            }
+            if (!cvInput.isContinuous()) {
+                std::cout << "Memory is NOT contiguous." << std::endl;
+            }
             torch::Tensor inputTensorCompressed = torch::from_blob(cvInput.data, {64, 64}, torch::kFloat32).to(m_device);
             torch::Tensor inputTensor = inputTensorCompressed.unsqueeze(0).unsqueeze(0);
             if (at::isnan(inputTensor).any().item<bool>()) {
                 std::cerr << "Input Tensor has a NaN value." << std::endl;
             }
 
-            m_prevInputs.push_back(inputTensor);
-            if (m_prevInputs.size() > TARGET_INPUT_LENGTH) {
-                m_prevInputs.pop_front();
+            for (int i = 0; i < 64; i++) {
+                for (int j = 0; j < 64; j++) {
+                    if (inputTensor[0][0][i][j].item<float>() < 0 || inputTensor[0][0][i][j].item<float>() > 1 ||
+                            std::isnan(inputTensor[0][0][i][j].item<float>())) {
+                        std::cout << "Bad Input" << std::endl;
+                        std::cout << inputTensor[0][0][i][j].item<float>() << std::endl;
+                    }
+                }
             }
+
 //            allVectors.push_back(inputTensor);
             if (m_prevInputs.size() == TARGET_INPUT_LENGTH) {
                 for (int i = 0; i < m_prevInputs.size(); i++) {
@@ -127,6 +131,7 @@ namespace ShadowPropagation {
                     auto result = m_module.forward(inputs);
                     // decoder_input, decoder_hidden, output_image, _, _
                     torch::Tensor outputTensor = result.toTuple()->elements()[2].toTensor();
+                    std::cout << "Output Tensor Dims: " << outputTensor.sizes() << std::endl;
                     if (at::isnan(outputTensor).any().item<bool>()) {
                         if (!isSaved && counter == 0) {
                             isSaved = true;
@@ -168,6 +173,10 @@ namespace ShadowPropagation {
                 auto endClock = std::chrono::steady_clock::now();
                 for (auto const & kv : m_callbacks)
                     kv.second(m_TimeAvail);
+            }
+            m_prevInputs.push_back(inputTensor);
+            if (m_prevInputs.size() > TARGET_INPUT_LENGTH) {
+                m_prevInputs.pop_front();
             }
 //            numImagesProcessed++;
 //            numMicroseconds += std::chrono::duration_cast<std::chrono::milliseconds>(endClock - startClock).count();
