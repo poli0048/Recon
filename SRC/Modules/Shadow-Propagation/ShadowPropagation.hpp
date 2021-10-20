@@ -64,7 +64,8 @@ namespace ShadowPropagation {
 			TimeAvailableFunction m_TimeAvail; //Most recent time available function
             torch::jit::script::Module m_module; // TorchScript Model
             torch::Device m_device;
-            std::deque<torch::Tensor> m_prevInputs;
+            //std::deque<torch::Tensor> m_prevInputs;
+            std::Edeque<Eigen::MatrixXf> m_inputHist;
             int counter;
 
             bool isSaved;
@@ -80,7 +81,7 @@ namespace ShadowPropagation {
         static ShadowPropagationEngine & Instance() { static ShadowPropagationEngine Obj; return Obj; }
 			
 			//Constructors and Destructors
-			ShadowPropagationEngine() : m_running(false), m_abort(false), m_prevInputs(),
+			ShadowPropagationEngine() : m_running(false), m_abort(false), /*m_prevInputs(),*/
 			                            m_device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU) {
 				m_engineThread = std::thread(&ShadowPropagationEngine::ModuleMain, this);
 //				at::set_num_interop_threads(3);

@@ -1,6 +1,50 @@
 #include "ShadowPropagation.hpp"
 #include <torch/cuda.h>
 
+static void CheckForBadTensorValues(torch::Tensor const & T) {
+	int NaNCount = 0;
+	int negativeCount = 0;
+	int over1Count = 0;
+	
+	for (int n = 0; n < 64; n++) {
+		for (int m = 0; m < 64; m++) {
+			float val = T[0][0][n][m].item<float>();
+			if (std::isnan(val)) {
+				//std::cerr << "Element (0,0," << n << "," << m << ") is NaN.\r\n";
+				NaNCount++;
+			}
+			else if (val < 0.0f) {
+				//std::cerr << "Element (0,0," << n << "," << m << ") is negative.\r\n";
+				negativeCount++;
+			}
+			else if (val > 1.0f) {
+				//std::cerr << "Element (0,0," << n << "," << m << ") exceeds 1.0\r\n";
+				over1Count++;
+			}
+		}
+	}
+	if ((NaNCount == 0) && (negativeCount == 0) && (over1Count == 0))
+		std::cerr << "All elements are OK.\r\n";
+	else
+		std::cerr << "Tensor contains " << NaNCount << " NaNs, " << negativeCount << " negative vals, " << over1Count << " vals over 1.\r\n";
+}
+
+static torch::Tensor EigenMatrixToTensor(Eigen::MatrixXf const & M, torch::Device const & Dev) {
+	//torch::Tensor T;
+	//T = T.to(Dev);
+	//T = T.new_empty({1,1,64,64}, torch::kFloat32);
+	
+	auto options = torch::TensorOptions().dtype(torch::kFloat32).layout(torch::kStrided).device(Dev);
+	torch::Tensor T = torch::empty({1, 1, 64, 64}, options);
+	
+	auto accessor = T.accessor<float,4>();
+	for (int n = 0; n < 64; n++) {
+		for (int m = 0; m < 64; m++)
+			accessor[0][0][n][m] = M(n,m);
+	}
+	return T;
+}
+
 namespace ShadowPropagation {
     void ShadowPropagationEngine::ModuleMain(void) {
         while (! m_abort) {
@@ -80,13 +124,29 @@ namespace ShadowPropagation {
             cv::circle(mask, center, radius - 3, cv::Scalar(255), -1, 8, 0);
             cv::Mat cvInput;
             cvInputWithExcess.copyTo(cvInput, mask);
-
-            if (!cvInput.isContinuous()) {
-                std::cout << "Memory is NOT contiguous." << std::endl;
+            
+            Eigen::MatrixXf shadowMapMatrix(64, 64);
+            for (int n = 0; n < 64; n++) {
+            	for (int m = 0; m < 64; m++) {
+            		shadowMapMatrix(n,m) = cvInput.at<float>(n,m);
+            	}
             }
-            torch::Tensor inputTensorCompressed = torch::from_blob(cvInput.data, {64, 64}, torch::kFloat32).to(m_device);
-            torch::Tensor inputTensor = inputTensorCompressed.unsqueeze(0).unsqueeze(0);
-            if (at::isnan(inputTensor).any().item<bool>()) {
+            
+           
+            
+            
+            
+
+            //if (!cvInput.isContinuous()) {
+            //    std::cout << "Memory is NOT contiguous." << std::endl;
+            //}
+            //torch::Tensor inputTensorCompressed = torch::from_blob(cvInput.data, {64, 64}, torch::kFloat32).to(m_device);
+            //torch::Tensor inputTensor = inputTensorCompressed.unsqueeze(0).unsqueeze(0).detach();
+            
+            //std::cerr << "Tensor on creation: ";
+            //CheckForBadTensorValues(inputTensor);
+            
+            /*if (at::isnan(inputTensor).any().item<bool>()) {
                 std::cerr << "Input Tensor has a NaN value." << std::endl;
             }
 
@@ -98,21 +158,38 @@ namespace ShadowPropagation {
                         std::cout << inputTensor[0][0][i][j].item<float>() << std::endl;
                     }
                 }
-            }
+            }*/
 
 //            allVectors.push_back(inputTensor);
-            if (m_prevInputs.size() == TARGET_INPUT_LENGTH) {
-                for (int i = 0; i < m_prevInputs.size(); i++) {
+            if (m_inputHist.size() == TARGET_INPUT_LENGTH) {
+                for (int i = 0; i < m_inputHist.size(); i++) {
                     std::vector<torch::jit::IValue> inputs;
-                    std::cout << m_prevInputs[i].sizes() << std::endl;
-                    inputs.push_back(m_prevInputs[i]);
+                    //std::cout << m_prevInputs[i].sizes() << std::endl;
+                    
+                    torch::Tensor histInput = EigenMatrixToTensor(m_inputHist[i], m_device);
+                    
+                    inputs.push_back(histInput);
                     inputs.push_back((i == 0));
                     inputs.push_back(false);
 //                if (at::isnan(inputs[0].toTensor()).all().item<bool>()) {
 //                    std::cerr << "PREV INPUT IS A NAN TENSOR!" << std::endl;
 //                }    std::vector<torch::Tensor> input;
 
+                    
+                    /*if (at::isnan(m_prevInputs[i]).any().item<bool>()) {
+                    	std::cerr << "Input has NaNs in it.\r\n";
+                    }*/
+                    
+                    std::cerr << "histInput[" << i << "]: ";
+                    CheckForBadTensorValues(histInput);
+                    
                     auto result = m_module.forward(inputs);
+                    torch::Tensor outputTensor = result.toTensor();
+                    std::cerr << "outputTensor: ";
+                    CheckForBadTensorValues(outputTensor);
+                    /*if (at::isnan(outputTensor).any().item<bool>()) {
+                    	std::cerr << "Output has NaNs in it.\r\n";
+                    }*/
 //                    torch::Tensor outputTensor = result.toTuple()->elements()[2].toTensor();
 //                    for (int i = 0; i < 64; i++) {
 //                        for (int j = 0; j < 64; j++) {
@@ -130,8 +207,12 @@ namespace ShadowPropagation {
                 }
                 cv::Mat localTimeAvailable(cv::Size(64, 64), CV_16UC1,
                                            cv::Scalar(std::numeric_limits<uint16_t>::max()));
+                torch::Tensor inputTensor = EigenMatrixToTensor(shadowMapMatrix, m_device);
                 for (int t = 1; t <= TIME_HORIZON; t++) {
                     std::vector<torch::jit::IValue> inputs;
+                    
+                    
+                    
                     inputs.push_back(inputTensor);
                     inputs.push_back(false);
                     inputs.push_back(false);
@@ -141,12 +222,23 @@ namespace ShadowPropagation {
 //                cv::Mat input(64, 64, CV_32FC1, inputTensor[0][0].data_ptr());
 //                cv::imshow("INPUT", input);
 //                cv::waitKey(1);
+                    
+                    std::cerr << "inputTensor: ";
+                    CheckForBadTensorValues(inputTensor);
+                    
                     auto result = m_module.forward(inputs);
                     // decoder_input, decoder_hidden, output_image, _, _
                     torch::Tensor outputTensor = result.toTensor();
 //                    torch::Tensor outputTensor = result.toTuple()->elements()[2].toTensor();
-                    std::cout << "Output Tensor Dims: " << outputTensor.sizes() << std::endl;
-                    if (at::isnan(outputTensor).any().item<bool>()) {
+                    //std::cout << "Output Tensor Dims: " << outputTensor.sizes() << std::endl;
+                    
+                    std::cerr << "outputTensor: ";
+                    CheckForBadTensorValues(outputTensor);
+                    
+                    //if (at::isnan(outputTensor).any().item<bool>()) {
+                    //	std::cerr << "Output has NaNs in it.\r\n";
+                    //}
+                    /*if (at::isnan(outputTensor).any().item<bool>()) {
                         if (!isSaved && counter == 0) {
                             isSaved = true;
                             std::cout << inputTensor << std::endl;
@@ -155,8 +247,10 @@ namespace ShadowPropagation {
                         }
                         counter++;
                         std::cout << " ANOMALY ALERT!" << std::endl;
-                    }
-                    auto accessor = outputTensor.accessor<float, 4>();
+                    }*/
+                    
+                    
+                    /*auto accessor = outputTensor.accessor<float, 4>();
                     for (int i = 0; i < 64; i++) {
                         for (int j = 0; j < 64; j++) {
                             if (isnan(accessor[0][0][i][j])) {
@@ -166,7 +260,9 @@ namespace ShadowPropagation {
 //                            std::cout << "NEGATIVE" << std::endl;
 //                        }
                         }
-                    }
+                    }*/
+                    
+                    
 //                cv::Mat output(64, 64, CV_32FC1, outputTensor[0][0].data_ptr());
 //                cv::imshow("OUTPUT!!", output);
 //                cv::waitKey(1);
@@ -179,7 +275,7 @@ namespace ShadowPropagation {
                             }
                         }
                     }
-                    inputTensor = outputTensor.clone();
+                    inputTensor = outputTensor.clone().detach();
                 }
                 // Scales up localTimeAvailable
                 cv::resize(localTimeAvailable, m_TimeAvail.TimeAvailable, cv::Size(512, 512), cv::INTER_LINEAR);
@@ -188,10 +284,17 @@ namespace ShadowPropagation {
                 for (auto const & kv : m_callbacks)
                     kv.second(m_TimeAvail);
             }
-            m_prevInputs.push_back(inputTensor);
-            if (m_prevInputs.size() > TARGET_INPUT_LENGTH) {
-                m_prevInputs.pop_front();
-            }
+            
+             m_inputHist.push_back(shadowMapMatrix);
+             if (m_inputHist.size() > TARGET_INPUT_LENGTH)
+             	   m_inputHist.pop_front();
+            
+            
+            
+            //m_prevInputs.push_back(inputTensor.detach());
+            //if (m_prevInputs.size() > TARGET_INPUT_LENGTH) {
+              //  m_prevInputs.pop_front();
+            //}
 //            numImagesProcessed++;
 //            numMicroseconds += std::chrono::duration_cast<std::chrono::milliseconds>(endClock - startClock).count();
             m_unprocessedShadowMaps.erase(m_unprocessedShadowMaps.begin()); //Will cause re-allocation but the buffer is small so don't worry about it
