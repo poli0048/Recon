@@ -111,7 +111,18 @@ namespace ShadowPropagation {
 //                    std::cerr << "PREV INPUT IS A NAN TENSOR!" << std::endl;
 //                }    std::vector<torch::Tensor> input;
 
-                    m_module.forward(inputs);
+                    auto result = m_module.forward(inputs);
+//                    torch::Tensor outputTensor = result.toTuple()->elements()[2].toTensor();
+//                    for (int i = 0; i < 64; i++) {
+//                        for (int j = 0; j < 64; j++) {
+//                            if (outputTensor[0][0][i][j].item<float>() < 0 || outputTensor[0][0][i][j].item<float>() > 1 ||
+//                                std::isnan(outputTensor[0][0][i][j].item<float>())) {
+//                                std::cout << "Bad Output Tensor from first foor loop" << std::endl;
+//                                std::cout << outputTensor[0][0][i][j].item<float>() << std::endl;
+//                            }
+//                        }
+//                    }
+
 //                cv::Mat input(64, 64, CV_32FC1, m_prevInputs[i][0][0].data_ptr());
 //                cv::imshow("PRE-INPUTs", input);
 //                cv::waitKey(1);
@@ -121,7 +132,7 @@ namespace ShadowPropagation {
                 for (int t = 1; t <= TIME_HORIZON; t++) {
                     std::vector<torch::jit::IValue> inputs;
                     inputs.push_back(inputTensor);
-//                inputs.push_back(false);
+                    inputs.push_back(false);
 //                if (at::isnan(inputs[0].toTensor()).all().item<bool>()) {
 //                    std::cerr << "INPUT IS A NAN TENSOR!" << std::endl;
 //                }
@@ -130,7 +141,8 @@ namespace ShadowPropagation {
 //                cv::waitKey(1);
                     auto result = m_module.forward(inputs);
                     // decoder_input, decoder_hidden, output_image, _, _
-                    torch::Tensor outputTensor = result.toTuple()->elements()[2].toTensor();
+                    torch::Tensor outputTensor = result.toTensor();
+//                    torch::Tensor outputTensor = result.toTuple()->elements()[2].toTensor();
                     std::cout << "Output Tensor Dims: " << outputTensor.sizes() << std::endl;
                     if (at::isnan(outputTensor).any().item<bool>()) {
                         if (!isSaved && counter == 0) {
