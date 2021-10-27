@@ -51,7 +51,7 @@ namespace DroneInterface {
 	    testMission.Waypoints.emplace_back();
 	    testMission.Waypoints.back().Latitude     =  44.237308 * PI/180.0; // radians
 	    testMission.Waypoints.back().Longitude    = -95.307433  * PI/180.0; // radians
-	    testMission.Waypoints.back().Altitude     =  466.0; // m
+	    testMission.Waypoints.back().RelAltitude  =  30.5; // m
 	    testMission.Waypoints.back().CornerRadius =  0.0f;  // m (Not used since we aren't using curved trajectories)
 	    testMission.Waypoints.back().Speed        =  16.0f;  // m/s
 	    testMission.Waypoints.back().LoiterTime   = std::nanf("");
@@ -60,7 +60,7 @@ namespace DroneInterface {
 	    testMission.Waypoints.emplace_back();
 	    testMission.Waypoints.back().Latitude     =  44.237308 * PI/180.0; // radians
 	    testMission.Waypoints.back().Longitude    = -95.309309 * PI/180.0; // radians
-	    testMission.Waypoints.back().Altitude     =  466.0; // m
+	    testMission.Waypoints.back().RelAltitude  =  30.5; // m
 	    testMission.Waypoints.back().CornerRadius = 0.2f;   // m (Not used since we aren't using curved trajectories)
 	    testMission.Waypoints.back().Speed        = 9.5f;   // m/s
 	    testMission.Waypoints.back().LoiterTime   = std::nanf("");
@@ -69,7 +69,7 @@ namespace DroneInterface {
 	    testMission.Waypoints.emplace_back();
 	    testMission.Waypoints.back().Latitude     =  44.237819 * PI/180.0; // radians
 	    testMission.Waypoints.back().Longitude    = -95.309309 * PI/180.0; // radians
-	    testMission.Waypoints.back().Altitude     =  466.0; // m
+	    testMission.Waypoints.back().RelAltitude  =  30.5; // m
 	    testMission.Waypoints.back().CornerRadius = 0.2f;   // m (Not used since we aren't using curved trajectories)
 	    testMission.Waypoints.back().Speed        = 9.5f;   // m/s
 	    testMission.Waypoints.back().LoiterTime   = std::nanf("");
@@ -78,7 +78,7 @@ namespace DroneInterface {
 	    testMission.Waypoints.emplace_back();
 	    testMission.Waypoints.back().Latitude     =  44.237819 * PI/180.0; // radians
 	    testMission.Waypoints.back().Longitude    = -95.307433 * PI/180.0; // radians
-	    testMission.Waypoints.back().Altitude     =  466.0; // m
+	    testMission.Waypoints.back().RelAltitude  =  30.5; // m
 	    testMission.Waypoints.back().CornerRadius = 0.2f;   // m (Not used since we aren't using curved trajectories)
 	    testMission.Waypoints.back().Speed        = 9.5f;   // m/s
 	    testMission.Waypoints.back().LoiterTime   = std::nanf("");
@@ -87,7 +87,7 @@ namespace DroneInterface {
 	    testMission.Waypoints.emplace_back();
 	    testMission.Waypoints.back().Latitude     =  44.238344 * PI/180.0; // radians
 	    testMission.Waypoints.back().Longitude    = -95.307433 * PI/180.0; // radians
-	    testMission.Waypoints.back().Altitude     =  466.0; // m
+	    testMission.Waypoints.back().RelAltitude  =  30.5; // m
 	    testMission.Waypoints.back().CornerRadius = 0.2f;   // m (Not used since we aren't using curved trajectories)
 	    testMission.Waypoints.back().Speed        = 9.5f;   // m/s
 	    testMission.Waypoints.back().LoiterTime   = std::nanf("");
@@ -96,7 +96,7 @@ namespace DroneInterface {
 	    testMission.Waypoints.emplace_back();
 	    testMission.Waypoints.back().Latitude     =  44.238344 * PI/180.0; // radians
 	    testMission.Waypoints.back().Longitude    = -95.309309 * PI/180.0; // radians
-	    testMission.Waypoints.back().Altitude     =  466.0; // m
+	    testMission.Waypoints.back().RelAltitude  =  30.5; // m
 	    testMission.Waypoints.back().CornerRadius = 0.2f; // m (Not used since we aren't using curved trajectories)
 	    testMission.Waypoints.back().Speed        = 9.5f; // m/s
 	    testMission.Waypoints.back().LoiterTime   = std::nanf("");
@@ -132,7 +132,7 @@ namespace DroneInterface {
 		m_mutex_A.lock();
 		tacopie::tcp_client * TCPClient = m_client;
 		m_mutex_A.unlock();
-		this->SendPacket(packet, TCPClient);
+		RealDrone::SendPacket(packet, TCPClient);
 	}
 	
 	void RealDrone::SendTestVirtualStickPacketB(){
@@ -151,7 +151,7 @@ namespace DroneInterface {
 		m_mutex_A.lock();
 		tacopie::tcp_client * TCPClient = m_client;
 		m_mutex_A.unlock();
-		this->SendPacket(packet, TCPClient);
+		RealDrone::SendPacket(packet, TCPClient);
 	}
 
 	void RealDrone::DataReceivedHandler(const std::shared_ptr<tacopie::tcp_client> & client, const tacopie::tcp_client::read_result & res) {
@@ -360,7 +360,6 @@ namespace DroneInterface {
 			}
 			case 4U: {
 				if (this->m_packet_ms.Deserialize(*m_packet_fragment)) {
-					std::cout << "Message String Packet received.\r\n";
 					std::cout << this->m_packet_ms;
 					return true;
 				}
@@ -439,8 +438,10 @@ namespace DroneInterface {
 		//to issue a warning here about poor altitude accuracy since the drone manager handles this and posts a single warning
 		//(instead of 1 per drone) when altitude data is unaided by a GCS-connected GNSS receiver.
 		double GCS_GroundAlt = 0.0;
-		if (GNSSReceiver::GNSSManager::Instance().GetGroundAlt(GCS_GroundAlt))
+		if (GNSSReceiver::GNSSManager::Instance().GetGroundAlt(GCS_GroundAlt)) {
+			//std::cerr << "Aiding drone alt.\r\n";
 			Altitude = GCS_GroundAlt + this->m_packet_ct.HAG;
+		}
 		else
 			Altitude  = this->m_packet_ct.Altitude;
 		
@@ -547,13 +548,11 @@ namespace DroneInterface {
 
 	//Start sending frames of live video (as close as possible to the given framerate (frame / s))
 	void RealDrone::StartDJICamImageFeed(double TargetFPS) { 
-		std::scoped_lock lock(m_mutex_B);
 		this->SendPacket_CameraControl(1, TargetFPS);
 	}
 	
 	//Stop sending frames of live video
 	void RealDrone::StopDJICamImageFeed(void) { 
-		std::scoped_lock lock(m_mutex_B);
 		this->SendPacket_CameraControl(0, 0);
 	}
 	
@@ -635,15 +634,9 @@ namespace DroneInterface {
 	
 	//Stop current mission, if running. Then load, verify, and start new waypoint mission.
 	void RealDrone::ExecuteWaypointMission(WaypointMission & Mission) {
-		std::scoped_lock lock(m_mutex_B);
-		//The iOS App should handle any necessary state change, like cancelling a current mission. In any event we certainly don't want to issue an RTL command
-		/*bool isExecuting;
-		TimePoint timestamp;
-		this->IsCurrentlyExecutingWaypointMission(isExecuting, timestamp);
-		if (isExecuting) {
-			this->SendPacket_EmergencyCommand(2); // RTH Command
-		}*/
+		m_mutex_B.lock();
 		m_currentWaypointMission = Mission;
+		m_mutex_B.unlock();
 		this->SendPacket_ExecuteWaypointMission(Mission.LandAtLastWaypoint, Mission.CurvedTrajectory, Mission.Waypoints);
 	}
 	
@@ -668,43 +661,26 @@ namespace DroneInterface {
 
 	//Put in virtualStick Mode and send command (stop mission if running)
 	void RealDrone::IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command) { 
-		std::scoped_lock lock(m_mutex_B);
 		this->SendPacket_VirtualStickCommand(0, Command.Yaw, Command.V_North, Command.V_East, Command.HAG, Command.timeout);
 	}
 	
 	//Put in virtualStick Mode and send command (stop mission if running)
 	void RealDrone::IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command) { 
-		std::scoped_lock lock(m_mutex_B);
 		this->SendPacket_VirtualStickCommand(1, Command.Yaw, Command.V_Forward, Command.V_Right, Command.HAG, Command.timeout);
 	}
 	
 	//Stop any running missions an leave virtualStick mode (if in it) and hover in place (P mode)
 	void RealDrone::Hover(void) {
-		std::scoped_lock lock(m_mutex_B);
-
-		/*
-		 * These are function calls to send test packets to DJI-Interface for Waypoint Mission and Virtual Stick
-        WaypointMission testMission;
-        std::cout<<"Loading waypoint mission"<<std::endl;
-
-        this->LoadTestWaypointMission(testMission);
-        std::cout<<"Executing waypoint mission with "<<testMission.Waypoints.size() <<" waypoints now"<<std::endl;
-        this->SendPacket_ExecuteWaypointMission(testMission.LandAtLastWaypoint, testMission.CurvedTrajectory, testMission.Waypoints);
-        std::cout<<"Finished executing waypoint mission"<<std::endl;
-        */
-		//this->SendTestVirtualStickPacketB();
 		this->SendPacket_EmergencyCommand(0);
 	}
 	
 	//Initiate landing sequence immediately at current vehicle location
 	void RealDrone::LandNow(void) {
-		std::scoped_lock lock(m_mutex_B);
 		this->SendPacket_EmergencyCommand(1);
 	}
 	
 	//Initiate a Return-To-Home sequence that lands the vehicle at it's take-off location
 	void RealDrone::GoHomeAndLand(void) {
-		std::scoped_lock lock(m_mutex_B);
 		this->SendPacket_EmergencyCommand(2);
 	}
 	
@@ -719,17 +695,11 @@ namespace DroneInterface {
 		
 		//Get drone's current position and the ground altitude
 		DroneInterface::Drone::TimePoint Timestamp;
-		double Latitude, Longitude, Altitude, currentHAG;
+		double Latitude, Longitude, Altitude;
 		if (! this->GetPosition(Latitude, Longitude, Altitude, Timestamp)) {
 			std::cerr << "Error in StartSampleWaypointMission(): Failed to get drone's current position. Aborting.\r\n";
 			return;
 		}
-		if (! this->GetHAG(currentHAG, Timestamp)) {
-			std::cerr << "Error in StartSampleWaypointMission(): Failed to get drone's HAG. Aborting.\r\n";
-			return;
-		}
-		double groundAlt = Altitude - currentHAG;
-		std::cerr << "groundAlt: " << groundAlt << "\r\n";
 		
 		Eigen::Matrix3d C_ECEF_ENU = latLon_2_C_ECEF_ENU(Latitude, Longitude);
 		Eigen::Vector3d currentPos_ECEF = LLA2ECEF(Eigen::Vector3d(Latitude, Longitude, Altitude));
@@ -738,8 +708,7 @@ namespace DroneInterface {
 		Eigen::Vector3d FirstWaypoint_LLA = ECEF2LLA(FirstWaypoint_ECEF);
 		Eigen::Vector2d FirstWaypoint_LL(FirstWaypoint_LLA(0), FirstWaypoint_LLA(1));
 		
-		DroneInterface::WaypointMission mission = CreateSampleWaypointMission(NumWaypoints, CurvedTrajectories, LandAtEnd,
-		                                                                      FirstWaypoint_LL, groundAlt, HAG);
+		DroneInterface::WaypointMission mission = CreateSampleWaypointMission(NumWaypoints, CurvedTrajectories, LandAtEnd, FirstWaypoint_LL, HAG);
 		
 		this->ExecuteWaypointMission(mission);
 	}
@@ -765,7 +734,7 @@ namespace DroneInterface {
 		m_mutex_A.lock();
 		tacopie::tcp_client * TCPClient = m_client;
 		m_mutex_A.unlock();
-		this->SendPacket(packet, TCPClient);
+		RealDrone::SendPacket(packet, TCPClient);
 	}
 	
 	void RealDrone::SendPacket_CameraControl(uint8_t Action, double TargetFPS) {
@@ -780,7 +749,7 @@ namespace DroneInterface {
 		m_mutex_A.lock();
 		tacopie::tcp_client * TCPClient = m_client;
 		m_mutex_A.unlock();
-		this->SendPacket(packet, TCPClient);
+		RealDrone::SendPacket(packet, TCPClient);
 	}
 	
 	void RealDrone::SendPacket_ExecuteWaypointMission(uint8_t LandAtEnd, uint8_t CurvedFlight, std::vector<Waypoint> Waypoints) {
@@ -796,7 +765,7 @@ namespace DroneInterface {
 		m_mutex_A.lock();
 		tacopie::tcp_client * TCPClient = m_client;
 		m_mutex_A.unlock();
-		this->SendPacket(packet, TCPClient);
+		RealDrone::SendPacket(packet, TCPClient);
 	}
 	
 	void RealDrone::SendPacket_VirtualStickCommand(uint8_t Mode, float Yaw, float V_x, float V_y, float HAG, float timeout) {
@@ -815,7 +784,7 @@ namespace DroneInterface {
 		m_mutex_A.lock();
 		tacopie::tcp_client * TCPClient = m_client;
 		m_mutex_A.unlock();
-		this->SendPacket(packet, TCPClient);
+		RealDrone::SendPacket(packet, TCPClient);
 	}
 }
 

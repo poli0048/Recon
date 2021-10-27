@@ -108,9 +108,10 @@ namespace DroneInterface {
 					if (m_droneRealVector.size() > 0U) {
 						Eigen::Vector3d Pos_LLA;
 						GNSSReceiver::GNSSManager::TimePoint Timestamp;
-						if (! GNSSReceiver::GNSSManager::Instance().GetPosition_LLA(Pos_LLA, Timestamp))
+						if (! GNSSReceiver::GNSSManager::Instance().GetPosition_LLA(Pos_LLA, Timestamp)) {
 							warningString = "Warning: No GNSS receiver connected to GCS. DJI drone altitude will be unaided (high error)."s;
 							warningString += "\nRecommend connecting GNSS receiver to GCS or disabling watchdog module (this option is less good)"s;
+						}
 					}
 					MapWidget::Instance().m_messageBoxOverlay.AddMessage(warningString, m_MessageToken);
 				}

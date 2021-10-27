@@ -142,7 +142,7 @@ namespace DroneInterface {
 		void SendTestVirtualStickPacketB();
 
 	private:
-		void SendPacket(Packet & packet, tacopie::tcp_client * TCPClient);
+		static void SendPacket(Packet & packet, tacopie::tcp_client * TCPClient);
 		void SendPacket_EmergencyCommand(uint8_t Action);
 		void SendPacket_CameraControl(uint8_t Action, double TargetFPS);
 		void SendPacket_ExecuteWaypointMission(uint8_t LandAtEnd, uint8_t CurvedFlight, std::vector<Waypoint> Waypoints);
@@ -151,6 +151,10 @@ namespace DroneInterface {
 		bool ProcessFullReceivedPacket(void); //Process a full packet. Returns true on success and false on failure (likily hash check fail)
 		void AddImageTimestampToLogAndFPSReport(TimePoint Timestamp);
 		bool TransferStateToTargetObject(void); //Used for possession
+		
+		//Note: There are two mutexes in this class, protecting resources in two groups. To avoid deadlocks, it is critical that whenever both
+		//locks are needed at the same time, they be locked in a single call to lock(), through the construction of a single scoped_lock, or they
+		//need to be locked in the order A, B (that is: A first, followed by B).
 		
 		std::mutex               m_mutex_A;             //All fields in this block are protected by this mutex
 		tacopie::tcp_client *    m_client;

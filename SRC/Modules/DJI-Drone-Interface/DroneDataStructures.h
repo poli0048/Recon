@@ -66,13 +66,16 @@ namespace DroneInterface {
 		}
 	};
 	
-	//Waypoint objects are used as components of WaypointMission objects. Note that the speed field should be checked before putting it in a DJIWaypoint. If it is 0,
-	//it needs to be adjusted upwards to a default min value. If 0 is put in a DJIWaypoint speed field, the behavior changes and the speed gets overwritten by
-	//another value set at the mission level. We don't want this ridiculous behavior so we should make sure this is never actually 0.
+	//Waypoint objects are used as components of WaypointMission objects. Note that the speed field should be checked before putting it in a DJIWaypoint.
+	//If it is 0, it needs to be adjusted upwards to a default min value. If 0 is put in a DJIWaypoint speed field, the behavior changes and the speed
+	//gets overwritten by another value set at the mission level. We don't want this ridiculous behavior so we should make sure this is never actually 0.
+	//Note that this data structure has changed to use relative instead of absolute altitude to address the fact that DJI drones have increadibly poor
+	//knowledge of their absolute altitudes.
 	struct Waypoint {
 		double Latitude  = 0.0; //WGS84 Latitude of waypoint (Radians)
 		double Longitude = 0.0; //WGS84 Longitude of waypoint (Radians)
-		double Altitude  = 0.0; //WGS84 Altitude of waypoint (meters) - Note that this is actual altitude and not height above ground
+		//double Altitude  = 0.0; //WGS84 Altitude of waypoint (meters) - Note that this is actual altitude and not height above ground
+		double RelAltitude = 0.0; //Height above home point for waypoint (meters)
 		
 		float CornerRadius = 0.2f; //Radius of arc (m) to make when cutting corner at this waypoint. Only used when CurvedTrajectory = true in the parent mission.
 		float Speed = 1.0f;        //Vehicle speed (m/s) between this waypoint and the next waypoint (0 < Speed <= 15)
@@ -93,7 +96,7 @@ namespace DroneInterface {
 		bool operator==(Waypoint const & Other) const {
 			return (this->Latitude     == Other.Latitude)     &&
 			       (this->Longitude    == Other.Longitude)    &&
-			       (this->Altitude     == Other.Altitude)     &&
+			       (this->RelAltitude  == Other.RelAltitude)  &&
 			       (this->CornerRadius == Other.CornerRadius) &&
 			       (this->Speed        == Other.Speed)        &&
 			       (this->LoiterTime   == Other.LoiterTime)   &&
@@ -105,7 +108,7 @@ namespace DroneInterface {
 		double PI = 3.14159265358979;
 		Str << "Latitude ----: " << 180.0/PI*v.Latitude     << " degrees\r\n";
 		Str << "Longitude ---: " << 180.0/PI*v.Longitude    << " degrees\r\n";
-		Str << "Altitude ----: " <<          v.Altitude     << " m\r\n";
+		Str << "RelAltitude -: " <<          v.RelAltitude  << " m\r\n";
 		Str << "CornerRadius : " <<          v.CornerRadius << " m\r\n";
 		Str << "Speed -------: " <<          v.Speed        << " m/s\r\n";
 		Str << "LoiterTime --: " <<          v.LoiterTime   << " s\r\n";

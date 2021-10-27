@@ -661,10 +661,10 @@ namespace DroneInterface {
 			}
 			else if (m_waypointMissionState == 0) {
 				//Taking off and reaching altitude of first waypoint
-				double targetHAG = m_LastMission.Waypoints[0].Altitude - m_groundAlt;
+				double targetHAG = m_LastMission.Waypoints[0].RelAltitude;
 				UpdateDroneVertChannelBasedOnTargetHAG(deltaT, targetHAG, climbRate, descentRate);
 				Update2DVelocityBasedOnTarget(deltaT, Eigen::Vector2d(0.0, 0.0), max2DAcc, max2DDec, max2DSpeed);
-				if (fabs(m_LastMission.Waypoints[0].Altitude - m_Alt) < 0.5) {
+				if (fabs(m_LastMission.Waypoints[0].RelAltitude - targetHAG) < 0.5) {
 					if (m_LastMission.CurvedTrajectory)
 						m_waypointMissionState = 4;
 					else
@@ -674,7 +674,7 @@ namespace DroneInterface {
 			else if (m_waypointMissionState == 1) {
 				//Goto waypoint (P2P)
 				Waypoint const & waypoint(m_LastMission.Waypoints[m_targetWaypoint]);
-				UpdateDroneVertChannelBasedOnTargetHAG(deltaT, waypoint.Altitude - m_groundAlt, climbRate, descentRate);
+				UpdateDroneVertChannelBasedOnTargetHAG(deltaT, waypoint.RelAltitude, climbRate, descentRate);
 				
 				double speed = 0.0; //m/s
 				if (m_targetWaypoint == 0)
@@ -738,7 +738,7 @@ namespace DroneInterface {
 			else if (m_waypointMissionState == 4) {
 				//Goto waypoint (curved)
 				Waypoint const & waypoint(m_LastMission.Waypoints[m_targetWaypoint]);
-				UpdateDroneVertChannelBasedOnTargetHAG(deltaT, waypoint.Altitude - m_groundAlt, climbRate, descentRate);
+				UpdateDroneVertChannelBasedOnTargetHAG(deltaT, waypoint.RelAltitude, climbRate, descentRate);
 				
 				double speed = 0.0; //m/s
 				if (m_targetWaypoint == 0)
@@ -969,17 +969,11 @@ namespace DroneInterface {
 		
 		//Get drone's current position and the ground altitude
 		DroneInterface::Drone::TimePoint Timestamp;
-		double Latitude, Longitude, Altitude, currentHAG;
+		double Latitude, Longitude, Altitude;
 		if (! this->GetPosition(Latitude, Longitude, Altitude, Timestamp)) {
 			std::cerr << "Error in StartSampleWaypointMission(): Failed to get drone's current position. Aborting.\r\n";
 			return;
 		}
-		if (! this->GetHAG(currentHAG, Timestamp)) {
-			std::cerr << "Error in StartSampleWaypointMission(): Failed to get drone's HAG. Aborting.\r\n";
-			return;
-		}
-		double groundAlt = Altitude - currentHAG;
-		std::cerr << "groundAlt: " << groundAlt << "\r\n";
 		
 		Eigen::Matrix3d C_ECEF_ENU = latLon_2_C_ECEF_ENU(Latitude, Longitude);
 		Eigen::Vector3d currentPos_ECEF = LLA2ECEF(Eigen::Vector3d(Latitude, Longitude, Altitude));
@@ -988,8 +982,7 @@ namespace DroneInterface {
 		Eigen::Vector3d FirstWaypoint_LLA = ECEF2LLA(FirstWaypoint_ECEF);
 		Eigen::Vector2d FirstWaypoint_LL(FirstWaypoint_LLA(0), FirstWaypoint_LLA(1));
 		
-		DroneInterface::WaypointMission mission = CreateSampleWaypointMission(NumWaypoints, CurvedTrajectories, LandAtEnd,
-		                                                                      FirstWaypoint_LL, groundAlt, HAG);
+		DroneInterface::WaypointMission mission = CreateSampleWaypointMission(NumWaypoints, CurvedTrajectories, LandAtEnd, FirstWaypoint_LL, HAG);
 		
 		this->ExecuteWaypointMission(mission);
 	}

@@ -406,14 +406,14 @@ static bool TestBench6(std::string const & Arg) {
 	double TargetSpeed = 15.0; //Max mission speed for DJI drones being controlled through SDK (m/s)
 	
 	//First point about 100 feet above the ground in Lamberton test area
-	A.Latitude  =  0.772121618310453;
-	A.Longitude = -1.663470726988503;
-	A.Altitude  = 380.0;
+	A.Latitude    =  0.772121618310453;
+	A.Longitude   = -1.663470726988503;
+	A.RelAltitude = 30.5;
 	
 	//Second point about 100 feet above the ground in Lamberton test area
-	B.Latitude  =  0.772065994667192;
-	B.Longitude = -1.663426622518305;
-	B.Altitude  = 380.0;
+	B.Latitude    =  0.772065994667192;
+	B.Longitude   = -1.663426622518305;
+	B.RelAltitude = 30.5;
 	
 	double time = Guidance::EstimateMissionTime(A, B, TargetSpeed);
 	std::cerr << "Estimated flight fime from point A to point B (stopped at beginning and end) is: " << time << " seconds.\r\n";
@@ -1032,7 +1032,7 @@ static bool TestBench23(std::string const & Arg) {
 		PacketA.Waypoints.emplace_back();
 		PacketA.Waypoints.back().Latitude     = 0.772121618310453;  //Radians
 		PacketA.Waypoints.back().Longitude    = -1.663470726988503; //Radians
-		PacketA.Waypoints.back().Altitude     = 380.0;              //m
+		PacketA.Waypoints.back().RelAltitude  = 30.5;               //m
 		PacketA.Waypoints.back().CornerRadius = 5.0f;               //m
 		PacketA.Waypoints.back().Speed        = 8.1f;               //m/s
 		PacketA.Waypoints.back().LoiterTime   = std::nanf("");      //Don't loiter
@@ -1041,7 +1041,7 @@ static bool TestBench23(std::string const & Arg) {
 		PacketA.Waypoints.emplace_back();
 		PacketA.Waypoints.back().Latitude     = 0.772121618310453;  //Radians
 		PacketA.Waypoints.back().Longitude    = -1.663470726988503; //Radians
-		PacketA.Waypoints.back().Altitude     = 401.3;              //m
+		PacketA.Waypoints.back().RelAltitude  = 40.0;               //m
 		PacketA.Waypoints.back().CornerRadius = 4.1f;               //m
 		PacketA.Waypoints.back().Speed        = 7.6f;               //m/s
 		PacketA.Waypoints.back().LoiterTime   = std::nanf("");      //Don't loiter
@@ -1067,7 +1067,7 @@ static bool TestBench23(std::string const & Arg) {
 				bool GimbalPitchesMatch = (std::isnan(A.GimbalPitch) && std::isnan(B.GimbalPitch)) || (std::fabs(A.GimbalPitch - B.GimbalPitch) <= 1e-10);
 				if ((std::fabs(A.Latitude  - B.Latitude)  > 1e-10) ||
 				    (std::fabs(A.Longitude - B.Longitude) > 1e-10) ||
-				    (A.Altitude     != B.Altitude)                 ||
+				    (A.RelAltitude  != B.RelAltitude)              ||
 				    (A.CornerRadius != B.CornerRadius)             ||
 				    (A.Speed        != B.Speed)                    ||
 				    (! LoiterTimesMatch)                           ||

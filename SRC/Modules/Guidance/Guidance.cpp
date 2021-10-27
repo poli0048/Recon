@@ -130,7 +130,7 @@ namespace Guidance {
     }
     //1 - Take two points and estimate the time (s) it would take a drone to fly from one to the other (stopped at start and end), assuming a max flight speed (m/s)
     double EstimateMissionTime(DroneInterface::Waypoint const & A, DroneInterface::Waypoint const & B, double TargetSpeed) {
-        double delta_altitude = B.Altitude-A.Altitude;
+        double delta_altitude = B.RelAltitude - A.RelAltitude;
         double delta_horizontal = GetDistanceBetweenTwoPoints(A.Latitude, A.Longitude, B.Latitude, B.Longitude);
 
         return sqrt(pow(delta_altitude,2) + pow(delta_horizontal,2))/TargetSpeed;
@@ -190,7 +190,7 @@ namespace Guidance {
             std::vector<Eigen::Vector2d> pointsListB;
             mainTriangle.BisectIntersection(pointsList[0], subTriangleA, subTriangleB);
 
-            for (int j = 1; j<pointsList.size(); j++){
+            for (int j = 1; j < (int) pointsList.size(); j++){
                 if (subTriangleA.ToSimplePolygon().ContainsPoint(pointsList[j])){
                     pointsListA.push_back(pointsList[j]);
                 }
@@ -243,15 +243,15 @@ namespace Guidance {
         // This loop searches all triangles for vertices that cut an edge
         // A triangle may cut an edge 0, 1, or 2 times
         // All intersections are assembled into a list per triangle. We are trying to avoid duplicates
-        for (int i = 0;i < allTriangles.size(); i++){
-            for (int j = 0; j < allTriangles.size(); j++){
+        for (int i = 0; i < (int) allTriangles.size(); i++) {
+            for (int j = 0; j < (int) allTriangles.size(); j++) {
                 Intersection.clear();
                 if (i!=j && allTriangles[i].ToSimplePolygon().CheckIntersect(allTriangles[j].ToSimplePolygon(), Intersection)){
                     //std::cout<< Intersection.size() <<" intersections found!" <<std::endl;
                     for (auto point: Intersection){
                         bool isUnique = true;
                         // Checking list for existence of same point. If exists, not unique and do not add to list
-                        for (int k = 0; k < intersectionsList[i].size(); k ++){
+                        for (int k = 0; k < (int) intersectionsList[i].size(); k++){
                             if ((intersectionsList[i][k] - point).norm() < TOLERANCE){
                                 isUnique = false;
                             }
@@ -266,7 +266,7 @@ namespace Guidance {
             }
         }
 
-        for (int i = 0; i < intersectionsList.size(); i++){
+        for (int i = 0; i < (int) intersectionsList.size(); i++) {
             if (!intersectionsList[i].empty()){
                 std::cout<< "Triangle " << std::to_string(i) << " has intersections " << intersectionsList[i].size() << std::endl;
             }
@@ -275,7 +275,7 @@ namespace Guidance {
         Triangle subTriangleA;
         Triangle subTriangleB;
         allTrianglesTriangulate.clear();
-        for (int i =0; i <allTriangles.size(); i++){
+        for (int i = 0; i < (int) allTriangles.size(); i++) {
             if (intersectionsList[i].empty()){
                 allTrianglesTriangulate.push_back(allTriangles[i]);
             }
@@ -297,7 +297,7 @@ namespace Guidance {
 
         std::vector<std::string> triangleLabels;
 
-        for (int i =0; i < allTrianglesTriangulate.size() ; i++){
+        for (int i = 0; i < (int) allTrianglesTriangulate.size(); i++) {
             triangleLabels.push_back(std::to_string(i));
         }
         //MapWidget::Instance().m_guidanceOverlay.ClearTriangleLabels();
@@ -313,13 +313,13 @@ namespace Guidance {
         //************************ ADJACENCY MAP CONSTRUCTION********************************
         //Add each triangle and its edges to the map.
 
-        for (int i = 0; i < allTriangles.size(); i++){
+        for (int i = 0; i < (int) allTriangles.size(); i++) {
             TriangleAdjacencyMap::Triangle tri;
             tri.id = i;
             tri.score = GetTriangleScore(allTriangles[i], ImagingReqs);
             map.nodes.push_back(tri);
             map.edges.push_back({});
-            for (int j = 0; j < allTriangles.size(); j++){
+            for (int j = 0; j < (int) allTriangles.size(); j++) {
                 if((i!=j) && allTriangles[i].ToSimplePolygon().CheckAdjacency(allTriangles[j].ToSimplePolygon())){
                     map.edges[i].push_back(j);
                 }
@@ -380,7 +380,8 @@ namespace Guidance {
         //Set labels for the grouped shapes.
         std::vector<std::string> groupLabels;
         std::string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-        for (int n = 0; n < map.groups.size(); n++) groupLabels.push_back(alphabet.substr(n, 1));
+        for (int n = 0; n < (int) map.groups.size(); n++)
+        	groupLabels.push_back(alphabet.substr(n, 1));
 
         //Display both the triangles and the grouped polygons on Recon.
         MapWidget::Instance().m_guidanceOverlay.ClearPartitionLabels();
@@ -391,9 +392,9 @@ namespace Guidance {
         //Set labels for the individual triangles.
         //std::vector<std::string> triangleLabels;
         triangleLabels.clear();
-        for (int i = 0; i < map.nodes.size(); i++){
+        for (int i = 0; i < (int) map.nodes.size(); i++) {
             std::string fullLabel = alphabet[assignedGroups[i]] + std::to_string(i) + ":";
-            for (int j = 0; j < map.edges[i].size(); j++){
+            for (int j = 0; j < (int) map.edges[i].size(); j++) {
                 if (j!=0){
                     fullLabel.append(",");
                 }
@@ -412,16 +413,16 @@ namespace Guidance {
         std::cout<<"There are " << map.nodes.size() << " nodes in the graph. This should equal the number of triangles." << std::endl;
         std::cout<<"There are " << map.groups.size() << " groups in the graph." << std::endl;
         //Information on individual triangles.
-        for (int i = 0; i < map.nodes.size(); i++){
+        for (int i = 0; i < (int) map.nodes.size(); i++) {
             float value = (int)(map.nodes[i].score * 100 + .5);
             std::cout << "Edges of " << i <<" (Score " << (float)value / 100 << "; Group [" << alphabet[assignedGroups[i]] <<"]) : ";
-            for (int j = 0; j < map.edges[i].size(); j++){
+            for (int j = 0; j < (int) map.edges[i].size(); j++) {
                 std::cout << map.edges[i][j] << ", ";
             }
             std::cout << std::endl;
         }
         //Information on grouped triangles.
-        for (int n = 0; n < map.groups.size(); n++){
+        for (int n = 0; n < (int) map.groups.size(); n++) {
             std::cout << "Group "<< alphabet.substr(n, 1) << " :";
             for (auto item: map.groups[n]){
                 std::cout << " " << item;
@@ -601,7 +602,7 @@ namespace Guidance {
                 }
                 // Sort intersections according to distance to one endpoint of hatchline
                 std::vector<std::pair<double,int> >V;
-                for(int i=0;i<m1_norm.size();i++){
+                for (int i = 0; i < (int) m1_norm.size(); i++) {
                     std::pair<double,int>P=std::make_pair(m1_norm[i],i);
                     V.push_back(P);
                 }
@@ -612,7 +613,7 @@ namespace Guidance {
                 // Guaranteed that line segment in each loop is possible shortest
                 // Therefore it is either completely inside or outside polygon
                 // Therefore the mid-point must be completely inside or outside polygon
-                for (int i = 1; i< V.size(); i++){
+                for (int i = 1; i < (int) V.size(); i++) {
                     Eigen::Vector2d midPoint = (allIntersections[V[i-1].second]+allIntersections[(V[i].second)])/2;
                     if(tempPolygon.ContainsPoint(midPoint)){
                         FragmentedHatchLines.push_back(LineSegment(allIntersections[V[i-1].second],allIntersections[(V[i].second)]));
@@ -667,7 +668,7 @@ namespace Guidance {
                 else currentEndpoint = FragmentedHatchLines[chosenLineIndex].m_endpoint2;
                 chosenPoint = currentEndpoint;
                 //Find the closest unused point to this one
-                for (int x = 0; x < hasLineBeenUsed.size(); x++){
+                for (int x = 0; x < (int) hasLineBeenUsed.size(); x++) {
                     if(hasLineBeenUsed[x]) continue;
                     if (chosenPoint == currentEndpoint){
                         chosenLineIndex = x;
@@ -709,7 +710,7 @@ namespace Guidance {
                 DroneInterface::Waypoint newWayPoint;
                 newWayPoint.Latitude = LatLonPoint[0];
                 newWayPoint.Longitude = LatLonPoint[1];
-                newWayPoint.Altitude = ImagingReqs.HAG;
+                newWayPoint.RelAltitude = ImagingReqs.HAG;
                 newWayPoint.Speed = ImagingReqs.TargetSpeed;
                 newWayPoint.LoiterTime   = std::nanf("");
                 newWayPoint.GimbalPitch   = std::nanf("");

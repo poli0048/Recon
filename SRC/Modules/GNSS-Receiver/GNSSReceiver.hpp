@@ -110,7 +110,7 @@ namespace GNSSReceiver {
 			//This field is averaged over time and will remain valid if the receiver is disconnected. This is primarily available for drone objects
 			//to compute their own absolute altitude based on barometric relative altitude in cases where their own estimates of absolute altitude
 			//may be inaccurate or unlreiable (cough... DJI... cough).
-			inline bool GetGroundAlt(double Altitude);
+			inline bool GetGroundAlt(double & Altitude);
 			
 			//Get the absolute GPS time corresponding to a steady_clock timestamp. Only possible if we got a valid GNSS fix (returns false otherwise)
 			inline bool TimestampToGPSTime(TimePoint const & Timestamp, uint32_t & GPS_Week, double & GPS_TOW);
@@ -184,7 +184,7 @@ namespace GNSSReceiver {
 		return true;
 	}
 	
-	inline bool GNSSManager::GetGroundAlt(double Altitude) {
+	inline bool GNSSManager::GetGroundAlt(double & Altitude) {
 		std::scoped_lock lock(m_mutex);
 		if (std::isnan(m_AveragedAlt))
 			return false;

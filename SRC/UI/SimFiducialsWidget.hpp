@@ -1,6 +1,6 @@
 //This widget lets you view, mark, and edit fiducials in data sets used for simulations
 //Author: Bryan Poling
-//Copyright (c) 2020 Sentek Systems, LLC. All rights reserved. 
+//Copyright (c) 2020 Sentek Systems, LLC. All rights reserved.
 #pragma once
 
 //System Includes

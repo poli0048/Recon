@@ -20,7 +20,6 @@
 namespace DroneInterface {
 	//StartPos_LL holds the lat and lon of the first waypoint (radians)
 	//GroundAlt and HAG are in meters.
-	WaypointMission CreateSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartPos_LL,
-	                                            double GroundAlt, double HAG);
+	WaypointMission CreateSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartPos_LL, double HAG);
 
 }

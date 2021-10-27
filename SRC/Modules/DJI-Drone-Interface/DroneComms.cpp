@@ -686,7 +686,7 @@ namespace DroneInterface {
 		for (auto const & waypoint : Waypoints) {
 			encodeField_float64(TargetPacket.m_data, waypoint.Latitude*180.0/PI);
 			encodeField_float64(TargetPacket.m_data, waypoint.Longitude*180.0/PI);
-			encodeField_float64(TargetPacket.m_data, waypoint.Altitude);
+			encodeField_float64(TargetPacket.m_data, waypoint.RelAltitude);
 			encodeField_float32(TargetPacket.m_data, waypoint.CornerRadius);
 			encodeField_float32(TargetPacket.m_data, waypoint.Speed);
 			encodeField_float32(TargetPacket.m_data, waypoint.LoiterTime);
@@ -717,7 +717,7 @@ namespace DroneInterface {
 			Waypoints.emplace_back();
 			Waypoints.back().Latitude     = decodeField_float64(iter)*PI/180.0;
 			Waypoints.back().Longitude    = decodeField_float64(iter)*PI/180.0;
-			Waypoints.back().Altitude     = decodeField_float64(iter);
+			Waypoints.back().RelAltitude  = decodeField_float64(iter);
 			Waypoints.back().CornerRadius = decodeField_float32(iter);
 			Waypoints.back().Speed        = decodeField_float32(iter);
 			Waypoints.back().LoiterTime   = decodeField_float32(iter);
@@ -817,20 +817,30 @@ namespace DroneInterface {
 	}
 	
 	std::ostream & operator<<(std::ostream & Str, Packet_Acknowledgment const & v) { 
-		Str << "Positive -: " << (unsigned int) v.Positive  << "\r\n";
-		Str << "SourcePID : " << (unsigned int) v.SourcePID << "\r\n";
+		if (v.Positive > uint8_t(0))
+			Str << "Positive acknowledgement of: ";
+		else
+			Str << "Negative acknowledgement of: ";
+		switch (v.SourcePID) {
+			case uint8_t(255): Str << "Emergency Command";        break;
+			case uint8_t(254): Str << "Camera Control";           break;
+			case uint8_t(253): Str << "Execute Waypoint Mission"; break;
+			case uint8_t(252): Str << "Virtual Stick Command";    break;
+			default:           Str << "Unrecognized (PID = " << (unsigned int) v.SourcePID << ")";
+		}
+		Str << " packet\r\n";
 		return Str;
 	}
 	
 	std::ostream & operator<<(std::ostream & Str, Packet_MessageString const & v) { 
 		switch (v.Type) {
-			case uint8_t(0): Str << "Type ---: Debug\r\n"; break;
-			case uint8_t(1): Str << "Type ---: Info\r\n"; break;
-			case uint8_t(2): Str << "Type ---: Warning\r\n"; break;
-			case uint8_t(3): Str << "Type ---: Error\r\n"; break;
-			default:         Str << "Type ---: Unrecognized (" << (unsigned int) v.Type << ")\r\n"; break;
+			case uint8_t(0): Str << "Debug";   break;
+			case uint8_t(1): Str << "Info";    break;
+			case uint8_t(2): Str << "Warning"; break;
+			case uint8_t(3): Str << "Error";   break;
+			default:         Str << "Unrecognized (Type = " << (unsigned int) v.Type << ")";
 		}
-		Str << "**************** Message ****************\r\n" << v.Message << "\r\n";
+		Str << " message received: " << v.Message << "\r\n";
 		return Str;
 	}
 	
