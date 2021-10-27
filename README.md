@@ -92,7 +92,7 @@ Now open a terminal in the Recon directory and run "make". If the build succeeds
 TBD
 
 # Current State
-The main UI works. Satellite image retrieval and caching, along with the built-in GIS system are fully functional. Polygon support is working and the UI allows for the creation and editing of polygonal survey regions. Vehicle simulator is feature complete. UI-based control of real and simulated vehicles works. The shadow detection module is mostly complete (except for some UI integration). The NN-based shadow propagation module is partially complete but is not merged into the master branch yet. Guidance module work is ongoing. The iOS App bridge for controlling real drones is still in development but mostly functional (https://github.com/poli0048/Recon-DJI-IOS-Interface).
+The main UI works. Satellite image retrieval and caching, along with the built-in GIS system are fully functional. Polygon support is working and the UI allows for the creation and editing of polygonal survey regions. The vehicle simulator is feature complete. UI-based control of real and simulated vehicles works. The shadow detection module is mostly complete (except for some UI integration). The NN-based shadow propagation module is partially complete but is not merged into the master branch yet. Guidance module work is ongoing. The iOS App bridge for controlling real drones is still in development but is mostly functional (https://github.com/poli0048/Recon-DJI-IOS-Interface).
 
 
 

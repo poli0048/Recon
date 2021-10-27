@@ -156,22 +156,23 @@ namespace DroneInterface {
 
 			// Destructor
 			~DroneManager() {
-				std::scoped_lock lock(m_mutex);
 				m_abort = true; //Signal the manager thread to stop
 				
+				//Join the manager thread
+				if (m_managerThread.joinable())
+					m_managerThread.join();
+				
+				std::scoped_lock lock(m_mutex);
 				// Destroy RealDrone objects (and close TCP client sockets)
 				std::cerr << "Removing " << m_droneRealVector.size() << " active client drones ... ... ... ";
 				for (RealDrone * drone : m_droneRealVector)
 					delete drone; //Destroy drone objects (their destructors will disconnect their respective sockets)
+				m_droneRealVector.clear();
 				std::cerr<< "Done" << std::endl;
 				
 				// Shutdown TCP server
 				m_server.stop(true, true);
 				std::cerr << "Closed Drone Manager Server. Please wait until port " << m_port <<" released to start Recon again" << std::endl;
-				
-				//Join the manager thread
-				if (m_managerThread.joinable())
-					m_managerThread.join();
 			}
 
 			inline std::vector<std::string> GetConnectedDroneSerialNumbers(void) {
