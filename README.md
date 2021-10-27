@@ -11,6 +11,7 @@ Recon is a C++ based, multi-vehicle ground control station (GCS) for collaborati
  * Built-in global GIS system for keep-out zones, avoidance zones, safe-landing zones, and min safe altitude. All layers can be viewed and edited directly from within Recon and are saved locally. This data is available to the Guidance Module - it is distinct from any DJI SDK-level restrictions, such as their cloud-based no-fly zone registry.
  * Live view of all drone states and drone locations on a satellite map (usable offline with on-disk caching)
  * With the "Shadow Detection" and "Shadow Propagation" modules, detect and track cloud shadows on the terrain. The Guidance module can incorporate shadow information into it's flight planning to minimize time spent in shadowed areas and ensure that each point on the ground is imaged at least once when not in shadow. Save a shadow map record showing where shadows were at each instant in a mission to aid in shadow-free image stitching.
+ * Integrated vehicle simulator to support development and testing of different guidance algorithms 
  
 **Modules:**
  * DJI Drone Interface Module: This module operates a network server and allows DJI drones to connect as clients (through a companion App running on an iOS device connected to the drones controller). When a drone is connected, this module exposes its telemetry, live imagery (if flying a supported camera), and command and control capabilities to other components of Recon. Note: Ideally we would define an abstract interface that could be implemented for various drone manufacturers, but this is unfortunately not practical due to major differences in control authority, accessible data, and command and control interfaces between manufacturers. If other drones are to be supported in the future they will require their own interfaces.
@@ -91,7 +92,7 @@ Now open a terminal in the Recon directory and run "make". If the build succeeds
 TBD
 
 # Current State
-The main UI works. Satellite image retrieval and caching, along with the built-in GIS system are fully functional. Simple polygon support is working and the UI allows for the creation and editing of polygonal survey regions. Work is ongoing on the various modules but they are currently being developed as stand-alone projects and will be integrated later.
+The main UI works. Satellite image retrieval and caching, along with the built-in GIS system are fully functional. Polygon support is working and the UI allows for the creation and editing of polygonal survey regions. Vehicle simulator is feature complete. UI-based control of real and simulated vehicles works. The shadow detection module is mostly complete (except for some UI integration). The NN-based shadow propagation module is partially complete but is not merged into the master branch yet. Guidance module work is ongoing. The iOS App bridge for controlling real drones is still in development but mostly functional (https://github.com/poli0048/Recon-DJI-IOS-Interface).
 
 
 

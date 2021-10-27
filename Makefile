@@ -11,7 +11,7 @@ BUILD_TYPE = Release
 
 ifeq ($(BUILD_TYPE),Release)
 	OPTFLAGS   = -O3 -march=broadwell -fopenmp
-	DEBUGFLAGS = -g
+	DEBUGFLAGS = 
 else
 	OPTFLAGS   = -O0 -march=core2 -fopenmp
 	DEBUGFLAGS = -g
