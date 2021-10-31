@@ -30,10 +30,6 @@ static void CheckForBadTensorValues(torch::Tensor const & T) {
 }
 
 static torch::Tensor EigenMatrixToTensor(Eigen::MatrixXf const & M, torch::Device const & Dev) {
-	//torch::Tensor T;
-	//T = T.to(Dev);
-	//T = T.new_empty({1,1,64,64}, torch::kFloat32);
-	
 	auto options = torch::TensorOptions().dtype(torch::kFloat32).layout(torch::kStrided).device(Dev);
 	torch::Tensor T = torch::empty({1, 1, 64, 64}, options);
 	
@@ -77,8 +73,6 @@ namespace ShadowPropagation {
             //try to have a plan for this since if we fall behind real time our TA functions become worthless. Can we reset the model
             //and only process every other shadow map? This doubling the time step would be like shadows are moving twice as fast, but
             //a model trained for one time step may fork for another... just an idea.
-//            torch::NoGradGuard no_grad;
-            std::cerr << "CALLED!" << std::endl;
             m_TimeAvail.UL_LL = map.UL_LL;
             m_TimeAvail.UR_LL = map.UR_LL;
             m_TimeAvail.LL_LL = map.LL_LL;
@@ -132,140 +126,41 @@ namespace ShadowPropagation {
             	}
             }
             
-           
-            
-            
-            
-
-            //if (!cvInput.isContinuous()) {
-            //    std::cout << "Memory is NOT contiguous." << std::endl;
-            //}
-            //torch::Tensor inputTensorCompressed = torch::from_blob(cvInput.data, {64, 64}, torch::kFloat32).to(m_device);
-            //torch::Tensor inputTensor = inputTensorCompressed.unsqueeze(0).unsqueeze(0).detach();
-            
-            //std::cerr << "Tensor on creation: ";
-            //CheckForBadTensorValues(inputTensor);
-            
-            /*if (at::isnan(inputTensor).any().item<bool>()) {
-                std::cerr << "Input Tensor has a NaN value." << std::endl;
-            }
-
-            for (int i = 0; i < 64; i++) {
-                for (int j = 0; j < 64; j++) {
-                    if (inputTensor[0][0][i][j].item<float>() < 0 || inputTensor[0][0][i][j].item<float>() > 1 ||
-                            std::isnan(inputTensor[0][0][i][j].item<float>())) {
-                        std::cout << "Bad Input" << std::endl;
-                        std::cout << inputTensor[0][0][i][j].item<float>() << std::endl;
-                    }
-                }
-            }*/
-
-//            allVectors.push_back(inputTensor);
             if (m_inputHist.size() == TARGET_INPUT_LENGTH) {
                 for (int i = 0; i < m_inputHist.size(); i++) {
                     std::vector<torch::jit::IValue> inputs;
-                    //std::cout << m_prevInputs[i].sizes() << std::endl;
-                    
                     torch::Tensor histInput = EigenMatrixToTensor(m_inputHist[i], m_device);
                     
                     inputs.push_back(histInput);
                     inputs.push_back((i == 0));
                     inputs.push_back(false);
-//                if (at::isnan(inputs[0].toTensor()).all().item<bool>()) {
-//                    std::cerr << "PREV INPUT IS A NAN TENSOR!" << std::endl;
-//                }    std::vector<torch::Tensor> input;
 
-                    
-                    /*if (at::isnan(m_prevInputs[i]).any().item<bool>()) {
-                    	std::cerr << "Input has NaNs in it.\r\n";
-                    }*/
-                    
-                    std::cerr << "histInput[" << i << "]: ";
-                    CheckForBadTensorValues(histInput);
+//                    std::cerr << "histInput[" << i << "]: ";
+//                    CheckForBadTensorValues(histInput);
                     
                     auto result = m_module.forward(inputs);
                     torch::Tensor outputTensor = result.toTensor();
-                    std::cerr << "outputTensor: ";
-                    CheckForBadTensorValues(outputTensor);
-                    /*if (at::isnan(outputTensor).any().item<bool>()) {
-                    	std::cerr << "Output has NaNs in it.\r\n";
-                    }*/
-//                    torch::Tensor outputTensor = result.toTuple()->elements()[2].toTensor();
-//                    for (int i = 0; i < 64; i++) {
-//                        for (int j = 0; j < 64; j++) {
-//                            if (outputTensor[0][0][i][j].item<float>() < 0 || outputTensor[0][0][i][j].item<float>() > 1 ||
-//                                std::isnan(outputTensor[0][0][i][j].item<float>())) {
-//                                std::cout << "Bad Output Tensor from first foor loop" << std::endl;
-//                                std::cout << outputTensor[0][0][i][j].item<float>() << std::endl;
-//                            }
-//                        }
-//                    }
-
-//                cv::Mat input(64, 64, CV_32FC1, m_prevInputs[i][0][0].data_ptr());
-//                cv::imshow("PRE-INPUTs", input);
-//                cv::waitKey(1);
+//                    std::cerr << "outputTensor: ";
+//                    CheckForBadTensorValues(outputTensor);
                 }
                 cv::Mat localTimeAvailable(cv::Size(64, 64), CV_16UC1,
                                            cv::Scalar(std::numeric_limits<uint16_t>::max()));
                 torch::Tensor inputTensor = EigenMatrixToTensor(shadowMapMatrix, m_device);
                 for (int t = 1; t <= TIME_HORIZON; t++) {
                     std::vector<torch::jit::IValue> inputs;
-                    
-                    
-                    
                     inputs.push_back(inputTensor);
                     inputs.push_back(false);
                     inputs.push_back(false);
-//                if (at::isnan(inputs[0].toTensor()).all().item<bool>()) {
-//                    std::cerr << "INPUT IS A NAN TENSOR!" << std::endl;
-//                }
-//                cv::Mat input(64, 64, CV_32FC1, inputTensor[0][0].data_ptr());
-//                cv::imshow("INPUT", input);
-//                cv::waitKey(1);
-                    
-                    std::cerr << "inputTensor: ";
-                    CheckForBadTensorValues(inputTensor);
+
+//                    std::cerr << "inputTensor: ";
+//                    CheckForBadTensorValues(inputTensor);
                     
                     auto result = m_module.forward(inputs);
                     // decoder_input, decoder_hidden, output_image, _, _
                     torch::Tensor outputTensor = result.toTensor();
-//                    torch::Tensor outputTensor = result.toTuple()->elements()[2].toTensor();
-                    //std::cout << "Output Tensor Dims: " << outputTensor.sizes() << std::endl;
-                    
-                    std::cerr << "outputTensor: ";
-                    CheckForBadTensorValues(outputTensor);
-                    
-                    //if (at::isnan(outputTensor).any().item<bool>()) {
-                    //	std::cerr << "Output has NaNs in it.\r\n";
-                    //}
-                    /*if (at::isnan(outputTensor).any().item<bool>()) {
-                        if (!isSaved && counter == 0) {
-                            isSaved = true;
-                            std::cout << inputTensor << std::endl;
-                            std::cout << outputTensor << std::endl;
-                            torch::save(inputTensor, "x.pt");
-                        }
-                        counter++;
-                        std::cout << " ANOMALY ALERT!" << std::endl;
-                    }*/
-                    
-                    
-                    /*auto accessor = outputTensor.accessor<float, 4>();
-                    for (int i = 0; i < 64; i++) {
-                        for (int j = 0; j < 64; j++) {
-                            if (isnan(accessor[0][0][i][j])) {
-                                accessor[0][0][i][j] = 0;
-                            }
-//                        if (accessor[0][0][i][j] < 0) {
-//                            std::cout << "NEGATIVE" << std::endl;
-//                        }
-                        }
-                    }*/
-                    
-                    
-//                cv::Mat output(64, 64, CV_32FC1, outputTensor[0][0].data_ptr());
-//                cv::imshow("OUTPUT!!", output);
-//                cv::waitKey(1);
+
+//                    std::cerr << "outputTensor: ";
+//                    CheckForBadTensorValues(outputTensor);
                     // Iterates over output tensor and then updates localTimeAvailable accordingly
                     for (int i = 0; i < 64; i++) {
                         for (int j = 0; j < 64; j++) {
@@ -291,10 +186,6 @@ namespace ShadowPropagation {
             
             
             
-            //m_prevInputs.push_back(inputTensor.detach());
-            //if (m_prevInputs.size() > TARGET_INPUT_LENGTH) {
-              //  m_prevInputs.pop_front();
-            //}
 //            numImagesProcessed++;
 //            numMicroseconds += std::chrono::duration_cast<std::chrono::milliseconds>(endClock - startClock).count();
             m_unprocessedShadowMaps.erase(m_unprocessedShadowMaps.begin()); //Will cause re-allocation but the buffer is small so don't worry about it

@@ -84,8 +84,6 @@ namespace ShadowPropagation {
 			ShadowPropagationEngine() : m_running(false), m_abort(false), /*m_prevInputs(),*/
 			                            m_device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU) {
 				m_engineThread = std::thread(&ShadowPropagationEngine::ModuleMain, this);
-//				at::set_num_interop_threads(3);
-//				at::set_num_threads(3);
                 m_module = torch::jit
                         ::load(Handy::Paths::ThisExecutableDirectory().parent_path()
                         .string().append("/SRC/Modules/Shadow-Propagation/model.pt"));
