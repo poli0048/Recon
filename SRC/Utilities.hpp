@@ -21,6 +21,12 @@ inline double SecondsSinceT0Epoch(std::chrono::time_point<std::chrono::steady_cl
 	return double(duration.count()) * double(std::chrono::steady_clock::period::num) / double(std::chrono::steady_clock::period::den);
 }
 
+inline double SecondsSinceT0Epoch(void) {
+	std::chrono::time_point<std::chrono::steady_clock> Now = std::chrono::steady_clock::now();
+	auto duration = Now.time_since_epoch();
+	return double(duration.count()) * double(std::chrono::steady_clock::period::num) / double(std::chrono::steady_clock::period::den);
+}
+
 inline double SecondsElapsed(std::chrono::time_point<std::chrono::steady_clock> const & Start, std::chrono::time_point<std::chrono::steady_clock> const & End) {
 	auto duration = End - Start;
 	return double(duration.count()) * double(std::chrono::steady_clock::period::num) / double(std::chrono::steady_clock::period::den);
@@ -184,5 +190,6 @@ std::filesystem::path GetSimVideoFilePath(std::filesystem::path const & DatasetP
 //Load GCPs from the file GCP.txt in the given folder - we also adjust them from file native res (4K) to 720p
 //Returned fiducials are in form needed by Shadow Detection Engine.
 std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> LoadFiducialsFromFile(std::filesystem::path const & DatasetPath);
+
 
 

@@ -44,7 +44,7 @@ inline void SettingsWindow::Draw() {
 		ImGui::TextUnformatted("User Interface:");
 		ImGui::Dummy(ImVec2(1, 10));
 		
-		float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("User Interface Theme:").x + 15.0f;
+		float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("High Visibility Cursor:").x + 15.0f;
 		float col3Start = std::max(ImGui::GetContentRegionAvail().x - defaultButtonWidth, col2Start + 50.0f);
 		float sliderWidth = std::max(col3Start - col2Start - 10.0f, 50.0f);
 		
@@ -84,6 +84,13 @@ inline void SettingsWindow::Draw() {
 		ImGui::SameLine(col3Start);
 		if (ImGui::Button(" Default ##Drone Icon Size"))
 			ProgOptions::Instance()->DroneIconScale = 0.5f;
+		
+		ImGui::TextUnformatted("High Visibility Cursor:");
+		ImGui::SameLine(col2Start);
+		ImGui::Checkbox("##High Contrast Cursor", &(ProgOptions::Instance()->HighContrastCursor));
+		ImGui::SameLine(col3Start);
+		if (ImGui::Button(" Default ##High Contrast Cursor"))
+			ProgOptions::Instance()->HighContrastCursor = false;
 		
 		ImGui::Dummy(ImVec2(1, ImGui::GetFontSize()));
 		ImGui::TextUnformatted("Map Behavior:");

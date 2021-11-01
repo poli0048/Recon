@@ -661,10 +661,11 @@ namespace DroneInterface {
 			}
 			else if (m_waypointMissionState == 0) {
 				//Taking off and reaching altitude of first waypoint
-				double targetHAG = m_LastMission.Waypoints[0].RelAltitude;
+				double currentHAG = m_Alt - m_groundAlt;
+				double targetHAG  = m_LastMission.Waypoints[0].RelAltitude;
 				UpdateDroneVertChannelBasedOnTargetHAG(deltaT, targetHAG, climbRate, descentRate);
 				Update2DVelocityBasedOnTarget(deltaT, Eigen::Vector2d(0.0, 0.0), max2DAcc, max2DDec, max2DSpeed);
-				if (fabs(m_LastMission.Waypoints[0].RelAltitude - targetHAG) < 0.5) {
+				if (fabs(currentHAG - targetHAG) < 0.5) {
 					if (m_LastMission.CurvedTrajectory)
 						m_waypointMissionState = 4;
 					else
@@ -773,6 +774,7 @@ namespace DroneInterface {
 				//turn through waypoint (curved)
 				Waypoint const & waypoint(m_LastMission.Waypoints[m_targetWaypoint]);
 				Waypoint const & nextWaypoint(m_LastMission.Waypoints[m_targetWaypoint + 1]); //We should never be in this state for the last waypoint
+				UpdateDroneVertChannelBasedOnTargetHAG(deltaT, waypoint.RelAltitude, climbRate, descentRate);
 				
 				//Computing the actual ideal arc to follow is overkill here. Instead, we aim for a point between the current waypoint
 				//and the next one (a distance of CornerRadius away from the current waypoint) and update our orientation to point

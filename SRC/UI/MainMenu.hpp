@@ -22,6 +22,7 @@
 #include "../Modules/Shadow-Detection/ShadowDetection.hpp"
 #include "../Modules/Shadow-Propagation/ShadowPropagation.hpp"
 #include "GNSSReceiverWindow.hpp"
+#include "LiveFiducialsWidget.hpp"
 
 class MainMenu {
 	public:
@@ -171,18 +172,23 @@ inline void MainMenu::Draw() {
 									std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> GCPs = LoadFiducialsFromFile(datasetPath);
 									ShadowDetection::ShadowDetectionEngine::Instance().SetReferenceFrame(refFrame);
 									ShadowDetection::ShadowDetectionEngine::Instance().SetFiducials(GCPs);
+									
+									//Start (or restart) the cam feed with the specified frame rate
+									if (drone->IsCamImageFeedOn())
+										drone->StopDJICamImageFeed();
+									drone->StartDJICamImageFeed(m_shadowDetectionModuleVidFeedFPS);
+									
+									//Instruct the shadow detection module to start (using this drone serial)
+									ShadowDetection::ShadowDetectionEngine::Instance().Start(serial);
 								}
 								else {
-									//TODO - this tool doesn't exist yet
+									//Start (or restart) the cam feed with the specified frame rate
+									if (drone->IsCamImageFeedOn())
+										drone->StopDJICamImageFeed();
+									drone->StartDJICamImageFeed(m_shadowDetectionModuleVidFeedFPS);
+									
+									LiveFiducialsWidget::Instance().Show(serial);
 								}
-								
-								//Start (or restart) the cam feed with the specified frame rate
-								if (drone->IsCamImageFeedOn())
-									drone->StopDJICamImageFeed();
-								drone->StartDJICamImageFeed(m_shadowDetectionModuleVidFeedFPS);
-								
-								//Instruct the shadow detection module to start (using this drone serial)
-								ShadowDetection::ShadowDetectionEngine::Instance().Start(serial);
 							}
 						}
 					}

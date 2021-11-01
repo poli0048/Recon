@@ -3,6 +3,7 @@
 
 //System Includes
 #include <memory>
+#include <cmath>
 
 //Project Includes
 #include "ReconUI.hpp"
@@ -19,7 +20,12 @@
 #include "ModalDialogs.hpp"
 #include "TextureUploadFlowRestrictor.hpp"
 #include "SimFiducialsWidget.hpp"
+#include "LiveFiducialsWidget.hpp"
 #include "GNSSReceiverWindow.hpp"
+#include "EmbeddedIcons.hpp"
+#include "../Utilities.hpp"
+
+#define PI 3.14159265358979
 
 ReconUI::ReconUI() {
 	gSoloud.init(); //Initialize the SoLoud engine
@@ -119,10 +125,54 @@ void ReconUI::Draw() {
 	AboutWindow::Instance().Draw();
 	SettingsWindow::Instance().Draw();
 	SimFiducialsWidget::Instance().Draw();
+	LiveFiducialsWidget::Instance().Draw();
 	GNSSReceiverWindow::Instance().Draw();
 	
 	//Draw secondary non-singleton windows
 	DrawChildren();
+	
+	//Draw cursor, if high contrast cursor is enabled
+	if (ProgOptions::Instance()->HighContrastCursor) {
+		ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+		ImGuiViewport * hoveredViewport = ImGui::FindViewportByID(ImGui::GetIO().MouseHoveredViewport);
+		if (hoveredViewport != nullptr) {
+			ImDrawList * drawlist = ImGui::GetForegroundDrawList(hoveredViewport);
+			//For some reason, anti-aliasing doesn't work when accessing a viewport draw list directly
+			//auto prevFlags = drawlist->Flags;
+			//drawlist->Flags = (drawlist->Flags | ImDrawListFlags_AntiAliasedFill);
+			
+			Eigen::Matrix2d R;
+			double theta = -20.0*PI/180.0;
+			//double L = 60.0;
+			double L = 3.0*ImGui::GetFontSize();
+			R << cos(theta), -sin(theta),
+			     sin(theta),  cos(theta);
+			Eigen::Vector2d v(0, L);
+			
+			Eigen::Vector2d p1 = ImGui::GetMousePos();
+			Eigen::Vector2d p2 = p1 + v;
+			Eigen::Vector2d p3 = p1 + 0.8*R*v;
+			Eigen::Vector2d p4 = p1 + R*R*v;
+			drawlist->AddTriangleFilled(p1, p2, p3, IM_COL32_BLACK);
+			drawlist->AddTriangleFilled(p1, p3, p4, IM_COL32_BLACK);
+			
+			double t = std::fmod(SecondsSinceT0Epoch(), 2.0) - 1.0;
+			double s = 1.0 - t*t;
+			//ImColor color(255, 255, int(255.0*s), 255); //Flash yellow and white
+			//ImColor color(255, int(255.0*s), int(255.0*s), 255); //Flash red and white
+			ImU32 color = IM_COL32_WHITE;
+			
+			Eigen::Vector2d w = 0.6*v;
+			Eigen::Vector2d q1 = p1 + 0.2*L*R*Eigen::Vector2d(0,1);
+			Eigen::Vector2d q2 = q1 + w;
+			Eigen::Vector2d q3 = q1 + 0.8*R*w;
+			Eigen::Vector2d q4 = q1 + R*R*w;
+			drawlist->AddTriangleFilled(q1, q2, q3, color);
+			drawlist->AddTriangleFilled(q1, q3, q4, color);
+			
+			//drawlist->Flags = prevFlags;
+		}
+	}
 	
 	firstDrawPass = false;
 }

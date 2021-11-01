@@ -48,11 +48,12 @@ class ProgOptions {
 		std::mutex OptionsMutex;
 		
 		//The options are public fields so we can hand pointers to them directy to ImGui to expose the options.
-		float UIScaleFactor;    //Scale factor for all UI elements
-		float MapDPIPercentage; //Val = X: Map tiles selected so 1 screen pixel = X/100 tile pixels. Generally set between 50 and 100.
-		float DroneIconScale;   //Value of 1 means 1 pixel to 1 pixel. Value of 2 means 2 screen pixels per image pixel, etc.
-		float zoomSpeed;        //Normalized so that 1.0 is reasonable.
-		Themes::Theme UITheme;  //Light, Dark, etc.
+		float UIScaleFactor;     //Scale factor for all UI elements
+		float MapDPIPercentage;  //Val = X: Map tiles selected so 1 screen pixel = X/100 tile pixels. Generally set between 50 and 100.
+		float DroneIconScale;    //Value of 1 means 1 pixel to 1 pixel. Value of 2 means 2 screen pixels per image pixel, etc.
+		float zoomSpeed;         //Normalized so that 1.0 is reasonable.
+		Themes::Theme UITheme;   //Light, Dark, etc.
+		bool HighContrastCursor; //ImGui draws the cursor and tries to make it bigger and easier to see when true
 		
 		bool GNSSModuleEnabled;             //If true, the GNSS receiver module should listen for GNSS receivers at the specified device path
 		bool GNSSModuleVerbose;             //If true, the GNSS receiver module will print out info about receiver status (for debugging GNSS)
@@ -71,6 +72,7 @@ class ProgOptions {
 			        CEREAL_NVP(DroneIconScale),
 			        CEREAL_NVP(zoomSpeed),
 			        CEREAL_NVP(UITheme),
+			        CEREAL_NVP(HighContrastCursor),
 			        CEREAL_NVP(GNSSModuleEnabled),
 			        CEREAL_NVP(GNSSModuleVerbose),
 			        CEREAL_NVP(GNSSReceiverDevicePath),
@@ -84,6 +86,7 @@ inline void ProgOptions::LoadDefaults(void) {
 	DroneIconScale         = 0.5f;
 	zoomSpeed              = 1.0f;
 	UITheme                = Themes::Theme::Dark;
+	HighContrastCursor     = false;
 	GNSSModuleEnabled      = true;
 	GNSSModuleVerbose      = false;
 	GNSSReceiverDevicePath = "/dev/ttyACM0"s;
