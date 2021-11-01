@@ -22,7 +22,6 @@
 #include "SimFiducialsWidget.hpp"
 #include "LiveFiducialsWidget.hpp"
 #include "GNSSReceiverWindow.hpp"
-#include "EmbeddedIcons.hpp"
 #include "../Utilities.hpp"
 
 #define PI 3.14159265358979

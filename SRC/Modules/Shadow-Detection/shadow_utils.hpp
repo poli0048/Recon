@@ -49,8 +49,17 @@ inline void getOrbRotation(const cv::Mat& descriptors_ref, const std::vector<cv:
 			//good_matches.push_back(knn_matches[i][0]);
 		}
 	}
-
-	H = cv::estimateAffinePartial2D(rot, ref);
+	
+	//This next function appears to raise an exception sometimes. This is probably because there aren't enough matches to run the algorithm.
+	//It looks like we just put as many items in these vectors as we have ORB keypoint matches that pass our inclusion test. There is no guarentee that there
+	//will be at least 2 of them. This is especially likily if we get a corrupted frame from the drone... there may be no matches.
+	try {
+		H = cv::estimateAffinePartial2D(rot, ref);
+	}
+	catch (...) {
+		std::cerr << "cv::estimateAffinePartial2D failed. Defaulting stabilization homography.\r\n";
+		H = cv::Mat::eye(2, 3, CV_64F);
+	}
 }
 
 inline void getBinaryCloudMask(const cv::Mat& img, cv::Mat& bright, cv::Mat& binary) {
