@@ -30,7 +30,7 @@ static void CheckForBadTensorValues(torch::Tensor const & T) {
 }
 
 static torch::Tensor EigenMatrixToTensor(Eigen::MatrixXf const & M, torch::Device const & Dev) {
-	auto options = torch::TensorOptions().dtype(torch::kFloat32).layout(torch::kStrided).device(Dev);
+	auto options = torch::TensorOptions().dtype(torch::kFloat32).layout(torch::kStrided).device(torch::kCPU);
 	torch::Tensor T = torch::empty({1, 1, 64, 64}, options);
 	
 	auto accessor = T.accessor<float,4>();
@@ -38,7 +38,7 @@ static torch::Tensor EigenMatrixToTensor(Eigen::MatrixXf const & M, torch::Devic
 		for (int m = 0; m < 64; m++)
 			accessor[0][0][n][m] = M(n,m);
 	}
-	return T;
+	return T.to(Dev);
 }
 
 namespace ShadowPropagation {
@@ -130,18 +130,11 @@ namespace ShadowPropagation {
                 for (int i = 0; i < m_inputHist.size(); i++) {
                     std::vector<torch::jit::IValue> inputs;
                     torch::Tensor histInput = EigenMatrixToTensor(m_inputHist[i], m_device);
-                    
                     inputs.push_back(histInput);
                     inputs.push_back((i == 0));
                     inputs.push_back(false);
-
-//                    std::cerr << "histInput[" << i << "]: ";
-//                    CheckForBadTensorValues(histInput);
                     
-                    auto result = m_module.forward(inputs);
-                    torch::Tensor outputTensor = result.toTensor();
-//                    std::cerr << "outputTensor: ";
-//                    CheckForBadTensorValues(outputTensor);
+                    m_module.forward(inputs);
                 }
                 cv::Mat localTimeAvailable(cv::Size(64, 64), CV_16UC1,
                                            cv::Scalar(std::numeric_limits<uint16_t>::max()));
@@ -152,15 +145,10 @@ namespace ShadowPropagation {
                     inputs.push_back(false);
                     inputs.push_back(false);
 
-//                    std::cerr << "inputTensor: ";
-//                    CheckForBadTensorValues(inputTensor);
-                    
                     auto result = m_module.forward(inputs);
                     // decoder_input, decoder_hidden, output_image, _, _
                     torch::Tensor outputTensor = result.toTensor();
 
-//                    std::cerr << "outputTensor: ";
-//                    CheckForBadTensorValues(outputTensor);
                     // Iterates over output tensor and then updates localTimeAvailable accordingly
                     for (int i = 0; i < 64; i++) {
                         for (int j = 0; j < 64; j++) {

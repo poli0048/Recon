@@ -52,8 +52,8 @@ namespace ShadowPropagation {
 			bool              m_running;
 			std::atomic<bool> m_abort;
 			std::mutex        m_mutex;
-			static const int  TARGET_INPUT_LENGTH = 10;
-			static const int  TIME_HORIZON = 10;
+			static const int  TARGET_INPUT_LENGTH = 15;
+			static const int  TIME_HORIZON = 15;
 			static constexpr double OUTPUT_THRESHOLD = 0.4;
 
 			int               m_callbackHandle; //Handle for this objects shadow detection engine callback
@@ -81,12 +81,19 @@ namespace ShadowPropagation {
         static ShadowPropagationEngine & Instance() { static ShadowPropagationEngine Obj; return Obj; }
 			
 			//Constructors and Destructors
-			ShadowPropagationEngine() : m_running(false), m_abort(false), /*m_prevInputs(),*/
-			                            m_device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU) {
+			ShadowPropagationEngine() : m_running(false), m_abort(false), 
+										m_device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU) {
 				m_engineThread = std::thread(&ShadowPropagationEngine::ModuleMain, this);
-                m_module = torch::jit
+				if (m_device.is_cuda()) {
+                	m_module = torch::jit
                         ::load(Handy::Paths::ThisExecutableDirectory().parent_path()
-                        .string().append("/SRC/Modules/Shadow-Propagation/model.pt"));
+                        .string().append("/SRC/Modules/Shadow-Propagation/model_cuda.pt"), m_device);
+				} else {
+                	m_module = torch::jit
+                        ::load(Handy::Paths::ThisExecutableDirectory().parent_path()
+                        .string().append("/SRC/Modules/Shadow-Propagation/model.pt"), m_device);
+
+				}
                 m_module.eval();
             }
 			~ShadowPropagationEngine() {
