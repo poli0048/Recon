@@ -514,6 +514,11 @@ inline void CommandWidget::Draw() {
 					VehicleControlWidget::Instance().AllDronesHitTheDeck();
 				ImGui::EndMenu();
 			}
+			if (MyGui::BeginMenu(u8"\uf015", labelMargin, "All drones return home and land")) {
+				if (ImGui::MenuItem("Confirm Command", NULL, false, true))
+					VehicleControlWidget::Instance().AllDronesReturnHomeAndLand();
+				ImGui::EndMenu();
+			}
 			
 			ImGui::EndPopup();
 		}

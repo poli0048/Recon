@@ -1,6 +1,6 @@
 # Recon
 ![GitHub Screenshot](/Screenshots/Screenshot-MainScreen.png)
-Recon is a C++ based, multi-vehicle ground control station (GCS) for collaborative drone imaging with cloud shadow prediction and avoidance capabilities. Recon has a high-level UI built on top of Dear ImGUI and a modular architecture for it's core components. It is currently only planned to support DJI vehicles through a companion iOS App (in development), but additional drones could/may be supported through additional modules in the future. **Note: Recon is a work in progress - it is not feature-complete.**
+Recon is a C++ based, multi-vehicle ground control station (GCS) for collaborative drone imaging with cloud shadow prediction and avoidance capabilities. Recon has a high-level UI built on top of Dear ImGUI and a modular architecture for it's core components. It is currently only planned to support DJI vehicles through a companion iOS App (in development), but additional drones could/may be supported through additional modules in the future. [See our video demonstration of basic features.](https://www.youtube.com/watch?v=aSOjmPsa1Go) **Note: Recon is a work in progress - it is not feature-complete.**
 
 **High-Level Software Architecture:**
 ![GitHub Screenshot](/Doc/Software_Architecture_Diagram.png)

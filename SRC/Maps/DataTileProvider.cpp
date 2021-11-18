@@ -712,6 +712,67 @@ namespace Maps {
 		return value;
 	}
 
+	//Get the min and max (non-NaN) values of a given data layer along a line from point A to point B, sampled every "sampleDist" meters.
+	//Aborts if the values can't be resolved within "Timeout" seconds. Returns true on success and false on timeout.
+	//On success, NaNsDetected will also be populated... true if any NaNs detected on line and false otherwise.
+	bool DataTileProvider::GetDataExtremesOnLine(Eigen::Vector2d const & PointA_NM, Eigen::Vector2d const & PointB_NM, double SampleDist, DataLayer layer,
+	                                             double Timeout, double & Data_Min, double & Data_Max, bool & NaNsDetected) {
+		std::chrono::time_point<std::chrono::steady_clock> startTime = std::chrono::steady_clock::now();
+		SampleDist = std::max(SampleDist, 0.25); //Sanitize - don't allow crazily tight samples
+		double sampleDist_NM = 0.5*MetersToNMUnits(SampleDist, PointA_NM(1)) + 0.5*MetersToNMUnits(SampleDist, PointB_NM(1));
+		
+		//Prepare a vector of sample points
+		int numSamples = (int) std::max(std::ceil((PointB_NM - PointA_NM).norm() / sampleDist_NM + 1.0), 2.0);
+		std::Evector<Eigen::Vector2d> samplePoints_NM;
+		for (int n = 0; n < numSamples; n++) {
+			double t = double(n) / double(numSamples - 1);
+			double s = 1.0 - t;
+			samplePoints_NM.push_back(s*PointA_NM + t*PointB_NM);
+		}
+
+		//Scan through iteratively until we have sampled all points successfully or until we timeout
+		bool valuesInitialized = false;
+		bool NanFound = false;
+		double minVal = std::nan("");
+		double maxVal = std::nan("");
+		while (true) {
+			if (SecondsElapsed(startTime) > Timeout)
+				return false;
+			if (samplePoints_NM.empty())
+				break;
+
+			std::Evector<Eigen::Vector2d> remainingSamplePoints;
+			for (auto const & pt_NM : samplePoints_NM) {
+				double value;
+				if (TryGetData(pt_NM, layer, value)) {
+					if ((! valuesInitialized) && (! std::isnan(value))) {
+						minVal = value;
+						maxVal = value;
+						valuesInitialized = true;
+					}
+					if (std::isnan(value))
+						NanFound = true;
+					else {
+						minVal = std::min(minVal, value);
+						maxVal = std::max(maxVal, value);
+					}
+				}
+				else
+					remainingSamplePoints.push_back(pt_NM);
+			}
+			samplePoints_NM.swap(remainingSamplePoints);
+
+			//If we had some misses, sleep a short while before checking the missed points again
+			if (! samplePoints_NM.empty())
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		}
+
+		NaNsDetected = NanFound;
+		Data_Min = minVal;
+		Data_Max = maxVal;
+		return true;
+	}
+
 	void DataTileProvider::PurgeAllTiles() {
 		m_threads_VisEval.Wait();
 		std::scoped_lock lock(m_cache_mtx, m_mtx_TilesWithcurrentVizEvalJobs);

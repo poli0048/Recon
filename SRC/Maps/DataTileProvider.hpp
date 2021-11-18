@@ -151,6 +151,12 @@ namespace Maps {
 			
 			//Same as TryGetData, but will block until the requested data is available (up to a given number of seconds, after which it will return NaN)
 			double GetData(Eigen::Vector2d const & Position_NM, DataLayer layer, double Timeout);
+
+			//Get the min and max (non-NaN) values of a given data layer along a line from point A to point B, sampled every "sampleDist" meters.
+			//Aborts if the values can't be resolved within "Timeout" seconds. Returns true on success and false on timeout.
+			//On success, NaNsDetected will also be populated... true if any NaNs detected on line and false otherwise.
+			bool GetDataExtremesOnLine(Eigen::Vector2d const & PointA_NM, Eigen::Vector2d const & PointB_NM, double SampleDist, DataLayer layer,
+			                           double Timeout, double & Data_Min, double & Data_Max, bool & NaNsDetected);
 			
 			//FRF Edit Tools - when painting, tiles will be created as needed. Painting is done at a fixed pyramid level (set in a constexpr above)
 			//and lower-res levels are derived from this level and updated as needed. We make a special exception and take the rectangle angle in
