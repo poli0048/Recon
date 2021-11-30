@@ -33,29 +33,30 @@ namespace Guidance {
     // **************************************   GuidanceEngine Non-Inline Functions Definitions   **************************************
     // *********************************************************************************************************************************
     //Start a survey mission (currently active region) using the given drones
-    bool GuidanceEngine::StartSurvey(std::vector<std::string> const & LowFlierSerials) {
+    bool GuidanceEngine::StartSurvey(std::vector<std::string> const & LowFlierSerials, ImagingRequirements const & Reqs) {
         std::scoped_lock lock(m_mutex);
         if (m_running)
             return false; //Require stopping the previous mission first
-            if (LowFlierSerials.empty())
-                return false; //Require at least 1 drone to start a mission
-                if (! SurveyRegionManager::Instance().GetCopyOfActiveRegionData(nullptr, &m_surveyRegion, nullptr))
-                    return false; //No active survey region
-                    m_dronesUnderCommand.clear();
-                    for (std::string serial : LowFlierSerials) {
-                        DroneInterface::Drone * ptr = DroneInterface::DroneManager::Instance().GetDrone(serial);
-                        if (ptr != nullptr) {
-                            m_dronesUnderCommand.push_back(ptr);
-                            VehicleControlWidget::Instance().StopCommandingDrone(serial);
-                        }
-                    }
-                    if (m_dronesUnderCommand.size() == LowFlierSerials.size()) {
-                        m_running = true;
-                        m_missionPrepDone = false; //This will trigger the pre-planning work that needs to happen for a new mission
-                        return true;
-                    }
-                    else
-                        return false;
+        if (LowFlierSerials.empty())
+            return false; //Require at least 1 drone to start a mission
+        if (! SurveyRegionManager::Instance().GetCopyOfActiveRegionData(nullptr, &m_surveyRegion, nullptr))
+            return false; //No active survey region
+        m_ImagingReqs = Reqs;
+        m_dronesUnderCommand.clear();
+        for (std::string serial : LowFlierSerials) {
+            DroneInterface::Drone * ptr = DroneInterface::DroneManager::Instance().GetDrone(serial);
+            if (ptr != nullptr) {
+                m_dronesUnderCommand.push_back(ptr);
+                VehicleControlWidget::Instance().StopCommandingDrone(serial);
+            }
+        }
+        if (m_dronesUnderCommand.size() == LowFlierSerials.size()) {
+            m_running = true;
+            m_missionPrepDone = false; //This will trigger the pre-planning work that needs to happen for a new mission
+            return true;
+        }
+        else
+            return false;
     }
 
     //Add a drone to the collection of low fliers and start commanding it

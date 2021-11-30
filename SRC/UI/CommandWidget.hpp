@@ -90,6 +90,10 @@ class CommandWidget {
 		bool  m_CheckAvoidanceZones = true;
 		
 		std::vector<bool> m_useDroneFlags;
+		float m_missionHAG_Feet = 150.0f;
+		float m_missionSpeed_mph = 33.6f;
+		float m_missionSidelapPercentage = 75.0f;
+		float m_missionLowFlierHFOV_Deg = 35.0f;
 		
 		float ContentHeight; //Height of widget content from last draw pass
 		float RecommendedHeight; //Recommended height for widget
@@ -373,6 +377,7 @@ inline void CommandWidget::Draw() {
 							MyGui::HeaderLabel("New Mission");
 						}
 						ImGui::Text("Survey Region: %s", activeSurveyRegion->m_Name.c_str());
+						ImGui::NewLine();
 						
 						bool atLeast1DroneSelected = false;
 						for (size_t n = 0U; n < availableDroneSerials.size(); n++) {
@@ -383,7 +388,15 @@ inline void CommandWidget::Draw() {
 							m_useDroneFlags[n] = flag;
 							atLeast1DroneSelected = atLeast1DroneSelected || flag;
 						}
+
+						//Mission Parameters
+						ImGui::NewLine();
+						ImGui::DragFloat("Height Above Ground##Drag", &m_missionHAG_Feet,          0.25f, 20.0f, 400.0f, "%.0f (feet)");
+						ImGui::DragFloat("Speed##Drag",               &m_missionSpeed_mph,         0.05f, 1.0f,  33.6f, "%.1f (mph)");
+						ImGui::DragFloat("Sidelap##Drag",             &m_missionSidelapPercentage, 0.1f,  0.0f,  99.5f, "%.1f (%%)");
+						ImGui::DragFloat("Sensor HFOV##Drag",         &m_missionLowFlierHFOV_Deg,  0.05f, 1.0f,  179.0f, "%.0f (Degrees)");
 						
+						ImGui::NewLine();
 						if (ImGui::BeginMenu("Start Mission", atLeast1DroneSelected)) {
 							if (ImGui::MenuItem("Confirm Command", NULL, false, true)) {
 								//std::cerr << "Starting Mission!\r\n";
@@ -394,7 +407,15 @@ inline void CommandWidget::Draw() {
 									if (m_useDroneFlags[n])
 										serialsToCommand.push_back(availableDroneSerials[n]);
 								}
-								Guidance::GuidanceEngine::Instance().StartSurvey(serialsToCommand);
+
+								double PI = 3.14159265358979;
+								Guidance::ImagingRequirements ImagingReqs;
+								ImagingReqs.HAG = double(m_missionHAG_Feet) * 0.3048;
+								ImagingReqs.TargetSpeed = double(m_missionSpeed_mph) * 0.44704;
+								ImagingReqs.SidelapFraction = std::clamp(double(m_missionSidelapPercentage)/100.0, 0.0, 1.0);
+								ImagingReqs.HFOV = m_missionLowFlierHFOV_Deg * PI/180.0;
+
+								Guidance::GuidanceEngine::Instance().StartSurvey(serialsToCommand, ImagingReqs);
 							}
 							ImGui::EndMenu();
 						}
@@ -403,10 +424,34 @@ inline void CommandWidget::Draw() {
 			}
 			else {
 				//UI for a mission in progress
+
+				ImGui::NewLine();
+				float col2Start = ImGui::CalcTextSize("Height Above Ground:  ").x;
+				ImGui::TextDisabled(" ------- Mission Parameters ------- ");
+				ImGui::TextDisabled("Height Above Ground:");
+				ImGui::SameLine(col2Start);
+				ImGui::TextDisabled("%.0f feet", m_missionHAG_Feet);
+
+				ImGui::TextDisabled("Speed:");
+				ImGui::SameLine(col2Start);
+				ImGui::TextDisabled("%.1f mph", m_missionSpeed_mph);
+
+				ImGui::TextDisabled("Sidelap:");
+				ImGui::SameLine(col2Start);
+				ImGui::TextDisabled("%.1f %%", m_missionSidelapPercentage);
+
+				ImGui::TextDisabled("Sensor HFOV:");
+				ImGui::SameLine(col2Start);
+				ImGui::TextDisabled("%.0f Degrees", m_missionLowFlierHFOV_Deg);
+
 				ImGui::NewLine();
 				if (ImGui::BeginMenu("Stop Mission (Drones Hover)")) {
-					if (ImGui::MenuItem("Confirm Command", NULL, false, true))
+					if (ImGui::MenuItem("Confirm Command", NULL, false, true)) {
+						std::vector<std::string> serials = Guidance::GuidanceEngine::Instance().GetSerialsOfDronesUnderCommand();
+						for (std::string serial : serials)
+							Guidance::GuidanceEngine::Instance().RemoveLowFlier(serial);
 						VehicleControlWidget::Instance().AllDronesStopAndHover();
+					}
 					ImGui::EndMenu();
 				}
 			}
