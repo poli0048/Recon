@@ -423,7 +423,7 @@ namespace Guidance {
 			    ImagingReqs.SidelapFraction = 0.7;
 			    double TargetFlightTime = 100;
 
-				PlanMission(tempPolyCollection, Mission, ImagingReqs);
+				PlanMission(m_surveyRegion, Mission, ImagingReqs);
                 	m_dronesUnderCommand[0]->ExecuteWaypointMission(Mission);
 				m_missionPrepDone = true; //Mark the prep work as done
 			}
