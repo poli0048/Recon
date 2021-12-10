@@ -48,17 +48,17 @@ namespace DroneInterface {
 	//The classes that follow implement packets specified in the ICD. For precise definitions of each field, refer to the ICD
 	class Packet_CoreTelemetry {
 		public:
-			uint8_t IsFlying;
-			double  Latitude;
-			double  Longitude;
-			double  Altitude;
-			double  HAG;
-			float   V_N;
-			float   V_E;
-			float   V_D;
-			double  Yaw;
-			double  Pitch;
-			double  Roll;
+			uint8_t IsFlying;  //=1 if FCS.isFlying is true, =0 if false
+			double  Latitude;  //WGS84 Latitude (Degrees)
+			double  Longitude; //WGS84 Longitude (Degrees)
+			double  Altitude;  //WGS84 Altitude (m)
+			double  HAG;       //Height above takeoff location
+			float   V_N;       //North velocity (m/s)
+			float   V_E;       //East velocity (m/s)
+			float   V_D;       //Down velocity (m/s)
+			double  Yaw;       //Vehicle Yaw (Degrees) - DJI definition
+			double  Pitch;     //Vehicle Pitch (Degrees) - DJI definition
+			double  Roll;      //Vehicle Roll (Degrees) - DJI definition
 			
 			Packet_CoreTelemetry()  = default;
 			~Packet_CoreTelemetry() = default;
@@ -70,16 +70,16 @@ namespace DroneInterface {
 
 	class Packet_ExtendedTelemetry {
 		public:
-			uint16_t GNSSSatCount;
-			uint8_t  GNSSSignal;
-			uint8_t  MaxHeight;
-			uint8_t  MaxDist;
-			uint8_t  BatLevel;
-			uint8_t  BatWarning;
-			uint8_t  WindLevel;
-			uint8_t  DJICam;
-			uint8_t  FlightMode;
-			uint16_t MissionID;
+			uint16_t GNSSSatCount; //Equals FCS.satelliteCount
+			uint8_t  GNSSSignal;   //From FCS.GPSSignalLevel (−1: None, ≥ 0: equals signal level)
+			uint8_t  MaxHeight;    //=1 if FCS.hasReachedMaxFlightHeight is true. =0 if false
+			uint8_t  MaxDist;      //=1 if FCS.hasReachedMaxFlightRadius if true. =0 if false
+			uint8_t  BatLevel;     //Equals DJIBatteryState.chargeRemainingInPercent
+			uint8_t  BatWarning;   //0=No Warning, 1=Warning, 2=Serious Warning
+			uint8_t  WindLevel;    //Wind level. (−1: FCS.windWarning = Unknown, >= 0:equals warning level)
+			uint8_t  DJICam;       //0:No Cam, 1:Cam present but feed off, 2:Cam present and feed on
+			uint8_t  FlightMode;   //Based on FCS.flightMode
+			uint16_t MissionID;    //Mission ID for current waypoint mission
 			std::string DroneSerial;
 			
 			Packet_ExtendedTelemetry()  = default;

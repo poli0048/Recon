@@ -53,6 +53,11 @@ namespace DroneInterface {
 		//Set home location
 		m_HomeLat = Position_LLA(0);
 		m_HomeLon = Position_LLA(1);
+
+		//Initialize Takeoff location
+		m_takeoffLat = std::nan("");
+		m_takeoffLon = std::nan("");
+		m_takeoffAlt = std::nan("");
 		
 		//Start with a full battery
 		m_battLevel = 1.0;
@@ -428,6 +433,16 @@ namespace DroneInterface {
 		std::scoped_lock lock(m_mutex);
 		m_flightMode = 7;
 	}
+
+	bool SimulatedDrone::GetTakeoffPosition(double & Latitude, double & Longitude, double & Altitude) {
+		std::scoped_lock lock(m_mutex);
+		if (std::isnan(m_takeoffLat))
+			return false;
+		Latitude  = m_takeoffLat;
+		Longitude = m_takeoffLon;
+		Altitude  = m_takeoffAlt;
+		return true;
+	}
 	
 	//True: Imagery will be provided at close-to-real-time rate. False: Imagery is provided as fast as possible
 	void SimulatedDrone::SetRealTime(bool Realtime) {
@@ -631,6 +646,14 @@ namespace DroneInterface {
 		double descentRate = 3.2; //Positive number (m/s)
 		double turnRate = 1.2;    //Positive number (rad/s)
 		
+		//If this is our first call with a non-zero flight mode, latch the takeoff position
+		if ((m_flightMode_LastPass == 0) && (m_flightMode > 0)) {
+			m_takeoffLat = m_Lat;
+			m_takeoffLon = m_Lon;
+			m_takeoffAlt = m_Alt;
+		}
+		m_flightMode_LastPass = m_flightMode;
+
 		double HAG = m_Alt - m_groundAlt;
 		Eigen::Matrix3d C_ECEF_ENU = latLon_2_C_ECEF_ENU(m_Lat, m_Lon);
 		Eigen::Matrix3d C_ENU_ECEF = C_ECEF_ENU.transpose();
@@ -897,8 +920,6 @@ namespace DroneInterface {
 			if ((P2 - P1).norm() < 0.25)
 				m_flightMode = 6;
 		}
-		
-		
 	}
 	
 	bool SimulatedDrone::ResizeTo720p(cv::Mat & Frame) {
