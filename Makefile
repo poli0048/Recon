@@ -28,8 +28,8 @@ RECON_INCLUDE_FLAGS  = $(RECON_INCLUDE_FLAGS1) $(RECON_INCLUDE_FLAGS2) $(RECON_I
 # ****************************   Set C++ Standard, profiling and linker trim flags and Defines   ****************************
 STANDARDFLAGS = -std=c++17
 PROFILEFLAGS =
-#PROFILEFLAGS = -pg
-LINKER_TRIM_FLAGS = 
+# PROFILEFLAGS = -pg
+LINKER_TRIM_FLAGS = -Wl,-no-undefined -Wl,--no-as-needed
 #LINKER_TRIM_FLAGS = -Wl,--gc-sections -Wl,--strip-all
 DEFINE_FLAGS = -DGSL_USE_STD_BYTE -DLOADGLFWICON -DIMGUIAPP_USE_FAS -DWITH_ALSA
 
@@ -44,7 +44,7 @@ LINK_FLAGS            = -fdiagnostics-color=auto -static-libstdc++ -static-libgc
                         -Wl,-Bdynamic -lpthread -lm -ldl -luuid -fopenmp \
                         `pkg-config --static --libs freetype2 libcurl gtk+-3.0` ../glfw/Release/src/libglfw3.a `pkg-config --libs opencv4` \
                         -lGL -lGLEW -lGLU \
-                        ../tacopie/build/lib/libtacopie.a -L ../libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/lib/ -ltorch -ltorch_cpu -lc10 \
+                        ../tacopie/build/lib/libtacopie.a -L ../libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/lib/ -lc10_cuda -ltorch -ltorch_cuda -ltorch_cpu -lc10 \
                         '-Wl,-rpath,$$ORIGIN/../../libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/lib' -lasound
 
 # **********************************************   Populate Source File Lists   *********************************************

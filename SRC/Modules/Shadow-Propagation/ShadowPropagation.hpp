@@ -52,8 +52,8 @@ namespace ShadowPropagation {
 			bool              m_running;
 			std::atomic<bool> m_abort;
 			std::mutex        m_mutex;
-			static const int  TARGET_INPUT_LENGTH = 15;
-			static const int  TIME_HORIZON = 15;
+			static const int  TARGET_INPUT_LENGTH = 10;
+			static const int  TIME_HORIZON = 10;
 			static constexpr double OUTPUT_THRESHOLD = 0.4;
 
 			int               m_callbackHandle; //Handle for this objects shadow detection engine callback
@@ -65,10 +65,7 @@ namespace ShadowPropagation {
             torch::jit::script::Module m_module; // TorchScript Model
             torch::Device m_device;
             //std::deque<torch::Tensor> m_prevInputs;
-            std::Edeque<Eigen::MatrixXf> m_inputHist;
-            int counter;
-
-            bool isSaved;
+            std::Edeque<Eigen::MatrixXf> m_inputHist; // Stores previous shadow maps in the form of Eigen::MatrixXf
 			
 			void ModuleMain(void);
 			
@@ -82,8 +79,11 @@ namespace ShadowPropagation {
 			
 			//Constructors and Destructors
 			ShadowPropagationEngine() : m_running(false), m_abort(false), 
+										// By default, select CUDA if the hardware supports it 
 										m_device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU) {
 				m_engineThread = std::thread(&ShadowPropagationEngine::ModuleMain, this);
+
+				// If CUDA is being used, load the CUDA version of the LSTM, otherwise load the CPU version
 				if (m_device.is_cuda()) {
                 	m_module = torch::jit
                         ::load(Handy::Paths::ThisExecutableDirectory().parent_path()
