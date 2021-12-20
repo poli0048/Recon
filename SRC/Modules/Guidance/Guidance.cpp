@@ -763,13 +763,79 @@ namespace Guidance {
     //SubregionMissions   - Input  - A vector of drone Missions - Element n is the mission for sub-region n.
     //DroneStartPositions - Input  - Element k is the starting position of drone k
     //Sequences           - Output - Element k is a vector of sub-region indices to task drone k to (in order)
-    void SelectSubregionSequnces(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
+    void SelectSubregionSequences(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
                                  std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::vector<std::vector<int>> & Sequences) {
-        //TODO
-        Sequences.clear();
+        
+        // Naive Approach 1: Always choose the minDist subregion (that has not already been assigned) as the next subregion to fly to in the sequence
+        
+        // n is the number of subregions and k is the number of drones.
+        // For n vertices, calculate the time remaining to start the subregion (i.e., lowest margin + time to fly from subregion starting point to location where lowest margin takes place)
+        // For n(n-1) / 2 + k * n edges, calculate time between each vertex using EstimateMissionTime.
+
+        // At each step, assignments should minimize the sum of the time (experiment with different rounding precisions; start with 1) it takes for 
+        // each drone to get to their assigned subregion starting point as well as minimize the margin within this set. No assignments should overlap.
+
+        std::vector<bool> remainingStartPoints(SubregionMissions.size(), true); // true if not yet traveled to, false if already traveled to or time available exceeded
+        std::vector<int> timeRemainingToStart(SubregionMissions.size(), -1);;
+        std::vector<std::vector<int>> timeToEachStartingPosition(DroneStartPositions.size(), std::vector<int>(SubregionMissions.size(), -1)); // need to initialize?
+        int startTime = 0;
+        int currentTime = 0;
+        double targetSpeed = 10;
+
+        for (int i = 0; i < SubregionMissions.size(); i++) {
+            double margin;
+            DroneInterface::Waypoint lowestMarginPosition; // populate this during IsPredictedToFinishWithoutShadows
+            bool willFinish = IsPredictedToFinishWithoutShadows(TA, SubregionMissions[i], 0, std::chrono::steady_clock::now(), margin);
+
+            DroneInterface::WaypointMission startToLowestMarginPosition; // populate this during IsPredictedToFinishWithoutShadows
+
+            if (willFinish) {
+                timeRemainingToStart[i] = margin + EstimateMissionTime(startToLowestMarginPosition); // write even if negative
+            }
+        }
+
+        std::vector<DroneInterface::Waypoint> currentDronePositions = DroneStartPositions; // might need to add copy()
+
+        while (true) {
+            // Eventually use modified version of SelectSubRegion(TA, SubregionMissions, StartPos)
+            for (int n = 0; SubregionMissions.size(); n++) {
+                remainingStartPoints[n] = timeRemainingToStart[n] - currentTime >= 0 ? remainingStartPoints[n] : false;
+                if (remainingStartPoints[n]) {
+                    for (int k = 0; k < currentDronePositions.size(); k++) {
+                        timeToEachStartingPosition[k][n] = EstimateMissionTime(currentDronePositions[k], SubregionMissions[n].Waypoints[0], targetSpeed);
+                    }
+                }
+            }
+
+            // currently doesn't find optimal total
+            for (int k = 0; k < currentDronePositions.size(); k++) {
+                if (std::find(begin(remainingStartPoints), end(remainingStartPoints), true) == end(remainingStartPoints)) {
+                    break;
+                }
+                int minTimeToStartingPosition = timeToEachStartingPosition[k][0];
+                int lowestPositiveMargin = -1;
+                int missionIndex = -1;
+                for (int n = 0; n < SubregionMissions.size(); n++) {
+                    if (remainingStartPoints[n]) {
+                        int timeToStartingPosition = timeToEachStartingPosition[k][n];
+                        int timeToSpare = timeRemainingToStart[n] - currentTime - timeToEachStartingPosition[k][n];
+                        if (timeToStartingPosition < minTimeToStartingPosition) {
+                            minTimeToStartingPosition = timeToStartingPosition;
+                            lowestPositiveMargin = timeToSpare;
+                            missionIndex = n;
+                        } else if (timeToStartingPosition == minTimeToStartingPosition && timeToSpare < lowestPositiveMargin) {
+                            lowestPositiveMargin = timeToSpare;
+                            missionIndex = n;
+                        }
+                    }
+                }
+                remainingStartPoints[missionIndex] = false;
+                Sequences[k].push_back(missionIndex);
+            }
+
+            // advance time
+        }
     }
-
-
 }
 
 

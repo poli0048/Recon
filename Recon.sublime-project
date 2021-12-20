@@ -1,0 +1,36 @@
+{
+    "folders":
+    [
+        {
+            "path": "SRC",
+            "follow_symlinks": true
+        },
+        {
+            "path": "../imgui",
+            "name": "ImGui",
+            "file_exclude_patterns": ["*.filters","*.txt","*.vcxitems","*.ttf","*.natvis","*.md"]
+        },
+        {
+            "path": "../handycpp",
+            "name": "HandyCpp",
+            "file_exclude_patterns": ["*.css","*.txt","*.html","*.natvis","*.md"]
+        }
+    ],
+    "settings":
+    {
+        "tab_size": 5
+    },
+    "build_systems":
+    [
+        {
+            "name": "Recon - Build",
+            "working_dir": "$project_path",
+            "shell_cmd": "make -j8"
+        },
+        {
+            "name": "Recon - Build & Run",
+            "working_dir": "$project_path",
+            "shell_cmd": "/bin/rm -f BIN/Recon; make -j8; ./BIN/Recon"
+        }
+    ]
+}

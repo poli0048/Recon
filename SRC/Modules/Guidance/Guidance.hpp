@@ -164,7 +164,7 @@ namespace Guidance {
 	//SubregionMissions   - Input  - A vector of drone Missions - Element n is the mission for sub-region n.
 	//DroneStartPositions - Input  - Element k is the starting position of drone k
 	//Sequences           - Output - Element k is a vector of sub-region indices to task drone k to (in order)
-	void SelectSubregionSequnces(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
+	void SelectSubregionSequences(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
 	                             std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::vector<std::vector<int>> & Sequences);
 	
 	
