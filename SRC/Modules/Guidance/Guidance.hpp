@@ -33,6 +33,17 @@
 //drone interface module. However, to support algorithm development we also make the lower-level guidance components public so they
 //can be run offline in test benches.
 namespace Guidance {
+	//A struct containing a few parameters typically needed at the same time to define a conventional serpentine waypoint mission.
+	//The SidelapFraction, HAG, and HFOV detirmine the row spacing for passes in a serpentine flight pattern according to equation:
+	//Row spacing = 2 * HAG * tan(0.5 * HFOV) * (1 - SidelapFraction)
+	struct ImagingRequirements {
+		public:
+			double HAG;             //Height Above Ground (m)
+			double TargetSpeed;     //Target speed to fly while imaging (m/s). This is a speed limit- drones will often fly slower than this, e.g. approaching waypoint
+			double SidelapFraction; //0-1: The fraction of the horizontal footprint of an image from one pass that should be visible in an adjacent pass
+			double HFOV;            //Horizontal Field Of View (radians) for the camera on the low-flying drones
+	};
+	
 	//Singleton class for the Guidance system
 	class GuidanceEngine {
 		private:
@@ -50,6 +61,7 @@ namespace Guidance {
 			
 			//Add additional necessary state data to keep track of mission progress, etc.
 			PolygonCollection m_surveyRegion;
+			ImagingRequirements m_ImagingReqs;
 			//other items... e.g. the partition of the survey region, pre-planned waypoint missions for each, a vector of completed sub-regions, etc.
 			
 			inline void ModuleMain(void);
@@ -74,7 +86,7 @@ namespace Guidance {
 			}
 			
 			//Starting a survey mission and adding a drone will automatically instruct the vehicle control to stop commanding the relavent drones
-			bool StartSurvey(std::vector<std::string> const & LowFlierSerials); //Start a survey mission (currently active region) using the given drones
+			bool StartSurvey(std::vector<std::string> const & LowFlierSerials, ImagingRequirements const & Reqs); //Start a survey mission (currently active region) using the given drones
 			bool AddLowFlier(std::string const & Serial); //Add a drone to the collection of low fliers and start commanding it
 			bool RemoveLowFlier(std::string const & Serial); //Stop commanding the drone with the given serial
 			bool IsRunning(void); //Returns true if currently commanding a mission, false otherwise
@@ -88,17 +100,6 @@ namespace Guidance {
 			inline void AbortMission_AllDronesHover(void);
 			inline void AbortMission_AllDronesLandNow(void);
 			inline void AbortMission_AllDronesReturnHomeAndLand(void);
-	};
-	
-	//A struct containing a few parameters typically needed at the same time to define a conventional serpentine waypoint mission.
-	//The SidelapFraction, HAG, and HFOV detirmine the row spacing for passes in a serpentine flight pattern according to equation:
-	//Row spacing = 2 * HAG * tan(0.5 * HFOV) * (1 - SidelapFraction)
-	struct ImagingRequirements {
-		public:
-			double HAG;             //Height Above Ground (m)
-			double TargetSpeed;     //Target speed to fly while imaging (m/s). This is a speed limit- drones will often fly slower than this, e.g. approaching waypoint
-			double SidelapFraction; //0-1: The fraction of the horizontal footprint of an image from one pass that should be visible in an adjacent pass
-			double HFOV;            //Horizontal Field Of View (radians) for the camera on the low-flying drones
 	};
 	
 	// *********************************   Functions needed to support Guidance Engine   *********************************
@@ -411,20 +412,20 @@ namespace Guidance {
 				}
 				*/
 				//std::Evector<PolygonCollection> vectorP;
-			    //vectorP.push_back(tempPolyCollection);
-			    //MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(vectorP);
+				//vectorP.push_back(tempPolyCollection);
+				//MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(vectorP);
 
 
-				ImagingRequirements ImagingReqs;
-			    DroneInterface::WaypointMission Mission;
-			    ImagingReqs.TargetSpeed = 9.39;
-			    ImagingReqs.HAG = 60.96;
-			    ImagingReqs.HFOV = 0.61087;
-			    ImagingReqs.SidelapFraction = 0.7;
-			    double TargetFlightTime = 100;
+				//ImagingRequirements ImagingReqs;
+				DroneInterface::WaypointMission Mission;
+				//ImagingReqs.TargetSpeed = 9.39;
+				//ImagingReqs.HAG = 60.96;
+				//ImagingReqs.HFOV = 0.61087;
+				//ImagingReqs.SidelapFraction = 0.7;
+				//double TargetFlightTime = 100;
 
-				PlanMission(tempPolyCollection, Mission, ImagingReqs);
-                	m_dronesUnderCommand[0]->ExecuteWaypointMission(Mission);
+				PlanMission(m_surveyRegion, Mission, m_ImagingReqs);
+				m_dronesUnderCommand[0]->ExecuteWaypointMission(Mission);
 				m_missionPrepDone = true; //Mark the prep work as done
 			}
 			

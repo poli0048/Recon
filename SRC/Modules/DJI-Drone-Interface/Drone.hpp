@@ -81,6 +81,9 @@ namespace DroneInterface {
         virtual void Hover(void) = 0; //Stop any running missions and leave virtualStick mode (if in it) and hover in place (P mode)
         virtual void LandNow(void) = 0; //Initiate landing sequence immediately at current vehicle location
         virtual void GoHomeAndLand(void) = 0; //Initiate a Return-To-Home sequence that lands the vehicle at it's take-off location
+
+        //Other functions
+        virtual bool GetTakeoffPosition(double & Latitude, double & Longitude, double & Altitude) = 0; //Get position of drones (most recent) takeoff point
         
         //Dev and Testing Methods
         virtual void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG) = 0;
@@ -127,6 +130,8 @@ namespace DroneInterface {
 		void LandNow(void)       override;
 		void GoHomeAndLand(void) override;
 
+		bool GetTakeoffPosition(double & Latitude, double & Longitude, double & Altitude) override;
+
 		//Dev and Testing Methods
 		void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG) override;
 
@@ -161,9 +166,12 @@ namespace DroneInterface {
 		std::vector<uint8_t>     m_buffer;
 		Packet *                 m_packet_fragment = new Packet();
 		
-		std::mutex               m_mutex_B;             //All fields in this block are protected by this mutex
-		Packet_CoreTelemetry     m_packet_ct;           //Data is retrieved from this packet in access methods
-		Packet_ExtendedTelemetry m_packet_et;           //Data is retrieved from this packet in access methods
+		std::mutex               m_mutex_B;                   //All fields in this block are protected by this mutex
+		double                   m_takeoffLat = std::nan(""); //Latched on each takeoff event
+		double                   m_takeoffLon = std::nan(""); //Latched on each takeoff event
+		double                   m_takeoffAlt = std::nan(""); //Latched on each takeoff event
+		Packet_CoreTelemetry     m_packet_ct;                 //Data is retrieved from this packet in access methods
+		Packet_ExtendedTelemetry m_packet_et;                 //Data is retrieved from this packet in access methods
 		TimePoint                m_PacketTimestamp_ct;
 		TimePoint                m_PacketTimestamp_et;
 		TimePoint                m_PacketTimestamp_imagery;
@@ -187,121 +195,125 @@ namespace DroneInterface {
 		Packet_MessageString m_packet_ms;              //Only used in ProcessFullReceivedPacket
 	};
 
-    //The SimulatedDrone class provides an interface to interact with a single virtual/simulated drone.
-    //Imagery is pulled from a video file and dispatched either at real-time speed or as fast as possible, depending on the configuration.
-    //Simulated drones should pretty much work in all supported modes and their dynamics are based on the DJI Inspire 2.
-    //The one notable exception is that we don't simulate the drones smart RTL functionality and they won't auto-land on critical battery.
-    //The battery level will just sit at 0 and the drone will continue to fly normally. This was deliberate to avoid practical limitations
-    //from hindering the testing and development of guidance algorithms.
-    class SimulatedDrone : public Drone {
-    public:
-        SimulatedDrone();
-        SimulatedDrone(std::string Serial, Eigen::Vector3d const & Position_LLA); //Position is Lat (rad), Lon (rad), Alt (m)
-        ~SimulatedDrone();
+	//The SimulatedDrone class provides an interface to interact with a single virtual/simulated drone.
+	//Imagery is pulled from a video file and dispatched either at real-time speed or as fast as possible, depending on the configuration.
+	//Simulated drones should pretty much work in all supported modes and their dynamics are based on the DJI Inspire 2.
+	//The one notable exception is that we don't simulate the drones smart RTL functionality and they won't auto-land on critical battery.
+	//The battery level will just sit at 0 and the drone will continue to fly normally. This was deliberate to avoid practical limitations
+	//from hindering the testing and development of guidance algorithms.
+	class SimulatedDrone : public Drone {
+		public:
+			SimulatedDrone();
+			SimulatedDrone(std::string Serial, Eigen::Vector3d const & Position_LLA); //Position is Lat (rad), Lon (rad), Alt (m)
+			~SimulatedDrone();
 
-        bool Ready(void) override;
+			bool Ready(void) override;
 
-        std::string GetDroneSerial(void) override;
+			std::string GetDroneSerial(void) override;
 
-        bool GetPosition(double & Latitude, double & Longitude, double & Altitude, TimePoint & Timestamp) override;
-        bool GetVelocity(double & V_North, double & V_East, double & V_Down, TimePoint & Timestamp)       override;
-        bool GetOrientation(double & Yaw, double & Pitch, double & Roll, TimePoint & Timestamp)           override;
-        bool GetHAG(double & HAG, TimePoint & Timestamp)                                                  override;
+			bool GetPosition(double & Latitude, double & Longitude, double & Altitude, TimePoint & Timestamp) override;
+			bool GetVelocity(double & V_North, double & V_East, double & V_Down, TimePoint & Timestamp)       override;
+			bool GetOrientation(double & Yaw, double & Pitch, double & Roll, TimePoint & Timestamp)           override;
+			bool GetHAG(double & HAG, TimePoint & Timestamp)                                                  override;
 
-        bool GetVehicleBatteryLevel(double & BattLevel, TimePoint & Timestamp)                   override;
-        bool GetActiveLimitations(bool & MaxHAG, bool & MaxDistFromHome, TimePoint & Timestamp)  override;
-        bool GetActiveWarnings(std::vector<std::string> & ActiveWarnings, TimePoint & Timestamp) override;
-        bool GetGNSSStatus(unsigned int & SatCount, int & SignalLevel, TimePoint & Timestamp)    override;
+			bool GetVehicleBatteryLevel(double & BattLevel, TimePoint & Timestamp)                   override;
+			bool GetActiveLimitations(bool & MaxHAG, bool & MaxDistFromHome, TimePoint & Timestamp)  override;
+			bool GetActiveWarnings(std::vector<std::string> & ActiveWarnings, TimePoint & Timestamp) override;
+			bool GetGNSSStatus(unsigned int & SatCount, int & SignalLevel, TimePoint & Timestamp)    override;
 
-        bool IsDJICamConnected(void)                                                                            override;
-        bool IsCamImageFeedOn(void)                                                                             override;
-        void StartDJICamImageFeed(double TargetFPS)                                                             override;
-        void StopDJICamImageFeed(void)                                                                          override;
-        bool GetMostRecentFrame(cv::Mat & Frame, unsigned int & FrameNumber, TimePoint & Timestamp)             override;
-        int  RegisterCallback(std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)> Callback) override;
-        void UnRegisterCallback(int Handle)                                                                     override;
+			bool IsDJICamConnected(void)                                                                            override;
+			bool IsCamImageFeedOn(void)                                                                             override;
+			void StartDJICamImageFeed(double TargetFPS)                                                             override;
+			void StopDJICamImageFeed(void)                                                                          override;
+			bool GetMostRecentFrame(cv::Mat & Frame, unsigned int & FrameNumber, TimePoint & Timestamp)             override;
+			int  RegisterCallback(std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)> Callback) override;
+			void UnRegisterCallback(int Handle)                                                                     override;
 
-        bool IsCurrentlyFlying(bool & Result, TimePoint & Timestamp)                   override;
-        bool GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp)         override;
-        void ExecuteWaypointMission(WaypointMission & Mission)                         override;
-        bool IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) override;
-        bool GetCurrentWaypointMission(WaypointMission & Mission)                      override;
-        void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command)       override;
-        void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command)       override;
+			bool IsCurrentlyFlying(bool & Result, TimePoint & Timestamp)                   override;
+			bool GetFlightMode(std::string & FlightModeStr, TimePoint & Timestamp)         override;
+			void ExecuteWaypointMission(WaypointMission & Mission)                         override;
+			bool IsCurrentlyExecutingWaypointMission(bool & Result, TimePoint & Timestamp) override;
+			bool GetCurrentWaypointMission(WaypointMission & Mission)                      override;
+			void IssueVirtualStickCommand(VirtualStickCommand_ModeA const & Command)       override;
+			void IssueVirtualStickCommand(VirtualStickCommand_ModeB const & Command)       override;
 
-        void Hover(void)         override;
-        void LandNow(void)       override;
-        void GoHomeAndLand(void) override;
-        
-        //Dev and Testing Methods
-        void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG) override;
-        
-        //SimulatedDrone-specific methods
-        void SetRealTime(bool Realtime); //True: Imagery will be provided at close-to-real-time rate. False: Imagery is provided as fast as possible
-        void SetSourceVideoFile(std::filesystem::path const & VideoPath); //Should be set before calling StartDJICamImageFeed()
-        std::filesystem::path GetSourceVideoFile(void);
-        bool GetReferenceFrame(double SecondsIntoVideo, cv::Mat & Frame); //Get a single frame - will fail if the video feed is running
+			void Hover(void)         override;
+			void LandNow(void)       override;
+			void GoHomeAndLand(void) override;
 
-        static bool ResizeTo720p(cv::Mat & Frame); //Make sure the frame is 720p... resize if needed.
-        static bool Resize_4K_to_720p(cv::Mat & Frame); //Drop a 4K m_frame down to 720p
-        
-    private:
-        std::unordered_map<int, std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)>> m_ImageryCallbacks;
+			bool GetTakeoffPosition(double & Latitude, double & Longitude, double & Altitude) override;
 
-        std::thread       m_MainThread;
-        std::atomic<bool> m_abort;
-        std::mutex        m_mutex; //Lock in each public method for thread safety
+			//Dev and Testing Methods
+			void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG) override;
 
-        //When the video feed is running, a thread is launched to do nothing but read and decode the necessary frames.
-        std::thread       m_VideoProcessingThread;
-        std::atomic<bool> m_VideoProcessingThreadAbort;
-        std::mutex        m_NextFrameMutex;
-        cv::Mat           m_NextFrame;                     //Protected by m_NextFrameMutex
-        bool              m_NextFrameReady = false;        //Protected by m_NextFrameMutex
-        bool              m_VideoFileReadFinished = false; //Protected by m_NextFrameMutex
+			//SimulatedDrone-specific methods
+			void SetRealTime(bool Realtime); //True: Imagery will be provided at close-to-real-time rate. False: Imagery is provided as fast as possible
+			void SetSourceVideoFile(std::filesystem::path const & VideoPath); //Should be set before calling StartDJICamImageFeed()
+			std::filesystem::path GetSourceVideoFile(void);
+			bool GetReferenceFrame(double SecondsIntoVideo, cv::Mat & Frame); //Get a single frame - will fail if the video feed is running
 
-        //Additional State Data
-        std::string m_serial;
-        double m_Lat, m_Lon, m_Alt; //Lat (rad), Lon (rad), alt (m)
-        double m_V_North, m_V_East, m_V_Down; //NED velocity
-        double m_yaw, m_pitch, m_roll; //Radians (DJI definitions)
-        double m_groundAlt; //(m)
-        
-        double m_HomeLat, m_HomeLon;
-        double m_battLevel;
-        int m_targetWaypoint = -1; //Next waypoint (when in waypoint mission mode)
-        //We use m_waypointMissionState to track a state machine that governs the drones behavior in a waypoint mission
-        //States: 0=takeoff, 1=goto waypoint (P2P), 2=pause at waypoint (P2P), 3=turning at waypoint (P2P),
-        //        4=goto waypoint (curved), 5=turn through waypoint (curved)
-        int m_waypointMissionState = -1;
-        TimePoint m_arrivalAtWaypoint_Timestamp;
-        double m_turningSpeedThroughWaypoint;
-        VirtualStickCommand_ModeA m_LastVSCommand_ModeA;
-        VirtualStickCommand_ModeB m_LastVSCommand_ModeB;
-        TimePoint m_LastVSCommand_ModeA_Timestamp;
-        TimePoint m_LastVSCommand_ModeB_Timestamp;
-        TimePoint m_LastPoseUpdate;
+			static bool ResizeTo720p(cv::Mat & Frame); //Make sure the frame is 720p... resize if needed.
+			static bool Resize_4K_to_720p(cv::Mat & Frame); //Drop a 4K m_frame down to 720p
 
-        bool m_realtime = false;
-        std::filesystem::path m_videoPath;
-        double m_targetFPS = -1.0;
-        bool m_imageFeedActive = false;
-        cv::Mat m_Frame;                     //Most recent frame
-        unsigned int m_FrameNumber = 0U;     //Frame number of most recent frame (increments on each *used* frame)
-        TimePoint m_FrameTimestamp;          //Timestamp of most recent frame
-        TimePoint m_VideoFeedStartTimestamp; //Timestamp of start of video feed
-        int m_flightMode = 0;                //-1=Other, 0=On Ground, 1=P, 2=Waypoint, 3=VirtualStick_A, 4=VirtualStick_B, 5=Takeoff, 6=Landing, 7=RTH
-        WaypointMission m_LastMission;       //A copy of the last waypoint mission uploaded to the drone
+		private:
+			std::unordered_map<int, std::function<void(cv::Mat const & Frame, TimePoint const & Timestamp)>> m_ImageryCallbacks;
 
-        void   DroneMain(void);
-        void   UpdateDronePose(void);
-        void   UpdateDrone2DPositionBasedOnVelocity(double deltaT, Eigen::Matrix3d const & C_ENU_ECEF);
-        void   UpdateDroneVertChannelBasedOnTargetHAG(double deltaT, double TargetHAG, double climbRate, double descentRate);
-        double UpdateDroneOrientationBasedOnYawTarget(double deltaT, double TargetYaw, double turnRate);
-        void   Update2DVelocityBasedOnTarget(double deltaT, Eigen::Vector2d const & V_Target_EN, double max2DAcc, double max2DDec, double max2DSpeed);
-        void   ComputeTarget2DVelocityBasedOnTargetPosAndSpeed(double TargetLat, double TargetLon, double TargetMoveSpeed,
-                                                               Eigen::Vector2d & V_Target_EN, Eigen::Matrix3d const & C_ECEF_ENU);
-    };
+			std::thread       m_MainThread;
+			std::atomic<bool> m_abort;
+			std::mutex        m_mutex; //Lock in each public method for thread safety
+
+			//When the video feed is running, a thread is launched to do nothing but read and decode the necessary frames.
+			std::thread       m_VideoProcessingThread;
+			std::atomic<bool> m_VideoProcessingThreadAbort;
+			std::mutex        m_NextFrameMutex;
+			cv::Mat           m_NextFrame;                     //Protected by m_NextFrameMutex
+			bool              m_NextFrameReady = false;        //Protected by m_NextFrameMutex
+			bool              m_VideoFileReadFinished = false; //Protected by m_NextFrameMutex
+
+			//Additional State Data
+			std::string m_serial;
+			double m_Lat, m_Lon, m_Alt; //Lat (rad), Lon (rad), alt (m)
+			double m_V_North, m_V_East, m_V_Down; //NED velocity
+			double m_yaw, m_pitch, m_roll; //Radians (DJI definitions)
+			double m_groundAlt; //(m)
+
+			double m_HomeLat, m_HomeLon;
+			double m_takeoffLat, m_takeoffLon, m_takeoffAlt; //Latched on each takeoff event
+			double m_battLevel;
+			int m_targetWaypoint = -1; //Next waypoint (when in waypoint mission mode)
+			//We use m_waypointMissionState to track a state machine that governs the drones behavior in a waypoint mission
+			//States: 0=takeoff, 1=goto waypoint (P2P), 2=pause at waypoint (P2P), 3=turning at waypoint (P2P),
+			//        4=goto waypoint (curved), 5=turn through waypoint (curved)
+			int m_waypointMissionState = -1;
+			TimePoint m_arrivalAtWaypoint_Timestamp;
+			double m_turningSpeedThroughWaypoint;
+			VirtualStickCommand_ModeA m_LastVSCommand_ModeA;
+			VirtualStickCommand_ModeB m_LastVSCommand_ModeB;
+			TimePoint m_LastVSCommand_ModeA_Timestamp;
+			TimePoint m_LastVSCommand_ModeB_Timestamp;
+			TimePoint m_LastPoseUpdate;
+
+			bool m_realtime = false;
+			std::filesystem::path m_videoPath;
+			double m_targetFPS = -1.0;
+			bool m_imageFeedActive = false;
+			cv::Mat m_Frame;                     //Most recent frame
+			unsigned int m_FrameNumber = 0U;     //Frame number of most recent frame (increments on each *used* frame)
+			TimePoint m_FrameTimestamp;          //Timestamp of most recent frame
+			TimePoint m_VideoFeedStartTimestamp; //Timestamp of start of video feed
+			int m_flightMode = 0;                //-1=Other, 0=On Ground, 1=P, 2=Waypoint, 3=VirtualStick_A, 4=VirtualStick_B, 5=Takeoff, 6=Landing, 7=RTH
+			int m_flightMode_LastPass = 0;       //State on last call to UpdateDronePose()
+			WaypointMission m_LastMission;       //A copy of the last waypoint mission uploaded to the drone
+
+			void   DroneMain(void);
+			void   UpdateDronePose(void);
+			void   UpdateDrone2DPositionBasedOnVelocity(double deltaT, Eigen::Matrix3d const & C_ENU_ECEF);
+			void   UpdateDroneVertChannelBasedOnTargetHAG(double deltaT, double TargetHAG, double climbRate, double descentRate);
+			double UpdateDroneOrientationBasedOnYawTarget(double deltaT, double TargetYaw, double turnRate);
+			void   Update2DVelocityBasedOnTarget(double deltaT, Eigen::Vector2d const & V_Target_EN, double max2DAcc, double max2DDec, double max2DSpeed);
+			void   ComputeTarget2DVelocityBasedOnTargetPosAndSpeed(double TargetLat, double TargetLon, double TargetMoveSpeed,
+			                                                       Eigen::Vector2d & V_Target_EN, Eigen::Matrix3d const & C_ECEF_ENU);
+	};
 
 }
 

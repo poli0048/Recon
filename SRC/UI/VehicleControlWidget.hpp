@@ -53,11 +53,12 @@ class VehicleControlWidget {
 		Eigen::Vector2d                  m_targetLatLon = Eigen::Vector2d(std::nan(""), std::nan("")); //Lat and Lon (radians) of target pos
 		bool                             m_flyAtDeck = false; //When true fly at min safe altitude (overrides m_targetHAGFeet)
 		bool                             m_hazard = false; //True if in hazardous state
-		int                              m_RTLState = -1; //-1 = off, 0 = start RTL (goto RTL_HAG), 1 = 2D Go home, 2 = Drop HAG.
 		float                            m_RTL_HAG = 0.0f; //Should be set before starting RTL sequence
-		Eigen::Vector2d                  m_takeoffLatLon = Eigen::Vector2d(std::nan(""), std::nan("")); //Lat and Lon (radians) of takeoff point
 		bool                             m_LastCommandWasHover = false;
 		bool                             m_AtTargetState = false;
+		bool                             m_AtTargetYaw = false;
+		bool                             m_AtTarget2DPosition = false;
+		bool                             m_AtTargetHAG = false;
 		DroneInterface::Drone::TimePoint m_TimeAtWhichWeReachedTargetState;
 		
 		vehicleState() = default;
@@ -75,6 +76,7 @@ class VehicleControlWidget {
 			m_IconTexture_DroneWithArrow = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_QuadCopterTopViewWithArrow_Light_96x96[0], 96, 96);
 			m_IconTexture_HighlightedDrone = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_QuadCopterTopView_LightHighlighted_84x84[0], 84, 84);
 			m_IconTexture_HighlightedDroneWithArrow = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_QuadCopterTopViewWithArrow_LightHighlighted_96x96[0], 96, 96);
+			m_messageToken = MapWidget::Instance().m_messageBoxOverlay.GetAvailableToken();
 		}
 		~VehicleControlWidget() {
 			ImGuiApp::Instance().DeleteImage(m_IconTexture_Drone);
@@ -103,6 +105,7 @@ class VehicleControlWidget {
 		inline void AllDronesHitTheDeck(void);
 		inline void StopCommandingDrone(std::string const & Serial); //Stop manual control of drone... does nothing if this module was already not commanding the drone
 		inline void AllDronesReturnHomeAndLand(void); //Safe, coordinated RTL for each drone - get all drones on ground ASAP
+		inline bool ReturnHomeSequenceInProgress(void) { return (m_RTL_State >= 0); }
 		
 		//Set/Clear Hazard lets the vehicle control widget decide on how to respond to a hazard instead of requiring the command module to make the call.
 		//This is needed so that the vehicle control widget can react by stopping the vehicle only if it isn't already in a hazardous state. If already in a
@@ -120,10 +123,14 @@ class VehicleControlWidget {
 		std::thread       m_controlThread;
 		std::atomic<bool> m_controlThreadAbort = false;
 		
-		std::mutex m_dronesAndStatesMutex; //Protects m_currentDroneSerials and m_vehicleStates
+		std::mutex m_dronesAndStatesMutex; //Protects fields in this block
 		std::vector<std::string> m_currentDroneSerials; //Updated in Draw()
 		std::unordered_map<std::string, vehicleState> m_vehicleStates;
-		
+		int m_messageToken = -1;
+
+		std::atomic<int> m_RTL_State = -1; //-1 = off, 0 = start RTL (goto RTL_HAG), 1 = 2D Go home, 2 = Drop target drone HAG, 3 = land target drone
+		int m_RTL_NumFlyingDrones = -1; //Used to track RTL progress (only accessed in control thread)
+
 		int m_indexOfDroneWithContextMenuOpen = -1;
 		int m_indexOfDroneUnderDrag = -1;
 		
@@ -152,19 +159,35 @@ class VehicleControlWidget {
 		static inline bool IsDroneHovered(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & drone_ScreenSpace,
 		                                  Eigen::Matrix2d const & R, float IconWidth_pixels);
 		
-		inline void StartManualControl(DroneInterface::Drone & Drone, vehicleState & State, bool FlyAtDeck = false);
-		inline void DroneCommand_Hover(DroneInterface::Drone & Drone, vehicleState & State);
-		inline void DroneCommand_LandNow(DroneInterface::Drone & Drone, vehicleState & State);
-		inline void DroneCommand_GoHomeAndLand(DroneInterface::Drone & Drone, vehicleState & State);
-		inline void LatchTakeoffLocation(DroneInterface::Drone & Drone, vehicleState & State);
+		static inline void StartManualControl(DroneInterface::Drone & Drone, vehicleState & State, bool FlyAtDeck = false);
+		static inline void DroneCommand_Hover(DroneInterface::Drone & Drone, vehicleState & State);
+		static inline void DroneCommand_LandNow(DroneInterface::Drone & Drone, vehicleState & State);
+		static inline void DroneCommand_GoHomeAndLand(DroneInterface::Drone & Drone, vehicleState & State);
 		
 		inline void DrawVideoWindows(void);
 		
 		inline bool TryGetDroneTelemetry(DroneInterface::Drone * Drone, bool & IsFlying, Eigen::Vector3d & DronePos_LLA, Eigen::Vector3d & DronePos_ECEF,
 		                                 Eigen::Vector3d & DroneVel_ENU, double & DroneYaw, double & DroneHAG, double MaxTelAge);
-		inline bool AtTargetState(Eigen::Vector3d const & DronePos_LLA, Eigen::Vector3d const & DronePos_ECEF,
-		                          Eigen::Vector3d const & DroneVel_ENU, double DroneYaw, double DroneHAG, vehicleState const & State);
+		inline void Update_AtTarget_Fields(Eigen::Vector3d const & DronePos_LLA, Eigen::Vector3d const & DronePos_ECEF,
+		                                   Eigen::Vector3d const & DroneVel_ENU, double DroneYaw, double DroneHAG, vehicleState & State);
+		//inline bool AtTargetState(Eigen::Vector3d const & DronePos_LLA, Eigen::Vector3d const & DronePos_ECEF,
+		//                          Eigen::Vector3d const & DroneVel_ENU, double DroneYaw, double DroneHAG, vehicleState const & State);
 		inline void ControlThreadMain(void);
+
+		//Smart RTL Helpers
+		static inline int NumberOfFlyingDrones(std::vector<DroneInterface::Drone *> const & Drones);
+		static inline bool AllFlyingDronesReachedTargetHAG(std::vector<DroneInterface::Drone *> const & Drones,
+		                                                   std::vector<vehicleState *> const & DroneStates);
+		static inline bool AllFlyingDronesReachedTargetPositions2D(std::vector<DroneInterface::Drone *> const & Drones,
+		                                                           std::vector<vehicleState *> const & DroneStates);
+		static inline bool LowestFlyingDroneReachedTargetHAG(std::vector<DroneInterface::Drone *> const & Drones,
+		                                                     std::vector<vehicleState *> const & DroneStates);
+		static inline void AllFlyingDronesSetTargetPositionToTakeoffPoint2D(std::vector<DroneInterface::Drone *> const & Drones,
+		                                                                    std::vector<vehicleState *> const & DroneStates);
+		static inline void AllFlyingDronesStageVerticalyForLanding(std::vector<DroneInterface::Drone *> const & Drones,
+		                                                           std::vector<vehicleState *> const & DroneStates);
+		static inline void LandLowestFlyingDrone(std::vector<DroneInterface::Drone *> const & Drones,
+		                                         std::vector<vehicleState *> const & DroneStates);
 		
 		inline void DrawMission_ManualControl(vehicleState * State, Eigen::Vector2d const & dronePos_ScreenSpace, ImDrawList * DrawList);
 		inline void DrawMission_Waypoints(size_t DroneNum, DroneInterface::Drone * Drone, Eigen::Vector2d const & dronePos_ScreenSpace, ImDrawList * DrawList);
@@ -216,8 +239,41 @@ inline bool VehicleControlWidget::TryGetDroneTelemetry(DroneInterface::Drone * D
 	return true;
 }
 
+//Update the fields: m_AtTargetState, m_AtTargetYaw, m_AtTarget2DPosition, and m_AtTargetHAG of argument "State"
+inline void VehicleControlWidget::Update_AtTarget_Fields(Eigen::Vector3d const & DronePos_LLA, Eigen::Vector3d const & DronePos_ECEF,
+                                                         Eigen::Vector3d const & DroneVel_ENU, double DroneYaw, double DroneHAG, vehicleState & State) {
+	double PI = 3.14159265358979;
+	
+	//Check 2D position (require position to be close and 2D speed to be small)
+	Eigen::Vector3d targetPos_LLA(State.m_targetLatLon(0), State.m_targetLatLon(1), DronePos_LLA(2));
+	Eigen::Vector3d targetPos_ECEF = LLA2ECEF(targetPos_LLA);
+	double posDelta2D = (targetPos_ECEF - DronePos_ECEF).norm();
+	double speed2D = std::sqrt(DroneVel_ENU(0)*DroneVel_ENU(0) + DroneVel_ENU(1)*DroneVel_ENU(1));
+	State.m_AtTarget2DPosition = ((posDelta2D <= 1.0) && (speed2D < 3.0*0.44704));
+	
+	//Check Yaw
+	double yawDelta = State.m_targetYawDeg*PI/180.0 - DroneYaw;
+	yawDelta = fmod(yawDelta, 2*PI);
+	if (yawDelta < 0.0)
+		yawDelta += 2*PI;
+	if (yawDelta > PI)
+		yawDelta = 2*PI - yawDelta;
+	//yawDelta is now the difference between the current and commanded yaw (without sign)
+	State.m_AtTargetYaw = (yawDelta < 5.0*PI/180.0);
+
+	//Check HAG
+	double targetHAG = State.m_targetHAGFeet/3.280839895;
+	State.m_AtTargetHAG = (fabs(DroneHAG - targetHAG) < 1.0);
+	
+	//Update m_AtTargetState
+	bool atStateNow = State.m_AtTarget2DPosition && State.m_AtTargetYaw && State.m_AtTargetHAG;
+	if ((! State.m_AtTargetState) && (atStateNow))
+		State.m_TimeAtWhichWeReachedTargetState = std::chrono::steady_clock::now();
+	State.m_AtTargetState = atStateNow;
+}
+
 //Returns true if a drone is approximately at it's target state (i.e. no additional movement is needed)
-inline bool VehicleControlWidget::AtTargetState(Eigen::Vector3d const & DronePos_LLA, Eigen::Vector3d const & DronePos_ECEF,
+/*inline bool VehicleControlWidget::AtTargetState(Eigen::Vector3d const & DronePos_LLA, Eigen::Vector3d const & DronePos_ECEF,
                                                 Eigen::Vector3d const & DroneVel_ENU, double DroneYaw, double DroneHAG, vehicleState const & State) {
 	double PI = 3.14159265358979;
 	
@@ -250,7 +306,7 @@ inline bool VehicleControlWidget::AtTargetState(Eigen::Vector3d const & DronePos
 		return false;
 	
 	return true;
-}
+}*/
 
 inline void VehicleControlWidget::ControlThreadMain(void) {
 	double approxLoopPeriod  = 0.10; //seconds
@@ -262,19 +318,27 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 	while (! m_controlThreadAbort) {
 		double PI = 3.14159265358979;
 		m_dronesAndStatesMutex.lock();
-		for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
-			std::string serial = m_currentDroneSerials[n];
+		
+		//Get pointers to all valid drones and their corresponding states (touching states as needed)
+		std::vector<DroneInterface::Drone *> drones;       drones.reserve(m_currentDroneSerials.size());
+		std::vector<vehicleState *>          droneStates;  droneStates.reserve(m_currentDroneSerials.size());
+		for (std::string serial : m_currentDroneSerials) {
 			DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(serial);
-			if (drone == nullptr)
+			if (m_vehicleStates.count(serial) == 0U)
+				m_vehicleStates[serial].m_serial = serial;
+			if (drone != nullptr) {
+				drones.push_back(drone);
+				droneStates.push_back(&(m_vehicleStates.at(serial)));
+			}
+		}
+
+		//Iterate over each valid drone and dispatch control commands as needed
+		for (size_t n = 0U; n < drones.size(); n++) {
+			DroneInterface::Drone * drone = drones[n];
+			vehicleState * myState = droneStates[n];
+			if (! myState->m_widgetControlEnabled)
 				continue;
-			
-			//Get reference to vehicle state object - we don't need to check existance; we touch states right after updating serials in the draw loop (while locked)
-			vehicleState & myState(m_vehicleStates.at(serial));
-			if (! myState.m_widgetControlEnabled)
-				continue;
-			
-			//If we get here the drone exists and is under manual control
-			
+
 			//Get current telemetry
 			bool IsFlying;
 			Eigen::Vector3d dronePos_LLA;
@@ -284,46 +348,40 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 			double droneHAG; //meters
 			if (TryGetDroneTelemetry(drone, IsFlying, dronePos_LLA, dronePos_ECEF, droneVel_ENU, droneYaw, droneHAG, 4.0)) {
 				if (IsFlying) {
-					//If we are supposed to fly at the deck, try to update the target HAD
-					if (myState.m_flyAtDeck) {
+					//If we are supposed to fly at the deck, try to update the target HAG
+					if (myState->m_flyAtDeck) {
 						double MSA;
 						Eigen::Vector2d Position_NM = LatLonToNM(Eigen::Vector2d(dronePos_LLA(0), dronePos_LLA(1)));
 						if (Maps::DataTileProvider::Instance()->TryGetData(Position_NM, Maps::DataLayer::MinSafeAltitude, MSA)) {
 							double groundAlt = dronePos_LLA(2) - droneHAG;
 							double minSafeHAG = MSA - groundAlt;
 							double targetHAG = minSafeHAG + 1.0; //Fly 1 meter above MSA to avoid triggering watchdog alarms
-							myState.m_targetHAGFeet = targetHAG*3.280839895;
+							myState->m_targetHAGFeet = targetHAG*3.280839895;
 						}
 					}
 					
-					if (std::isnan(myState.m_targetLatLon(0)) || std::isnan(myState.m_targetLatLon(1))) {
+					if (std::isnan(myState->m_targetLatLon(0)) || std::isnan(myState->m_targetLatLon(1))) {
 						//This shouldn't happen, but in this case we have no target position. Hover
-						if (! myState.m_LastCommandWasHover) {
+						if (! myState->m_LastCommandWasHover) {
 							drone->Hover();
-							myState.m_LastCommandWasHover = true;
+							myState->m_LastCommandWasHover = true;
 						}
 					}
 					else {
 						//Check if we are at our target state and update state fields accordingly
-						if (AtTargetState(dronePos_LLA, dronePos_ECEF, droneVel_ENU, droneYaw, droneHAG, myState)) {
-							if (! myState.m_AtTargetState)
-								myState.m_TimeAtWhichWeReachedTargetState = std::chrono::steady_clock::now();
-							myState.m_AtTargetState = true;
-						}
-						else
-							myState.m_AtTargetState = false;
+						Update_AtTarget_Fields(dronePos_LLA, dronePos_ECEF, droneVel_ENU, droneYaw, droneHAG, *myState);
 						
-						if (myState.m_AtTargetState && (SecondsElapsed(myState.m_TimeAtWhichWeReachedTargetState) > 2.0)) {
+						if (myState->m_AtTargetState && (SecondsElapsed(myState->m_TimeAtWhichWeReachedTargetState) > 2.0)) {
 							//We have been at our target state for enough time - switch to hover
-							if (! myState.m_LastCommandWasHover) {
+							if (! myState->m_LastCommandWasHover) {
 								drone->Hover();
-								myState.m_LastCommandWasHover = true;
+								myState->m_LastCommandWasHover = true;
 							}
 						}
 						else {
 							//We need to command the drone in virtualstick mode - Compute the East-North velocity we need
 							double currentSpeed2D = std::sqrt(droneVel_ENU(0)*droneVel_ENU(0) + droneVel_ENU(1)*droneVel_ENU(1));
-							Eigen::Vector3d targetPos_LLA(myState.m_targetLatLon(0), myState.m_targetLatLon(1), dronePos_LLA(2));
+							Eigen::Vector3d targetPos_LLA(myState->m_targetLatLon(0), myState->m_targetLatLon(1), dronePos_LLA(2));
 							Eigen::Vector3d targetPos_ECEF = LLA2ECEF(targetPos_LLA);
 							Eigen::Vector3d delta_ECEF     = targetPos_ECEF - dronePos_ECEF;
 							Eigen::Matrix3d C_ECEF_ENU     = latLon_2_C_ECEF_ENU(dronePos_LLA(0), dronePos_LLA(1));
@@ -334,7 +392,7 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 							v_EN.normalize();
 							
 							//We will set our East-North velocity to a multiple of v_EN... we just need to scale it appropriately
-							double maxSpeed_mps = myState.m_vehicleSpeedMPH * 0.44704f;
+							double maxSpeed_mps = myState->m_vehicleSpeedMPH * 0.44704f;
 							double maxDecel = 2.5; //m/s/s - measured on Inspire 1
 							double stoppingDist = maxSpeed_mps*maxSpeed_mps / (2.0 * maxDecel);
 							if (distFromTarget > stoppingDist)
@@ -349,13 +407,13 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 							
 							//Execute using Mode A
 							DroneInterface::VirtualStickCommand_ModeA command;
-							command.Yaw     = myState.m_targetYawDeg*PI/180.0;
+							command.Yaw     = myState->m_targetYawDeg*PI/180.0;
 							command.V_North = v_EN(1);
 							command.V_East  = v_EN(0);
-							command.HAG     = myState.m_targetHAGFeet/3.280839895;
+							command.HAG     = myState->m_targetHAGFeet/3.280839895;
 							command.timeout = std::max(2.0, 10.0*approxLoopPeriod);
 							drone->IssueVirtualStickCommand(command);
-							myState.m_LastCommandWasHover = false;
+							myState->m_LastCommandWasHover = false;
 							
 							//Execute using Mode B
 							/*Eigen::Matrix2d C_EN_Vehicle;
@@ -364,13 +422,13 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 							Eigen::Vector2d V_Target_Vehicle = C_EN_Vehicle * v_EN;
 							
 							DroneInterface::VirtualStickCommand_ModeB command;
-							command.Yaw       = myState.m_targetYawDeg*PI/180.0;
+							command.Yaw       = myState->m_targetYawDeg*PI/180.0;
 							command.V_Forward = V_Target_Vehicle(1);
 							command.V_Right   = V_Target_Vehicle(0);
-							command.HAG       = myState.m_targetHAGFeet/3.280839895;
+							command.HAG       = myState->m_targetHAGFeet/3.280839895;
 							command.timeout   = std::max(2.0, 10.0*approxLoopPeriod);
 							drone->IssueVirtualStickCommand(command);
-							myState.m_LastCommandWasHover = false;*/
+							myState->m_LastCommandWasHover = false;*/
 						}
 					}
 				}
@@ -379,10 +437,202 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 				//Don't do anything (like hover) since if the drone is on the ground we would be telling it to take off.
 				std::cerr << "Warning: skipping control command because drone has invalid or old telemetry.\r\n";
 		}
+
+		//Update global RTL state machine
+		if (m_RTL_State >= 0) {
+			//We are undergoing a smart RTL
+			if (NumberOfFlyingDrones(drones) <= 0) {
+				m_RTL_State = -1; //RTL sequence is done
+				MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_messageToken);
+			}
+
+			if (m_RTL_State == 0) {
+				//Goto RTL_HAG
+				//Check whether we have reached target HAGS - when we do... update target positions and advance
+				if (AllFlyingDronesReachedTargetHAG(drones, droneStates)) {
+					AllFlyingDronesSetTargetPositionToTakeoffPoint2D(drones, droneStates);
+					m_RTL_State = 1;
+				}
+			}
+			else if (m_RTL_State == 1) {
+				//Drones are heading home (2D)
+				//Check if they have reached their target 2D positions. When they have... advance
+				if (AllFlyingDronesReachedTargetPositions2D(drones, droneStates)) {
+					AllFlyingDronesStageVerticalyForLanding(drones, droneStates);
+					m_RTL_State = 2;
+				}
+			}
+			else if (m_RTL_State == 2) {
+				//Vertical Staging - bring all drones down
+				//Check if lowest drone has reached staging height... When it has, advance
+				if (LowestFlyingDroneReachedTargetHAG(drones, droneStates)) {
+					m_RTL_NumFlyingDrones = NumberOfFlyingDrones(drones);
+					LandLowestFlyingDrone(drones, droneStates);
+					m_RTL_State = 3;
+				}
+			}
+			else if (m_RTL_State == 3) {
+				//Landing lowest drone
+				//Check to see if it has landed. When it has, goto staging if we have more flying drones. Otherwise we are done
+				int numFlyingDrones = NumberOfFlyingDrones(drones);
+				if (numFlyingDrones < m_RTL_NumFlyingDrones) {
+					AllFlyingDronesStageVerticalyForLanding(drones, droneStates);
+					m_RTL_State = 2;
+				}
+			}
+
+		}
+		//int m_RTL_State = -1; //-1 = off, 0 = start RTL (goto RTL_HAG), 1 = 2D Go home, 2 = Drop target drone HAG, 3 = land target drone
+
+		//TODO
+
+
+
 		m_dronesAndStatesMutex.unlock();
 		
 		std::this_thread::sleep_for(std::chrono::milliseconds(int32_t(approxLoopPeriod*1000.0)));
 	}
+}
+
+inline int VehicleControlWidget::NumberOfFlyingDrones(std::vector<DroneInterface::Drone *> const & Drones) {
+	int numFlyingDrones = 0;
+	for (size_t n = 0U; n < Drones.size(); n++) {
+		bool isFlying;
+		DroneInterface::Drone::TimePoint isFlyingTimestamp;
+		if ((Drones[n]->IsCurrentlyFlying(isFlying, isFlyingTimestamp)) && (SecondsElapsed(isFlyingTimestamp) <= 4.0)) {
+			if (isFlying)
+				numFlyingDrones++;
+		}
+	}
+	return numFlyingDrones;
+}
+
+//Returns true if all flying drones have reached their target HAGs
+inline bool VehicleControlWidget::AllFlyingDronesReachedTargetHAG(std::vector<DroneInterface::Drone *> const & Drones,
+                                                                  std::vector<vehicleState *> const & DroneStates) {
+	for (size_t n = 0U; n < Drones.size(); n++) {
+		bool isFlying;
+		DroneInterface::Drone::TimePoint isFlyingTimestamp;
+		if ((! Drones[n]->IsCurrentlyFlying(isFlying, isFlyingTimestamp)) || (SecondsElapsed(isFlyingTimestamp) > 4.0))
+			isFlying = false;
+
+		if (isFlying) {
+			if (! DroneStates[n]->m_AtTargetHAG)
+				return false;
+		}
+	}
+	return true;
+}
+
+//Returns true if all flying drones have reached their target 2D positions
+inline bool VehicleControlWidget::AllFlyingDronesReachedTargetPositions2D(std::vector<DroneInterface::Drone *> const & Drones,
+                                                                          std::vector<vehicleState *> const & DroneStates) {
+	for (size_t n = 0U; n < Drones.size(); n++) {
+		bool isFlying;
+		DroneInterface::Drone::TimePoint isFlyingTimestamp;
+		if ((! Drones[n]->IsCurrentlyFlying(isFlying, isFlyingTimestamp)) || (SecondsElapsed(isFlyingTimestamp) > 4.0))
+			isFlying = false;
+
+		if (isFlying) {
+			if (! DroneStates[n]->m_AtTarget2DPosition)
+				return false;
+		}
+	}
+	return true;
+}
+
+//Returns true if the flying drone with lowest target HAG has reached it's target HAG and false otherwise
+//Also returns false if there are no flying drones
+inline bool VehicleControlWidget::LowestFlyingDroneReachedTargetHAG(std::vector<DroneInterface::Drone *> const & Drones,
+	                                                               std::vector<vehicleState *> const & DroneStates) {
+	size_t indexOfLowestFlyingDrone = 0U;
+	int numFlyingDrones = 0;
+	for (size_t n = 0U; n < Drones.size(); n++) {
+		bool isFlying;
+		DroneInterface::Drone::TimePoint isFlyingTimestamp;
+		if ((! Drones[n]->IsCurrentlyFlying(isFlying, isFlyingTimestamp)) || (SecondsElapsed(isFlyingTimestamp) > 4.0))
+			isFlying = false;
+
+		if (isFlying) {
+			//Initialize indexOfLowestFlyingDrone if this is the first flying drone
+			if (numFlyingDrones == 0)
+				indexOfLowestFlyingDrone = n;
+			numFlyingDrones++;
+			if (DroneStates[n]->m_targetHAGFeet < DroneStates[indexOfLowestFlyingDrone]->m_targetHAGFeet)
+				indexOfLowestFlyingDrone = n;
+		}
+	}
+	if (numFlyingDrones == 0)
+		return false;
+	else
+		return DroneStates[indexOfLowestFlyingDrone]->m_AtTargetHAG;
+}
+
+inline void VehicleControlWidget::AllFlyingDronesSetTargetPositionToTakeoffPoint2D(std::vector<DroneInterface::Drone *> const & Drones,
+                                                                                   std::vector<vehicleState *> const & DroneStates) {
+	for (size_t n = 0U; n < Drones.size(); n++) {
+		bool isFlying;
+		DroneInterface::Drone::TimePoint isFlyingTimestamp;
+		if ((! Drones[n]->IsCurrentlyFlying(isFlying, isFlyingTimestamp)) || (SecondsElapsed(isFlyingTimestamp) > 4.0))
+			isFlying = false;
+
+		if (isFlying) {
+			double takeoffLat, takeoffLon, takeoffAlt;
+			if (Drones[n]->GetTakeoffPosition(takeoffLat, takeoffLon, takeoffAlt))
+				DroneStates[n]->m_targetLatLon << takeoffLat, takeoffLon;
+			else
+				std::cerr << "Error: Can't command flying drone home since it's takeoff location is unknown.\r\n";
+		}
+	}
+}
+
+//Bring all drones down in height, with the lowest drone at the desired height for starting the landing sequence
+inline void VehicleControlWidget::AllFlyingDronesStageVerticalyForLanding(std::vector<DroneInterface::Drone *> const & Drones,
+                                                                          std::vector<vehicleState *> const & DroneStates) {
+	std::vector<vehicleState *> flyingDroneStates;
+	float minTargetHAG_Feet = std::nanf("");
+	for (size_t n = 0U; n < Drones.size(); n++) {
+		bool isFlying;
+		DroneInterface::Drone::TimePoint isFlyingTimestamp;
+		if ((! Drones[n]->IsCurrentlyFlying(isFlying, isFlyingTimestamp)) || (SecondsElapsed(isFlyingTimestamp) > 4.0))
+			isFlying = false;
+
+		if (isFlying) {
+			flyingDroneStates.push_back(DroneStates[n]);
+			if (std::isnan(minTargetHAG_Feet))
+				minTargetHAG_Feet = DroneStates[n]->m_targetHAGFeet;
+			else
+				minTargetHAG_Feet = std::min(minTargetHAG_Feet, DroneStates[n]->m_targetHAGFeet);
+		}
+	}
+	for (vehicleState * state : flyingDroneStates)
+		state->m_targetHAGFeet -= (minTargetHAG_Feet - 50.0f);
+}
+
+//Start landing the flying drone with the lowest target HAG
+inline void VehicleControlWidget::LandLowestFlyingDrone(std::vector<DroneInterface::Drone *> const & Drones,
+                                                        std::vector<vehicleState *> const & DroneStates) {
+	size_t indexOfLowestFlyingDrone = 0U;
+	int numFlyingDrones = 0;
+	for (size_t n = 0U; n < Drones.size(); n++) {
+		bool isFlying;
+		DroneInterface::Drone::TimePoint isFlyingTimestamp;
+		if ((! Drones[n]->IsCurrentlyFlying(isFlying, isFlyingTimestamp)) || (SecondsElapsed(isFlyingTimestamp) > 4.0))
+			isFlying = false;
+
+		if (isFlying) {
+			//Initialize indexOfLowestFlyingDrone if this is the first flying drone
+			if (numFlyingDrones == 0)
+				indexOfLowestFlyingDrone = n;
+			numFlyingDrones++;
+			if (DroneStates[n]->m_targetHAGFeet < DroneStates[indexOfLowestFlyingDrone]->m_targetHAGFeet)
+				indexOfLowestFlyingDrone = n;
+		}
+	}
+	if (numFlyingDrones > 0)
+		DroneCommand_LandNow(*(Drones[indexOfLowestFlyingDrone]), *(DroneStates[indexOfLowestFlyingDrone]));
+	else
+		std::cerr << "Warning in VehicleControlWidget::LandLowestFlyingDrone(): No flying drones... nothing to do.\r\n";
 }
 
 inline void VehicleControlWidget::DrawVideoWindows(void) {
@@ -687,6 +937,11 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 				else {
 					//Stop drag event - if in map widget bounds, this is a command to move the drone
 					if (CursorInBounds) {
+						if (m_RTL_State >= 0)
+							std::cerr << "RTL Sequence canceled due to manual drone move command.\r\n";
+						m_RTL_State = -1; //Cancel RTL sequence if in progress
+						MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_messageToken);
+
 						//Set the target location
 						state->m_targetLatLon = NMToLatLon(CursorPos_NM);
 						
@@ -1002,7 +1257,6 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 				if (! isFlying) {
 					if (MyGui::BeginMenu(u8"\uf5b0", labelMargin, "Take off & Hover")) {
 						if (ImGui::MenuItem("Confirm Command", NULL, false, true)) {
-							LatchTakeoffLocation(*drone, *state);
 							DroneCommand_Hover(*drone, *state);
 							StartManualControl(*drone, *state, false);
 							state->m_targetHAGFeet = 50.0;
@@ -1035,14 +1289,10 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 				//TODO - this should be removed once waypoint mission functionality is tested
 				if (ImGui::BeginMenu("Start Waypoint Mission")) {
 					if (ImGui::MenuItem("Short Mission - Point 2 Point")) {
-						if (! isFlying)
-							LatchTakeoffLocation(*drone, *state);
 						state->m_widgetControlEnabled = false;
 						drone->StartSampleWaypointMission(10, false, false, Eigen::Vector2d(5.0, 50.0), 30.0);
 					}
 					if (ImGui::MenuItem("Short Mission - Round Corners")) {
-						if (! isFlying)
-							LatchTakeoffLocation(*drone, *state);
 						state->m_widgetControlEnabled = false;
 						drone->StartSampleWaypointMission(10, true, false, Eigen::Vector2d(5.0, 50.0), 30.0);
 					}
@@ -1060,24 +1310,46 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 
 inline void VehicleControlWidget::AllDronesStopAndHover(void) {
 	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
-	
+	m_RTL_State = -1; //Cancel any RTL in progress
+	MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_messageToken);
+
 	//Iterate through each connected drone and execute the command
 	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
 		DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
 		if (drone == nullptr)
 			continue;
+		
+		//Skip drone if not currently flying
+		bool isFlying = false;
+		DroneInterface::Drone::TimePoint isFlyingTimestamp;
+		if ((! drone->IsCurrentlyFlying(isFlying, isFlyingTimestamp)) || (SecondsElapsed(isFlyingTimestamp) > 5.0))
+			isFlying = false;
+		if (! isFlying)
+			continue;
+
 		StartManualControl(*drone, m_vehicleStates.at(m_currentDroneSerials[n]), false);
 	}
 }
 
 inline void VehicleControlWidget::AllDronesHitTheDeck(void) {
 	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
-	
+	m_RTL_State = -1; //Cancel any RTL in progress
+	MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_messageToken);
+
 	//Iterate through each connected drone and execute the command
 	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
 		DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
 		if (drone == nullptr)
 			continue;
+
+		//Skip drone if not currently flying
+		bool isFlying = false;
+		DroneInterface::Drone::TimePoint isFlyingTimestamp;
+		if ((! drone->IsCurrentlyFlying(isFlying, isFlyingTimestamp)) || (SecondsElapsed(isFlyingTimestamp) > 5.0))
+			isFlying = false;
+		if (! isFlying)
+			continue;
+
 		StartManualControl(*drone, m_vehicleStates.at(m_currentDroneSerials[n]), true);
 	}
 }
@@ -1091,35 +1363,86 @@ inline void VehicleControlWidget::StopCommandingDrone(std::string const & Serial
 
 //Safe, coordinated RTL for each drone - get all drones on ground ASAP
 inline void VehicleControlWidget::AllDronesReturnHomeAndLand(void) {
+	//Step 1 - Stop horizontal motion for all drones.
+	//Step 2 - Get all drones positions and Alts.
+	//Step 3 - Get max of MSA on all lines from each drone to it's respective home point
+	//Step 4 - Assign staggered RTL HAGs that keeps all drones above max MSA
+	//Step 5 - Start RTL sequence for each drone, with corresponding RTL HAG
 	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
 
 	std::cerr << "TODO: RTL Sequence requested.\r\n";
 
-	//Iterate through the connected drones - put each pointer in a vector - also grab state objects (touching if necessary)
+	//Iterate through the connected (flying) drones - put each pointer in a vector - also grab state objects (touching if necessary)
 	//Leave out drones for which GetDrone returns a nullptr so we don't have to constantly check for that later in this function
-	std::vector<DroneInterface::Drone *> drones;       drones.reserve(m_currentDroneSerials.size());
-	std::vector<vehicleState *>          droneStates;  droneStates.reserve(m_currentDroneSerials.size());
+	std::vector<DroneInterface::Drone *> drones;             drones.reserve(m_currentDroneSerials.size());
+	std::vector<vehicleState *>          droneStates;        droneStates.reserve(m_currentDroneSerials.size());
+	std::vector<double>                  droneAlts;          droneAlts.reserve(m_currentDroneSerials.size());
+	std::vector<double>                  droneHomeAlts;      droneHomeAlts.reserve(m_currentDroneSerials.size());
+	std::vector<double>                  droneBattLevels;    droneBattLevels.reserve(m_currentDroneSerials.size());
 	for (std::string serial : m_currentDroneSerials) {
 		DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(serial);
 		if (m_vehicleStates.count(serial) == 0U)
 			m_vehicleStates[serial].m_serial = serial;
 		if (drone != nullptr) {
-			drones.push_back(drone);
-			droneStates.push_back(&(m_vehicleStates.at(serial)));
+			bool isFlying = false;
+			DroneInterface::Drone::TimePoint isFlyingTimestamp;
+			if ((! drone->IsCurrentlyFlying(isFlying, isFlyingTimestamp)) || (SecondsElapsed(isFlyingTimestamp) > 5.0))
+				isFlying = false;
+
+			if (isFlying) {
+				double HAG;
+				DroneInterface::Drone::TimePoint HAGTimestamp;
+				if ((! drone->GetHAG(HAG, HAGTimestamp)) || (SecondsElapsed(HAGTimestamp) > 5.0))
+					HAG = std::nan("");
+
+				double BattLevel;
+				DroneInterface::Drone::TimePoint BattTimestamp;
+				if ((! drone->GetVehicleBatteryLevel(BattLevel, BattTimestamp)) || (SecondsElapsed(BattTimestamp) > 5.0))
+					BattLevel = 0.0; //Default if unknown or old battery data
+
+				double Latitude, Longitude, Altitude;
+				DroneInterface::Drone::TimePoint PositionTimestamp;
+				if ((! drone->GetPosition(Latitude, Longitude, Altitude, PositionTimestamp)) || (SecondsElapsed(PositionTimestamp) > 5.0))
+					Altitude = std::nan("");
+
+				if ((! std::isnan(Altitude)) && (! std::isnan(HAG))) {
+					drones.push_back(drone);
+					droneStates.push_back(&(m_vehicleStates.at(serial)));
+					droneAlts.push_back(Altitude);
+					droneHomeAlts.push_back(Altitude - HAG);
+					droneBattLevels.push_back(BattLevel);
+				}
+				else
+					std::cerr << "Warning in AllDronesReturnHomeAndLand(): Skipping drone with unknown position or HAG.\r\n";
+			}
 		}
+	}
+
+	if (drones.empty()) {
+		std::cerr << "Warning in AllDronesReturnHomeAndLand(): No connected, flying drone. Nothing to do.\r\n";
+		return;
 	}
 
 	//Step 1 - Stop horizontal motion for all drones.
 	for (size_t n = 0U; n < drones.size(); n++)
 		StartManualControl(*(drones[n]), *(droneStates[n]), false);
 
-	//TODO: Possibly wait until all drones have come to a stop at their current target positions
-
 	//Step 2 - Get the max of all MSA values on all lines between drones and their respective home points
 	double maxMSA = std::nan("");
 	for (size_t n = 0U; n < drones.size(); n++) {
+		double takeoffLat, takeoffLon, takeoffAlt;
+		Eigen::Vector2d takeoffLatLon;
+		if (! drones[n]->GetTakeoffPosition(takeoffLat, takeoffLon, takeoffAlt)) {
+			std::cerr << "Dropping drone from alt detirmination because it has no takeoff location.\r\n";
+			continue;
+		}
+		else
+			takeoffLatLon << takeoffLat, takeoffLon;
+
+		//Get endpoints of line between current commanded position and home position (in NM)
 		Eigen::Vector2d PointA_NM = LatLonToNM(droneStates[n]->m_targetLatLon);
-		Eigen::Vector2d PointB_NM = LatLonToNM(droneStates[n]->m_takeoffLatLon);
+		Eigen::Vector2d PointB_NM = LatLonToNM(takeoffLatLon);
+
 		double SampleDist = 1.0; //meters
 		Maps::DataLayer layer = Maps::DataLayer::MinSafeAltitude;
 		double Timeout = 5.0; //seconds
@@ -1140,17 +1463,24 @@ inline void VehicleControlWidget::AllDronesReturnHomeAndLand(void) {
 	std::cerr << "Lowest drone must be above " << maxMSA << " m (WGS84 altitude).\r\n";
 
 	//Step 3 - Assign staggered RTL HAGs that keeps all drones above max MSA
-	//First, find the lowest drone (based on commanded HAG)
-	//size_t lowestDroneIndex = 0;
-	//for (size_t n = 1U; n < drones.size(); n++) {
-	//	if ()
-	//}
+	//We will land the drones in order of their HAGs, so we want the drones sorted by battery level to ensure that the drones
+	//with the lowest battery levels are landed first.
+	std::vector<size_t> idx(drones.size());
+	std::iota(idx.begin(), idx.end(), 0U);
+	std::stable_sort(idx.begin(), idx.end(), [&droneBattLevels](size_t i1, size_t i2) {return droneBattLevels[i1] < droneBattLevels[i2];});
 
-	//Step 1 - Stop horizontal motion for all drones.
-	//Step 2 - Get all drones positions and Alts.
-	//Step 3 - Get max of MSA on all lines from each drone to it's respective home point
-	//Step 4 - Assign staggered RTL HAGs that keeps all drones above max MSA
-	//Step 5 - Start RTL sequence for each drone, with corresponding RTL HAG
+	//Set target HAGs - Lowest drone will be just above maxMSA or 100 feet, whichever is greater. Then start RTL sequences.
+	double RTL_Alt = std::max(maxMSA + 2.0, droneHomeAlts[idx[0]] + 100.0 * 0.3048);
+	for (size_t n : idx) {
+		droneStates[n]->m_targetYawDeg = 0.0f;
+		droneStates[n]->m_RTL_HAG = RTL_Alt - droneHomeAlts[n];
+		droneStates[n]->m_targetHAGFeet = (RTL_Alt - droneHomeAlts[n]) * 3.280839895;
+		droneStates[n]->m_flyAtDeck = false;
+		droneStates[n]->m_vehicleSpeedMPH = 33.6;
+		RTL_Alt += 8.0;
+	}
+	m_RTL_State = 0; //Start the RTL sequence
+	MapWidget::Instance().m_messageBoxOverlay.AddMessage("Warning: RTL Sequence in progress. Abort by issuing a move command to any drone (click and drag it)."s, m_messageToken);
 }
 
 //Set/Clear Hazard lets the vehicle control widget decide on how to respond to a hazard instead of requiring the command module to make the call.
@@ -1253,16 +1583,6 @@ inline void VehicleControlWidget::DroneCommand_GoHomeAndLand(DroneInterface::Dro
 	Drone.GoHomeAndLand();
 }
 
-//Should be called before any event that results in the drone taking off. Saves Lat/Lon for RTL sequence.
-inline void VehicleControlWidget::LatchTakeoffLocation(DroneInterface::Drone & Drone, vehicleState & State) {
-	double Latitude, Longitude, Altitude;
-	DroneInterface::Drone::TimePoint Timestamp;
-	if (Drone.GetPosition(Latitude, Longitude, Altitude, Timestamp) && (SecondsElapsed(Timestamp) < 5.0)) {
-		State.m_takeoffLatLon << Latitude, Longitude;
-		//std::cerr << "Takeoff location latched.\r\n";
-	}
-}
-
 inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Drone & drone) {
 	float labelMargin = 1.5f*ImGui::GetFontSize();
 	std::string popupStrIdentifier = drone.GetDroneSerial() + "-ContextMenu"s;
@@ -1286,7 +1606,6 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 		if (! isFlying) {
 			if (MyGui::BeginMenu(u8"\uf5b0", labelMargin, "Take off & Hover")) {
 				if (ImGui::MenuItem("Confirm Command", NULL, false, true)) {
-					LatchTakeoffLocation(drone, myState);
 					DroneCommand_Hover(drone, myState);
 					StartManualControl(drone, myState, false);
 					myState.m_targetHAGFeet = 50.0;
@@ -1325,14 +1644,10 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 		//TODO - this should be removed once waypoint mission functionality is tested
 		if (ImGui::BeginMenu("Start Waypoint Mission")) {
 			if (ImGui::MenuItem("Short Mission - Point 2 Point")) {
-				if (! isFlying)
-					LatchTakeoffLocation(drone, myState);
 				myState.m_widgetControlEnabled = false;
 				drone.StartSampleWaypointMission(10, false, false, Eigen::Vector2d(5.0, 50.0), 30.0);
 			}
 			if (ImGui::MenuItem("Short Mission - Round Corners")) {
-				if (! isFlying)
-					LatchTakeoffLocation(drone, myState);
 				myState.m_widgetControlEnabled = false;
 				drone.StartSampleWaypointMission(10, true, false, Eigen::Vector2d(5.0, 50.0), 30.0);
 			}

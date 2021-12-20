@@ -235,10 +235,6 @@ inline void GNSSReceiverWindow::Draw() {
 			for (auto const & item : GNSSID_SVID_CN0_Vec)
 				CN0Vec.push_back(std::get<2>(item));
 			
-			ImPlot::SetNextPlotLimitsX(0.0, 52.0, ImGuiCond_Always);
-			ImPlot::SetNextPlotLimitsY(-0.75, double(CN0Vec.size()) - 0.25, ImGuiCond_Always);
-			ImPlot::SetNextPlotTicksX(10.0, 50.0, 9);
-			
 			std::vector<double> Yticks(GNSSID_SVID_CN0_Vec.size());
 			std::vector<std::string> YLabels(GNSSID_SVID_CN0_Vec.size());
 			std::vector<const char *> YLabels_c_str(GNSSID_SVID_CN0_Vec.size());
@@ -256,16 +252,16 @@ inline void GNSSReceiverWindow::Draw() {
 				}
 				YLabels_c_str[n] = YLabels[n].c_str();
 			}
-			ImPlot::SetNextPlotTicksY(&(Yticks[0]), int(Yticks.size()), &(YLabels_c_str[0]));
-			
-			//ImGui:: SliderFloat("PlotPadding", &(ImPlot::GetStyle().PlotPadding.y), 0.0f, 50.0f, "%.0f");
-			//ImGui:: SliderFloat("LabelPadding", &(ImPlot::GetStyle().LabelPadding.y), 0.0f, 50.0f, "%.0f");
-			//ImGui:: SliderFloat("LegendPadding", &(ImPlot::GetStyle().LegendPadding.y), 0.0f, 50.0f, "%.0f");
 			
 			ImPlotStyle & plotStyle(ImPlot::GetStyle());
 			float plotHeight = (Yticks.size() + 2U) * ImGui::GetTextLineHeightWithSpacing() + 2*(plotStyle.PlotPadding.y + plotStyle.LabelPadding.y);
-			ImPlotFlags flags = ImPlotFlags_NoLegend | ImPlotFlags_NoMousePos;
-			if (ImPlot::BeginPlot("C/N0 (dBHz)", NULL, NULL, ImVec2(-1, plotHeight), flags)) {
+			ImPlotFlags flags = ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText;
+			ImPlot::SetNextAxesLimits(0.0, 52.0, -0.75, double(CN0Vec.size()) - 0.25, ImPlotCond_Always);
+			if (ImPlot::BeginPlot("C/N0 (dBHz)", ImVec2(-1, plotHeight), flags)) {
+				ImPlot::SetupAxes("C/N0", "Sat", ImPlotAxisFlags_NoLabel, ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks);
+				ImPlot::SetupAxisTicks(ImAxis_X1, 10.0, 50.0, 9);
+				ImPlot::SetupAxisTicks(ImAxis_Y1, &(Yticks[0]), int(Yticks.size()), &(YLabels_c_str[0]));
+
 				ImVec2 plotPos_SS = ImPlot::GetPlotPos();
 				ImVec2 plotDims_SS = ImPlot::GetPlotSize();
 				float ymin = plotPos_SS.y;

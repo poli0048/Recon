@@ -303,15 +303,27 @@ namespace DroneInterface {
 
 		switch (PID) {
 			case 0U: {
-				std::scoped_lock lock(m_mutex_B);
+				m_mutex_B.lock();
+				bool isFlying_prevState = (this->m_packet_ct_received) && (this->m_packet_ct.IsFlying > 0U);
 				if (this->m_packet_ct.Deserialize(*m_packet_fragment)) {
+					bool isFlying_currentState = (this->m_packet_ct.IsFlying > 0U);
+					if ((! isFlying_prevState) && isFlying_currentState) {
+						std::cout << "Latching takeoff position.\r\n";
+						m_mutex_B.unlock();
+						TimePoint Timestamp;
+						GetPosition(m_takeoffLat, m_takeoffLon, m_takeoffAlt, Timestamp);
+						m_mutex_B.lock();
+					}
+
 					//std::cout << this->m_packet_ct;
 					this->m_packet_ct_received = true;
 					this->m_PacketTimestamp_ct = std::chrono::steady_clock::now();
+					m_mutex_B.unlock();
 					return true;
 				}
 				else {
 					std::cerr << "Error: Tried to deserialize invalid Core Telemetry packet." << std::endl;
+					m_mutex_B.unlock();
 					return false;
 				}
 			}
@@ -684,6 +696,16 @@ namespace DroneInterface {
 		this->SendPacket_EmergencyCommand(2);
 	}
 	
+	bool RealDrone::GetTakeoffPosition(double & Latitude, double & Longitude, double & Altitude) {
+		std::scoped_lock lock(m_mutex_B);
+		if (std::isnan(m_takeoffLat))
+			return false;
+		Latitude  = m_takeoffLat;
+		Longitude = m_takeoffLon;
+		Altitude  = m_takeoffAlt;
+		return true;
+	}
+
 	void RealDrone::StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd,
 	                                           Eigen::Vector2d const & StartOffset_EN, double HAG) {
 		std::cerr << "Starting sample waypoint mission.\r\n";
