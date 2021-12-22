@@ -65,6 +65,15 @@ class GuidanceOverlay {
 		void SetTriangleLabels(std::vector<std::string> const & Labels);
 		void ClearTriangleLabels(void);
 		
+		//Provide the missions planned for each of the components of the partition of the survey region
+		//Item n will be interpereted as the mission that covers component n of the provided partition.
+		void SetMissions(std::vector<DroneInterface::WaypointMission> const & Missions);
+
+
+
+
+
+
 		//Line segments are provided as a vector of tuples. Each tuple is of the form: <Line, thickness, color>
 		//Line is a LineSegment object with coordinates in Normalized Mercator
 		//thickness is the line thickness, in pixels
