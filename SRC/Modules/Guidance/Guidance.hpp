@@ -259,9 +259,9 @@ namespace Guidance {
 				MapWidget::Instance().m_messageBoxOverlay.AddMessage("Wow - A third message from the guidance module!"s, m_MessageToken3);
 				
 				//Create a sample survey region partition to give to the guidance overlay
-				std::Evector<PolygonCollection> Partition;
+				//std::Evector<PolygonCollection> Partition;
 				
-				double PI = 3.14159265358979;
+				/*double PI = 3.14159265358979;
 				std::Evector<Eigen::Vector2d> vertices_NM;
 				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239506, -95.314901)*PI/180.0));
 				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239493, -95.310003)*PI/180.0));
@@ -313,21 +313,21 @@ namespace Guidance {
 				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245036, -95.304892)*PI/180.0));
 				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245449, -95.305398)*PI/180.0));
 				Partition.back().m_components.back().m_holes.emplace_back();
-				Partition.back().m_components.back().m_holes.back().SetBoundary(vertices_NM);
+				Partition.back().m_components.back().m_holes.back().SetBoundary(vertices_NM);*/
 				
-				MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
+				//MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
 				
 				//Create partition labels to give the guidance overlay
-				std::vector<std::string> partitionLabels;
-				for (int n = 0; n < (int) Partition.size(); n++)
-					partitionLabels.push_back(std::to_string(n));
+				//std::vector<std::string> partitionLabels;
+				//for (int n = 0; n < (int) Partition.size(); n++)
+				//	partitionLabels.push_back(std::to_string(n));
 
 
-				MapWidget::Instance().m_guidanceOverlay.SetPartitionLabels(partitionLabels);
+				//MapWidget::Instance().m_guidanceOverlay.SetPartitionLabels(partitionLabels);
 				
 				//Create a sample vector of triangles to give to the guidance overlay
 
-				PolygonCollection tempPolyCollection;
+				/*PolygonCollection tempPolyCollection;
 				vertices_NM.clear();
 				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241568, -95.314818)*PI/180.0));
 				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241568, -95.319818)*PI/180.0));
@@ -335,7 +335,7 @@ namespace Guidance {
 				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243568, -95.314818)*PI/180.0));
 				tempPolyCollection.m_components.emplace_back();
 				tempPolyCollection.m_components.back().m_boundary.SetBoundary(vertices_NM);
-				/*
+				
 				vertices_NM.clear();
 				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239568, -95.314818)*PI/180.0));//
 				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246525, -95.314818)*PI/180.0));//
@@ -417,16 +417,31 @@ namespace Guidance {
 
 
 				//ImagingRequirements ImagingReqs;
-				DroneInterface::WaypointMission Mission;
+				//DroneInterface::WaypointMission Mission;
 				//ImagingReqs.TargetSpeed = 9.39;
 				//ImagingReqs.HAG = 60.96;
 				//ImagingReqs.HFOV = 0.61087;
 				//ImagingReqs.SidelapFraction = 0.7;
 				//double TargetFlightTime = 100;
 
+				std::Evector<PolygonCollection> Partition;
+				PartitionSurveyRegion(m_surveyRegion, Partition, 180.0, m_ImagingReqs);
+
+				DroneInterface::WaypointMission Mission;
 				PlanMission(m_surveyRegion, Mission, m_ImagingReqs);
-				m_dronesUnderCommand[0]->ExecuteWaypointMission(Mission);
+				//m_dronesUnderCommand[0]->ExecuteWaypointMission(Mission);
 				m_missionPrepDone = true; //Mark the prep work as done
+
+				/*std::vector<std::vector<int>> missionSequences;
+				missionSequences.emplace_back();
+				missionSequences.back().push_back(0);
+				missionSequences.back().push_back(1);
+				missionSequences.back().push_back(2);
+				missionSequences.emplace_back();
+				missionSequences.back().push_back(5);
+				missionSequences.back().push_back(4);
+				missionSequences.back().push_back(3);
+				MapWidget::Instance().m_guidanceOverlay.SetDroneMissionSequences(missionSequences);*/
 			}
 			
 			//If we get here we are executing a mission

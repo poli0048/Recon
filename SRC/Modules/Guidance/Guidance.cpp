@@ -719,7 +719,7 @@ namespace Guidance {
                 Mission.Waypoints.push_back(newWayPoint);
             }
         }
-        MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
+        //MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
     }
 
     //5 - Take a Time Available function, a waypoint mission, and a progress indicator (where in the mission you are) and detirmine whether or not the drone
