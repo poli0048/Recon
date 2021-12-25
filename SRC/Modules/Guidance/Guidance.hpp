@@ -56,12 +56,22 @@ namespace Guidance {
 			int               m_MessageToken3;
 			
 			bool m_missionPrepDone;
+			bool m_dronesToTask;
+
 			std::vector<DroneInterface::Drone *> m_dronesUnderCommand; //pointers to the drones we are allowed to command for current mission
 			std::unordered_map<std::string, std::tuple<int, DroneInterface::WaypointMission>> m_currentDroneMissions; //Serial -> (missionNum, Mission)
 			
 			//Add additional necessary state data to keep track of mission progress, etc.
 			PolygonCollection m_surveyRegion;
 			ImagingRequirements m_ImagingReqs;
+			std::Evector<PolygonCollection> m_surveyRegionPartition;
+			
+			std::vector<DroneInterface::WaypointMission> m_completedDroneMissions;
+			std::vector<std::vector<int>> m_subregionSequences;
+
+			std::vector<DroneInterface::WaypointMission> m_droneMissions;
+			std::vector<DroneInterface::Waypoint> m_droneStartPositions;
+			std::vector<bool> m_flyingMissionStatus;
 			//other items... e.g. the partition of the survey region, pre-planned waypoint missions for each, a vector of completed sub-regions, etc.
 			
 			inline void ModuleMain(void);
@@ -235,220 +245,4 @@ namespace Guidance {
 		m_currentDroneMissions.clear();
 		m_surveyRegion.Clear();
 	}
-	
-	inline void GuidanceEngine::ModuleMain(void) {
-		while (! m_abort) {
-			m_mutex.lock();
-			if (! m_running) {
-				MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_MessageToken1);
-				MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_MessageToken2);
-				MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_MessageToken3);
-				m_mutex.unlock();
-				std::this_thread::sleep_for(std::chrono::milliseconds(100));
-				continue;
-			}
-			
-			//We are running - see if we have done the prep work yet. If not, do all the initial setup work that needs to be done
-			if (! m_missionPrepDone) {
-				//A - Partition the survey region
-				//B - Compute pre-planned waypoint missions for each sub-region
-				
-				//TEMP - Just for testing the overlay
-				MapWidget::Instance().m_messageBoxOverlay.AddMessage("Error: This is a message from the guidance module!"s, m_MessageToken1);
-				MapWidget::Instance().m_messageBoxOverlay.AddMessage("Warning - Another message from the guidance module!"s, m_MessageToken2);
-				MapWidget::Instance().m_messageBoxOverlay.AddMessage("Wow - A third message from the guidance module!"s, m_MessageToken3);
-				
-				//Create a sample survey region partition to give to the guidance overlay
-				std::Evector<PolygonCollection> Partition;
-				
-				double PI = 3.14159265358979;
-				std::Evector<Eigen::Vector2d> vertices_NM;
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239506, -95.314901)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239493, -95.310003)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.242162, -95.309846)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.242162, -95.314849)*PI/180.0));
-				Partition.emplace_back(); //Create a new element in the partition
-				Partition.back().m_components.emplace_back(); //Add a component to the new element
-				Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
-				
-				vertices_NM.clear();
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.242162, -95.309899)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.242162, -95.314831)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245044, -95.314761)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245019, -95.309846)*PI/180.0));
-				Partition.emplace_back(); //Create a new element in the partition
-				Partition.back().m_components.emplace_back(); //Add a component to the new element
-				Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
-				
-				vertices_NM.clear();
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244970, -95.309858)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244988, -95.314735)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246652, -95.314735)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246634, -95.309884)*PI/180.0));
-				Partition.emplace_back(); //Create a new element in the partition
-				Partition.back().m_components.emplace_back(); //Add a component to the new element
-				Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
-				
-				vertices_NM.clear();
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244194, -95.308155)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245155, -95.306839)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241236, -95.301317)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.240349, -95.302530)*PI/180.0));
-				Partition.emplace_back(); //Create a new element in the partition
-				Partition.back().m_components.emplace_back(); //Add a component to the new element
-				Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
-				
-				//Make the last item in the partition more interesting by adding a second poly component with a hole
-				vertices_NM.clear();
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245247, -95.306569)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243489, -95.304134)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244269, -95.303076)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245913, -95.305528)*PI/180.0));
-				Partition.back().m_components.emplace_back(); //Add a second component to the previous element
-				Partition.back().m_components.back().m_boundary.SetBoundary(vertices_NM);
-				
-				vertices_NM.clear();
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245087, -95.305907)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244714, -95.305375)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245036, -95.304892)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245449, -95.305398)*PI/180.0));
-				Partition.back().m_components.back().m_holes.emplace_back();
-				Partition.back().m_components.back().m_holes.back().SetBoundary(vertices_NM);
-				
-				MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
-				
-				//Create partition labels to give the guidance overlay
-				std::vector<std::string> partitionLabels;
-				for (int n = 0; n < (int) Partition.size(); n++)
-					partitionLabels.push_back(std::to_string(n));
-
-
-				MapWidget::Instance().m_guidanceOverlay.SetPartitionLabels(partitionLabels);
-				
-				//Create a sample vector of triangles to give to the guidance overlay
-
-				PolygonCollection tempPolyCollection;
-				vertices_NM.clear();
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241568, -95.314818)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241568, -95.319818)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243568, -95.319818)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243568, -95.314818)*PI/180.0));
-				tempPolyCollection.m_components.emplace_back();
-				tempPolyCollection.m_components.back().m_boundary.SetBoundary(vertices_NM);
-				/*
-				vertices_NM.clear();
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239568, -95.314818)*PI/180.0));//
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246525, -95.314818)*PI/180.0));//
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.246525, -95.309865)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245743, -95.309865)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245481, -95.312265)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244821, -95.312381)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244752, -95.309884)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244191, -95.309865)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243392, -95.312117)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.242719, -95.312117)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.242281, -95.309865)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.239568, -95.309865)*PI/180.0));
-				tempPolyCollection.m_components.emplace_back();
-				tempPolyCollection.m_components.back().m_boundary.SetBoundary(vertices_NM);
-				vertices_NM.clear();
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241568, -95.314818)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.242568, -95.324818)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243568, -95.314818)*PI/180.0));
-				tempPolyCollection.m_components.emplace_back();
-				tempPolyCollection.m_components.back().m_boundary.SetBoundary(vertices_NM);
-
-
-				vertices_NM.clear();
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.244209, -95.308160)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.245130, -95.306817)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.243331, -95.304286)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241267, -95.301327)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.240332, -95.302515)*PI/180.0));
-				vertices_NM.push_back(LatLonToNM(Eigen::Vector2d(44.241886, -95.304733)*PI/180.0));
-				tempPolyCollection.m_components.emplace_back();
-				tempPolyCollection.m_components.back().m_boundary.SetBoundary(vertices_NM);
-				 */
-				//MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
-                /*
-				std::Evector<Triangle> triangles;
-				tempPolyCollection.Triangulate(triangles);
-				MapWidget::Instance().m_guidanceOverlay.SetTriangles(triangles);
-				
-				//Create triangle labels to give the guidance overlay
-				std::vector<std::string> triangleLabels;
-				for (int n = 0; n < (int) triangles.size(); n++)
-					triangleLabels.push_back(std::to_string(n));
-				MapWidget::Instance().m_guidanceOverlay.SetTriangleLabels(triangleLabels);
-                */
-				//Create some lines and circles (vertices) to give to the guidance overlay
-				/*
-				{
-					std::Evector<std::tuple<LineSegment, float, Eigen::Vector3f>> lineSegments;
-					std::Evector<std::tuple<Eigen::Vector2d, float, Eigen::Vector3f>> circles;
-					
-					float lineThickness = 2.0f;
-					float circleRadius  = 6.5f;
-					Eigen::Vector3f lineColor  (0.0f, 0.8f, 0.0f);
-					Eigen::Vector3f circleColor(0.8f, 0.0f, 0.0f);
-					Eigen::Vector2d vertex1_NM = LatLonToNM(Eigen::Vector2d(44.241080, -95.314821)*PI/180.0);
-					Eigen::Vector2d vertex2_NM = LatLonToNM(Eigen::Vector2d(44.241049, -95.310016)*PI/180.0);
-					lineSegments.push_back(std::make_tuple(LineSegment(vertex1_NM, vertex2_NM), lineThickness, lineColor));
-					circles.push_back(std::make_tuple(vertex1_NM, circleRadius, circleColor));
-					circles.push_back(std::make_tuple(vertex2_NM, circleRadius, circleColor));
-					
-					lineThickness = 4.0f;
-					circleRadius = 7.5f;
-					lineColor << 0.2f, 0.2f, 0.2f;
-					circleColor << 1.0f, 1.0f, 1.0f;
-					vertex1_NM = LatLonToNM(Eigen::Vector2d(44.240509, -95.314010)*PI/180.0);
-					vertex2_NM = LatLonToNM(Eigen::Vector2d(44.242557, -95.311247)*PI/180.0);
-					lineSegments.push_back(std::make_tuple(LineSegment(vertex1_NM, vertex2_NM), lineThickness, lineColor));
-					circles.push_back(std::make_tuple(vertex1_NM, circleRadius, circleColor));
-					circles.push_back(std::make_tuple(vertex2_NM, circleRadius, circleColor));
-					
-					MapWidget::Instance().m_guidanceOverlay.SetLineSegments(lineSegments);
-					MapWidget::Instance().m_guidanceOverlay.SetCircles(circles);
-				}
-				*/
-				//std::Evector<PolygonCollection> vectorP;
-				//vectorP.push_back(tempPolyCollection);
-				//MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(vectorP);
-
-
-				//ImagingRequirements ImagingReqs;
-				DroneInterface::WaypointMission Mission;
-				//ImagingReqs.TargetSpeed = 9.39;
-				//ImagingReqs.HAG = 60.96;
-				//ImagingReqs.HFOV = 0.61087;
-				//ImagingReqs.SidelapFraction = 0.7;
-				//double TargetFlightTime = 100;
-
-				PlanMission(m_surveyRegion, Mission, m_ImagingReqs);
-				m_dronesUnderCommand[0]->ExecuteWaypointMission(Mission);
-				m_missionPrepDone = true; //Mark the prep work as done
-			}
-			
-			//If we get here we are executing a mission
-			//1 - Check to see if we need to do anything. We should do an update if:
-			//   A - There are sub-regions without assigned drones and we have drones without an assigned mission
-			//   B - A commanded drone has finished it's assigned mission
-			//   C - A drone is flying a mission and it looks like it's going to get hit with a shadow before it can finish
-			//If we decide there is no work to do, unlock, snooze and continue
-			
-			//2 - We need to do an update - identify which drones need to be re-assigned
-			//If any drone has finished a mission, mark the sub-region it just flew as finished.
-			//For each drone that needs to be given a mission, select an available sub-region (not already flown and not expected to be hit with shadows)
-			//Upload the corresponding mission for that sub-region and update m_currentDroneMissions.
-			
-			//Unlock and snooze - updates shouldn't need to happen in rapid succession so don't worry about snoozing here
-			m_mutex.unlock();
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-		}
-	}
 }
-
-
-
-
-
