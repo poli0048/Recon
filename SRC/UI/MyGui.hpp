@@ -112,6 +112,27 @@ namespace MyGui {
 		else
 			DrawList->AddText(pos, col, text_begin, text_end);
 	}
+
+	//Add line with triangle at and (a.k.a an arrow) to a draw list. The arrow points from A to B (both given in screen space).
+	inline void AddArrow(ImDrawList * DrawList, ImVec2 const & A, ImVec2 const & B, ImU32 col, float LineThickness, float ArrowWidth) {
+		Eigen::Vector2d P1 = Eigen::Vector2d(A);
+		Eigen::Vector2d P2 = Eigen::Vector2d(B);
+		Eigen::Vector2d v = P2 - P1;
+		if (v.norm() > 1e-2) {
+			v.normalize();
+			Eigen::Matrix2d R;
+			R << 0, -1,
+				1,  0;
+			Eigen::Vector2d w = R*v;
+			Eigen::Vector2d P3 = P2 - ArrowWidth/2.0f*v;
+			Eigen::Vector2d T1 = P2 + ArrowWidth/2.0f*v;
+			Eigen::Vector2d T2 = P3 + ArrowWidth/2.0f*w;
+			Eigen::Vector2d T3 = P3 - ArrowWidth/2.0f*w;
+			
+			DrawList->AddLine(P1, P3, col, LineThickness);
+			DrawList->AddTriangleFilled(T1, T2, T3, col);
+		}
+	}
 }
 
 

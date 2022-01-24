@@ -1,6 +1,6 @@
 #Linux Recon Makefile
 #Author: Bryan Poling
-#Copyright (c) 2020 Sentek Systems, LLC. All rights reserved. 
+#Copyright (c) 2020 Sentek Systems, LLC. All rights reserved.
 
 CC = gcc
 #CC = g++
@@ -17,19 +17,26 @@ else
 	DEBUGFLAGS = -g
 endif
 
+# ****************************************************   LibTorch Flags   ***************************************************
+# The LibTorch pre-built folder should be unpacked to the same directory that contains the Recon folder
+LIBTORCH_FOLDERNAME = libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu
+LIBTORCH_LINKFLAGS  = -ltorch -ltorch_cpu -lc10
+#LIBTORCH_FOLDERNAME = libtorch-cxx11-abi-shared-with-deps-latest
+#LIBTORCH_LINKFLAGS  = -ltorch -ltorch_cuda -ltorch_cpu -lc10 -lc10_cuda
+
 # ****************************************************   Include Paths   ****************************************************
 RECON_INCLUDE_FLAGS1 = -I.. -I../eigen -I../Flexible-Raster-Format -I../imgui -I../restclient-cpp/include -I../cereal/include
-RECON_INCLUDE_FLAGS2 = `pkg-config --cflags freetype2 libcurl gtk+-3.0` -I../glfw/include -I../imgui/examples/libs/gl3w -I../nativefiledialog/src/include
-RECON_INCLUDE_FLAGS3 = -I../libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/include/
-RECON_INCLUDE_FLAGS4 = -I../libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/include/torch/csrc/api/include/ -I../serial/include -I../tacopie/includes
+RECON_INCLUDE_FLAGS2 = `pkg-config --cflags freetype2 libcurl gtk+-3.0 python3` -I../glfw/include -I../imgui/examples/libs/gl3w -I../nativefiledialog/src/include
+RECON_INCLUDE_FLAGS3 = -I../$(LIBTORCH_FOLDERNAME)/libtorch/include/
+RECON_INCLUDE_FLAGS4 = -I../$(LIBTORCH_FOLDERNAME)/libtorch/include/torch/csrc/api/include/ -I../serial/include -I../tacopie/includes
 RECON_INCLUDE_FLAGS5 = -I../soloud/include
 RECON_INCLUDE_FLAGS  = $(RECON_INCLUDE_FLAGS1) $(RECON_INCLUDE_FLAGS2) $(RECON_INCLUDE_FLAGS3) $(RECON_INCLUDE_FLAGS4) $(RECON_INCLUDE_FLAGS5)
 
 # ****************************   Set C++ Standard, profiling and linker trim flags and Defines   ****************************
 STANDARDFLAGS = -std=c++17
 PROFILEFLAGS =
-#PROFILEFLAGS = -pg
-LINKER_TRIM_FLAGS = 
+# PROFILEFLAGS = -pg
+LINKER_TRIM_FLAGS = -Wl,-no-undefined -Wl,--no-as-needed
 #LINKER_TRIM_FLAGS = -Wl,--gc-sections -Wl,--strip-all
 DEFINE_FLAGS = -DGSL_USE_STD_BYTE -DLOADGLFWICON -DIMGUIAPP_USE_FAS -DWITH_ALSA
 
@@ -40,18 +47,16 @@ COMPILE_DEPGEN_FLAGS  = -MT $@ -MMD -MP -MF DEP/$(*F).d
 ELF_FLAGS             = -fdata-sections -ffunction-sections
 COMPILE_FLAGS         = -c -fdiagnostics-color=auto -pthread $(COMPILE_WARNING_FLAGS) $(RECON_INCLUDE_FLAGS) $(COMPILE_DEPGEN_FLAGS) \
                         $(DEBUGFLAGS) $(PROFILEFLAGS) $(LINKER_TRIM_FLAGS) $(DEFINE_FLAGS) $(STANDARDFLAGS) $(OPTFLAGS) $(ELF_FLAGS) `pkg-config --cflags opencv4`
-LINK_FLAGS            = -fdiagnostics-color=auto -static-libstdc++ -static-libgcc -lstdc++ -lstdc++fs \
-                        -Wl,-Bdynamic -lpthread -lm -ldl -luuid -fopenmp \
-                        `pkg-config --static --libs freetype2 libcurl gtk+-3.0` ../glfw/Release/src/libglfw3.a `pkg-config --libs opencv4` \
-                        -lGL -lGLEW -lGLU \
-                        ../tacopie/build/lib/libtacopie.a -L ../libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/lib/ -ltorch -ltorch_cpu -lc10 \
-                        '-Wl,-rpath,$$ORIGIN/../../libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/lib' -lasound
+LINK_FLAGS            = -fdiagnostics-color=auto -static-libstdc++ -static-libgcc -lstdc++ -lstdc++fs -Wl,-Bdynamic -lpthread -lm -ldl -luuid -fopenmp \
+                        `pkg-config --static --libs freetype2 libcurl gtk+-3.0 python3` ../glfw/Release/src/libglfw3.a `pkg-config --libs opencv4` \
+                        -lGL -lGLEW -lGLU ../tacopie/build/lib/libtacopie.a -lasound -L../$(LIBTORCH_FOLDERNAME)/libtorch/lib/ $(LIBTORCH_LINKFLAGS) \
+                        '-Wl,-rpath,$$ORIGIN/../../$(LIBTORCH_FOLDERNAME)/libtorch/lib'
 
 # **********************************************   Populate Source File Lists   *********************************************
 #Populate source files that are part of Recon project
 RECON_SRCFILES = $(wildcard SRC/*.cpp) $(wildcard SRC/UI/*.cpp) $(wildcard SRC/Maps/*.cpp) $(wildcard SRC/Modules/DJI-Drone-Interface/*.cpp) \
                  $(wildcard SRC/Modules/Guidance/*.cpp) $(wildcard SRC/Modules/Shadow-Detection/*.cpp) $(wildcard SRC/Modules/Shadow-Propagation/*.cpp) \
-                 $(wildcard SRC/Modules/GNSS-Receiver/*.cpp)
+                 $(wildcard SRC/Modules/GNSS-Receiver/*.cpp) $(wildcard SRC/Modules/Coverage-planning/Navigation/*.cpp)
 
 #Build list of additional (external) source files.
 EXTERNAL_SRCFILES = ../restclient-cpp/source/connection.cc \
@@ -116,8 +121,8 @@ $(EXTERNAL_OBJFILES):
 
 #Clean build rule    *************************************************************************************
 clean:
-	/bin/rm -r OBJ/*
-	/bin/rm DEP/*.d
+	/bin/rm -f -r OBJ/*
+	/bin/rm -f DEP/*.d
 	/bin/rm -f BIN/Recon
 
 #Dependency file include directive    ********************************************************************

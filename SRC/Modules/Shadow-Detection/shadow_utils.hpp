@@ -110,7 +110,7 @@ inline void create_masked_binary(const int mapRows, const int mapCols, const cv:
 
     for (uint32_t row = 0U; row < (uint32_t) mapRows; row++) {
         for (uint32_t col = 0U; col < (uint32_t) mapCols; col++) {
-	    // Set any pixel with value of 254 to 255
+	    // Set any pixel with value of 255 to 254
 	    if (binary_sampled.at<uchar>(row,col) == 255){
 		//std::cout << "Settting value at " << row << "," << col << " to 254" << std::endl;
 		binary_sampled.at<uchar>(row,col) = 254;

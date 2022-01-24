@@ -432,7 +432,7 @@ namespace Guidance {
 				//m_dronesUnderCommand[0]->ExecuteWaypointMission(Mission);
 				m_missionPrepDone = true; //Mark the prep work as done
 
-				/*std::vector<std::vector<int>> missionSequences;
+				std::vector<std::vector<int>> missionSequences;
 				missionSequences.emplace_back();
 				missionSequences.back().push_back(0);
 				missionSequences.back().push_back(1);
@@ -441,7 +441,7 @@ namespace Guidance {
 				missionSequences.back().push_back(5);
 				missionSequences.back().push_back(4);
 				missionSequences.back().push_back(3);
-				MapWidget::Instance().m_guidanceOverlay.SetDroneMissionSequences(missionSequences);*/
+				MapWidget::Instance().m_guidanceOverlay.SetDroneMissionSequences(missionSequences);
 			}
 			
 			//If we get here we are executing a mission
