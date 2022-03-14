@@ -106,7 +106,7 @@ static bool TestBench0(std::string const & Arg) {
 	std::Evector<LineSegment> InputSegments;
 	InputSegments.emplace_back(Eigen::Vector2d(0.0, 0.0), Eigen::Vector2d(1.0, 0.0));
 	InputSegments.emplace_back(Eigen::Vector2d(0.0, 0.0), Eigen::Vector2d(0.0, 1.0));
-	std::Evector<LineSegment> OutputSegments = BreakAtIntersections(InputSegments);
+	std::Evector<LineSegment> OutputSegments = SanitizeCollectionOfSegments(InputSegments);
 	std::cerr << "Input Segments:\r\n";
 	for (auto const & item : InputSegments)
 		std::cerr << item << "\r\n";
@@ -118,7 +118,7 @@ static bool TestBench0(std::string const & Arg) {
 	InputSegments.clear();
 	InputSegments.emplace_back(Eigen::Vector2d(0.0,  0.0), Eigen::Vector2d(1.0, 0.0));
 	InputSegments.emplace_back(Eigen::Vector2d(0.01, 0.0), Eigen::Vector2d(0.0, 1.0));
-	OutputSegments = BreakAtIntersections(InputSegments);
+	OutputSegments = SanitizeCollectionOfSegments(InputSegments);
 	std::cerr << "Input Segments:\r\n";
 	for (auto const & item : InputSegments)
 		std::cerr << item << "\r\n";
@@ -134,7 +134,7 @@ static bool TestBench0(std::string const & Arg) {
 	InputSegments.emplace_back(Eigen::Vector2d(1.0, -1.0), Eigen::Vector2d(2.0,  1.0));
 	InputSegments.emplace_back(Eigen::Vector2d(2.0,  1.0), Eigen::Vector2d(3.0, -1.0));
 	InputSegments.emplace_back(Eigen::Vector2d(3.0, -1.0), Eigen::Vector2d(3.0,  1.0));
-	OutputSegments = BreakAtIntersections(InputSegments);
+	OutputSegments = SanitizeCollectionOfSegments(InputSegments);
 	std::cerr << "Input Segments:\r\n";
 	for (auto const & item : InputSegments)
 		std::cerr << item << "\r\n";
@@ -156,7 +156,7 @@ static bool TestBench1(std::string const & Arg) {
 	vertices.emplace_back(1.0, 1.0);
 	vertices.emplace_back(0.0, 1.0);
 	poly.SetBoundary(vertices);
-	std::cerr << "Sanitized Simple Polygon:\r\n" << poly << "\r\n";
+	std::cerr << "Sanitized Simple Polygon:\r\n" << poly << "\r\n\r\n";
 	
 	//Test if simple polygon is left unchanged
 	vertices.clear();
@@ -165,7 +165,7 @@ static bool TestBench1(std::string const & Arg) {
 	vertices.emplace_back(1.1, 1.1);
 	vertices.emplace_back(0.1, 0.9);
 	poly.SetBoundary(vertices);
-	std::cerr << "Sanitized Simple Polygon:\r\n" << poly << "\r\n";
+	std::cerr << "Sanitized Simple Polygon:\r\n" << poly << "\r\n\r\n";
 	
 	//Test order reversal of simple polygon
 	vertices.clear();
@@ -175,7 +175,7 @@ static bool TestBench1(std::string const & Arg) {
 	vertices.emplace_back(0.5, 0.0);
 	vertices.emplace_back(0.0, 0.0);
 	poly.SetBoundary(vertices);
-	std::cerr << "Sanitized Simple Polygon:\r\n" << poly << "\r\n";
+	std::cerr << "Sanitized Simple Polygon:\r\n" << poly << "\r\n\r\n";
 	
 	//Test order reversal of simple polygon
 	vertices.clear();
@@ -184,7 +184,7 @@ static bool TestBench1(std::string const & Arg) {
 	vertices.emplace_back(0.0, 0.0);
 	vertices.emplace_back(0.1, 0.9);
 	poly.SetBoundary(vertices);
-	std::cerr << "Sanitized Simple Polygon:\r\n" << poly << "\r\n";
+	std::cerr << "Sanitized Simple Polygon:\r\n" << poly << "\r\n\r\n";
 	
 	//Test tracing for simple self-intersecting polygon
 	vertices.clear();
@@ -194,7 +194,22 @@ static bool TestBench1(std::string const & Arg) {
 	vertices.emplace_back(1.0, 0.0);
 	poly.SetBoundary(vertices);
 	std::cerr << "Sanitized Simple Polygon:\r\n" << poly;
-	std::cerr << "Area: " << poly.GetArea() << "\r\n";
+	std::cerr << "Area: " << poly.GetArea() << "\r\n\r\n";
+
+	//Sanitize polygon with arms enclosing no area (leaf prunning)
+	vertices.clear();
+	vertices.emplace_back(0.0, 0.0);
+	vertices.emplace_back(1.0, 0.0);
+	vertices.emplace_back(2.0, 1.0);
+	vertices.emplace_back(3.0, 1.0);
+	vertices.emplace_back(4.0, 2.0);
+	vertices.emplace_back(3.0, 1.0);
+	vertices.emplace_back(2.0, 1.0);
+	vertices.emplace_back(1.0, 0.0);
+	vertices.emplace_back(1.0, 1.0);
+	vertices.emplace_back(0.0, 1.0);
+	poly.SetBoundary(vertices);
+	std::cerr << "Sanitized Simple Polygon:\r\n" << poly << "\r\n\r\n";
 	
 	//Test winding-number polygon inclusion test
 	Eigen::Vector2d P;
@@ -210,6 +225,130 @@ static bool TestBench1(std::string const & Arg) {
 	std::cerr << "(" << P(0) << ", " << P(1) << ") is " << (poly.ContainsPoint(P) ? "in"s : "not in"s) << " polygon.\r\n";
 	
 	std::cerr << "\r\n";
+
+	//Test sanitization with more complex polygon
+	vertices.clear();
+	vertices.emplace_back(414, 222); vertices.emplace_back(410, 224); vertices.emplace_back(407, 228);
+	vertices.emplace_back(403, 231); vertices.emplace_back(399, 233); vertices.emplace_back(395, 234);
+	vertices.emplace_back(391, 233); vertices.emplace_back(387, 233); vertices.emplace_back(383, 233);
+	vertices.emplace_back(379, 232); vertices.emplace_back(375, 233); vertices.emplace_back(371, 235);
+	vertices.emplace_back(368, 238); vertices.emplace_back(366, 242); vertices.emplace_back(366, 246);
+	vertices.emplace_back(366, 250); vertices.emplace_back(367, 254); vertices.emplace_back(367, 258);
+	vertices.emplace_back(369, 262); vertices.emplace_back(370, 266); vertices.emplace_back(371, 270);
+	vertices.emplace_back(373, 274); vertices.emplace_back(377, 278); vertices.emplace_back(379, 282);
+	vertices.emplace_back(379, 286); vertices.emplace_back(377, 290); vertices.emplace_back(373, 292);
+	vertices.emplace_back(369, 293); vertices.emplace_back(365, 295); vertices.emplace_back(361, 297);
+	vertices.emplace_back(357, 299); vertices.emplace_back(353, 300); vertices.emplace_back(349, 301);
+	vertices.emplace_back(345, 303); vertices.emplace_back(343, 306); vertices.emplace_back(341, 310);
+	vertices.emplace_back(341, 314); vertices.emplace_back(340, 318); vertices.emplace_back(339, 322);
+	vertices.emplace_back(341, 326); vertices.emplace_back(343, 330); vertices.emplace_back(346, 333);
+	vertices.emplace_back(348, 337); vertices.emplace_back(348, 341); vertices.emplace_back(345, 345);
+	vertices.emplace_back(341, 346); vertices.emplace_back(337, 347); vertices.emplace_back(333, 347);
+	vertices.emplace_back(329, 348); vertices.emplace_back(325, 349); vertices.emplace_back(321, 350);
+	vertices.emplace_back(318, 353); vertices.emplace_back(315, 357); vertices.emplace_back(312, 361);
+	vertices.emplace_back(308, 365); vertices.emplace_back(304, 363); vertices.emplace_back(300, 359);
+	vertices.emplace_back(296, 356); vertices.emplace_back(294, 352); vertices.emplace_back(294, 348);
+	vertices.emplace_back(295, 344); vertices.emplace_back(299, 340); vertices.emplace_back(303, 338);
+	vertices.emplace_back(303, 334); vertices.emplace_back(302, 330); vertices.emplace_back(300, 326);
+	vertices.emplace_back(297, 323); vertices.emplace_back(296, 319); vertices.emplace_back(293, 315);
+	vertices.emplace_back(289, 314); vertices.emplace_back(285, 316); vertices.emplace_back(281, 318);
+	vertices.emplace_back(277, 319); vertices.emplace_back(273, 316); vertices.emplace_back(269, 314);
+	vertices.emplace_back(265, 316); vertices.emplace_back(262, 320); vertices.emplace_back(258, 323);
+	vertices.emplace_back(254, 325); vertices.emplace_back(250, 324); vertices.emplace_back(246, 324);
+	vertices.emplace_back(242, 325); vertices.emplace_back(238, 328); vertices.emplace_back(235, 332);
+	vertices.emplace_back(233, 336); vertices.emplace_back(233, 340); vertices.emplace_back(235, 344);
+	vertices.emplace_back(238, 347); vertices.emplace_back(240, 350); vertices.emplace_back(242, 354);
+	vertices.emplace_back(244, 358); vertices.emplace_back(246, 362); vertices.emplace_back(245, 366);
+	vertices.emplace_back(242, 370); vertices.emplace_back(240, 374); vertices.emplace_back(236, 377);
+	vertices.emplace_back(232, 378); vertices.emplace_back(228, 376); vertices.emplace_back(224, 374);
+	vertices.emplace_back(220, 373); vertices.emplace_back(216, 373); vertices.emplace_back(212, 374);
+	vertices.emplace_back(208, 373); vertices.emplace_back(205, 371); vertices.emplace_back(203, 368);
+	vertices.emplace_back(203, 364); vertices.emplace_back(203, 360); vertices.emplace_back(202, 357);
+	vertices.emplace_back(200, 355); vertices.emplace_back(198, 353); vertices.emplace_back(196, 351);
+	vertices.emplace_back(192, 352); vertices.emplace_back(188, 350); vertices.emplace_back(190, 348);
+	vertices.emplace_back(186, 348); vertices.emplace_back(185, 346); vertices.emplace_back(182, 345);
+	vertices.emplace_back(179, 347); vertices.emplace_back(175, 347); vertices.emplace_back(171, 346);
+	vertices.emplace_back(167, 345); vertices.emplace_back(163, 347); vertices.emplace_back(159, 347);
+	vertices.emplace_back(158, 343); vertices.emplace_back(158, 339); vertices.emplace_back(155, 335);
+	vertices.emplace_back(152, 331); vertices.emplace_back(148, 329); vertices.emplace_back(144, 328);
+	vertices.emplace_back(140, 327); vertices.emplace_back(136, 326); vertices.emplace_back(132, 326);
+	vertices.emplace_back(128, 326); vertices.emplace_back(124, 326); vertices.emplace_back(120, 327);
+	vertices.emplace_back(116, 329); vertices.emplace_back(113, 333); vertices.emplace_back(111, 337);
+	vertices.emplace_back(109, 341); vertices.emplace_back(106, 345); vertices.emplace_back(102, 349);
+	vertices.emplace_back(98, 351);  vertices.emplace_back(96, 355);  vertices.emplace_back(96, 359);
+	vertices.emplace_back(96, 363);  vertices.emplace_back(96, 367);  vertices.emplace_back(95, 371);
+	vertices.emplace_back(91, 372);  vertices.emplace_back(87, 371);  vertices.emplace_back(84, 367);
+	vertices.emplace_back(82, 369);  vertices.emplace_back(85, 371);  vertices.emplace_back(86, 374);
+	vertices.emplace_back(88, 377);  vertices.emplace_back(90, 380);  vertices.emplace_back(92, 384);
+	vertices.emplace_back(88, 385);  vertices.emplace_back(91, 387);  vertices.emplace_back(93, 390);
+	vertices.emplace_back(95, 394);  vertices.emplace_back(98, 397);  vertices.emplace_back(101, 399);
+	vertices.emplace_back(105, 400); vertices.emplace_back(109, 402); vertices.emplace_back(113, 405);
+	vertices.emplace_back(114, 409); vertices.emplace_back(112, 412); vertices.emplace_back(114, 414);
+	vertices.emplace_back(118, 418); vertices.emplace_back(122, 422); vertices.emplace_back(126, 424);
+	vertices.emplace_back(130, 424); vertices.emplace_back(134, 425); vertices.emplace_back(136, 429);
+	vertices.emplace_back(140, 427); vertices.emplace_back(144, 427); vertices.emplace_back(148, 428);
+	vertices.emplace_back(152, 430); vertices.emplace_back(156, 429); vertices.emplace_back(160, 426);
+	vertices.emplace_back(164, 423); vertices.emplace_back(167, 420); vertices.emplace_back(171, 417);
+	vertices.emplace_back(175, 416); vertices.emplace_back(179, 416); vertices.emplace_back(183, 417);
+	vertices.emplace_back(186, 419); vertices.emplace_back(190, 419); vertices.emplace_back(191, 423);
+	vertices.emplace_back(191, 427); vertices.emplace_back(192, 431); vertices.emplace_back(195, 428);
+	vertices.emplace_back(191, 424); vertices.emplace_back(191, 420); vertices.emplace_back(193, 416);
+	vertices.emplace_back(197, 414); vertices.emplace_back(201, 414); vertices.emplace_back(205, 414);
+	vertices.emplace_back(209, 414); vertices.emplace_back(212, 417); vertices.emplace_back(215, 421);
+	vertices.emplace_back(218, 425); vertices.emplace_back(221, 429); vertices.emplace_back(223, 433);
+	vertices.emplace_back(227, 435); vertices.emplace_back(231, 436); vertices.emplace_back(234, 439);
+	vertices.emplace_back(238, 440); vertices.emplace_back(242, 440); vertices.emplace_back(246, 441);
+	vertices.emplace_back(250, 443); vertices.emplace_back(253, 447); vertices.emplace_back(255, 451);
+	vertices.emplace_back(257, 455); vertices.emplace_back(261, 459); vertices.emplace_back(264, 463);
+	vertices.emplace_back(268, 466); vertices.emplace_back(272, 469); vertices.emplace_back(276, 471);
+	vertices.emplace_back(280, 473); vertices.emplace_back(284, 472); vertices.emplace_back(288, 470);
+	vertices.emplace_back(291, 466); vertices.emplace_back(294, 462); vertices.emplace_back(297, 458);
+	vertices.emplace_back(301, 455); vertices.emplace_back(305, 452); vertices.emplace_back(309, 451);
+	vertices.emplace_back(311, 447); vertices.emplace_back(312, 443); vertices.emplace_back(315, 439);
+	vertices.emplace_back(318, 435); vertices.emplace_back(322, 434); vertices.emplace_back(326, 432);
+	vertices.emplace_back(330, 430); vertices.emplace_back(333, 428); vertices.emplace_back(334, 424);
+	vertices.emplace_back(335, 420); vertices.emplace_back(337, 416); vertices.emplace_back(340, 413);
+	vertices.emplace_back(344, 411); vertices.emplace_back(348, 410); vertices.emplace_back(352, 409);
+	vertices.emplace_back(356, 407); vertices.emplace_back(360, 406); vertices.emplace_back(364, 405);
+	vertices.emplace_back(368, 405); vertices.emplace_back(372, 404); vertices.emplace_back(376, 404);
+	vertices.emplace_back(380, 403); vertices.emplace_back(384, 403); vertices.emplace_back(388, 402);
+	vertices.emplace_back(392, 401); vertices.emplace_back(396, 399); vertices.emplace_back(400, 397);
+	vertices.emplace_back(404, 395); vertices.emplace_back(408, 392); vertices.emplace_back(412, 391);
+	vertices.emplace_back(416, 390); vertices.emplace_back(420, 389); vertices.emplace_back(424, 389);
+	vertices.emplace_back(428, 389); vertices.emplace_back(432, 388); vertices.emplace_back(436, 386);
+	vertices.emplace_back(438, 383); vertices.emplace_back(440, 379); vertices.emplace_back(441, 375);
+	vertices.emplace_back(441, 371); vertices.emplace_back(442, 367); vertices.emplace_back(442, 363);
+	vertices.emplace_back(442, 359); vertices.emplace_back(442, 355); vertices.emplace_back(442, 351);
+	vertices.emplace_back(442, 347); vertices.emplace_back(442, 343); vertices.emplace_back(444, 339);
+	vertices.emplace_back(446, 335); vertices.emplace_back(450, 331); vertices.emplace_back(454, 329);
+	vertices.emplace_back(458, 327); vertices.emplace_back(462, 326); vertices.emplace_back(466, 325);
+	vertices.emplace_back(470, 325); vertices.emplace_back(474, 325); vertices.emplace_back(478, 324);
+	vertices.emplace_back(482, 321); vertices.emplace_back(485, 319); vertices.emplace_back(486, 315);
+	vertices.emplace_back(487, 311); vertices.emplace_back(489, 307); vertices.emplace_back(490, 303);
+	vertices.emplace_back(491, 299); vertices.emplace_back(488, 295); vertices.emplace_back(486, 291);
+	vertices.emplace_back(484, 287); vertices.emplace_back(483, 283); vertices.emplace_back(482, 279);
+	vertices.emplace_back(481, 275); vertices.emplace_back(480, 271); vertices.emplace_back(478, 267);
+	vertices.emplace_back(476, 263); vertices.emplace_back(474, 259); vertices.emplace_back(472, 255);
+	vertices.emplace_back(471, 251); vertices.emplace_back(471, 247); vertices.emplace_back(472, 243);
+	vertices.emplace_back(472, 239); vertices.emplace_back(470, 235); vertices.emplace_back(466, 231);
+	vertices.emplace_back(462, 230); vertices.emplace_back(458, 230); vertices.emplace_back(457, 234);
+	vertices.emplace_back(453, 237); vertices.emplace_back(449, 237); vertices.emplace_back(445, 235);
+	vertices.emplace_back(441, 233); vertices.emplace_back(437, 231); vertices.emplace_back(433, 230);
+	vertices.emplace_back(429, 228); vertices.emplace_back(425, 225); vertices.emplace_back(421, 223);
+	vertices.emplace_back(417, 222);
+
+	/*cv::Mat canvas(512, 512, CV_8UC3);
+	for (size_t n = 0U; n + 1U < vertices.size(); n++) {
+		cv::Point p1(vertices[n](0), vertices[n](1));
+		cv::Point p2(vertices[n+1](0), vertices[n+1](1));
+		cv::line(canvas, p1, p2, cv::Scalar(255,0,0), 1);
+	}
+	cv::circle(canvas, cv::Point(vertices[255](0), vertices[255](1)), 5, cv::Scalar(0,0,255));
+	cv::imshow("Polygon", canvas);
+	cv::waitKey(10000);*/
+
+
+	poly.SetBoundary(vertices);
 	
 	return true;
 }

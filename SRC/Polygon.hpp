@@ -81,6 +81,12 @@ public:
     //Same as ComputeIntersection, but only returns true if the intersection is not an endpoint for at least one of the segments.
     bool ComputeInteriorIntersection(LineSegment const & Other, Eigen::Vector2d & Intersection, bool & IsInteriorThis, bool & IsInteriorOther) const;
 
+    static bool SanitizeSegments(LineSegment const & A, LineSegment const & B, std::Evector<LineSegment> & Dst);
+
+    static bool HasInteriorOverlap(LineSegment const & A, LineSegment const & B);
+
+    static bool AreEquivalent(LineSegment const & A, LineSegment const & B);
+
     //Tell Cereal which members to serialize (must be public)
     template<class Archive> void serialize(Archive & archive) { archive(m_endpoint1, m_endpoint2); }
 
@@ -160,6 +166,10 @@ public:
 
     //Get the point inside or on the edge of the polygon nearest to the provided point
     Eigen::Vector2d ProjectPoint(Eigen::Vector2d const & Point) const;
+
+    //Get the point on the boundary of the polygon that is nearest to the provided point (and optionally get the closest vertex)
+    Eigen::Vector2d ProjectPointToBoundary(Eigen::Vector2d const & Point) const;
+    Eigen::Vector2d ProjectPointToBoundary(Eigen::Vector2d const & Point, size_t & ClosestVertexIndex) const;
 
     //Test to see if polygon contains a point in its interior (not stable on the boundary)
     bool ContainsPoint(Eigen::Vector2d const & Point) const;
@@ -321,5 +331,5 @@ public:
 
 //Public Utility functions
 //static bool PointsAreColinear(Eigen::Vector2d const & p1, Eigen::Vector2d const & p2, Eigen::Vector2d const & p3);
-std::Evector<LineSegment> BreakAtIntersections(std::Evector<LineSegment> const & InputSegments);
+std::Evector<LineSegment> SanitizeCollectionOfSegments(std::Evector<LineSegment> const & InputSegments);
 

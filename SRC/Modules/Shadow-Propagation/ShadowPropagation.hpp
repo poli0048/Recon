@@ -1,6 +1,6 @@
 //This module provides the main interface for the shadow propagation system
 //Authors: Bryan Poling
-//Copyright (c) 2021 Sentek Systems, LLC. All rights reserved. 
+//Copyright (c) 2021 Sentek Systems, LLC. All rights reserved.
 #pragma once
 
 //System Includes
@@ -13,8 +13,6 @@
 
 //External Includes
 #include <opencv2/opencv.hpp>
-#include "torch/script.h"
-#include "torch/torch.h"
 
 //Project Includes
 #include "../../EigenAliases.h"
@@ -51,63 +49,31 @@ namespace ShadowPropagation {
 		private:
 			std::thread       m_engineThread;
 			std::atomic<bool> m_abort;
-			
-			static const     int   TARGET_INPUT_LENGTH = 10;   //Number of history epochs for bootstrapping LSTM
-			static const     int   TIME_HORIZON        = 10;   //Number of epochs (not necessarily seconds) to predict into future
-			static constexpr float OUTPUT_THRESHOLD    = 0.4f; //Min float value in prediction to be interpreted as shadowing
 
 			//m_mutex protects all variables in this group
 			std::mutex m_mutex;
 			bool m_running;       //Whether the module is currently running or not
-			bool m_Starting;      //Set to true when we start the module to clear old shadow map history
 			int m_callbackHandle; //Handle for this objects shadow detection engine callback
 			std::unordered_map<int, std::function<void(TimeAvailableFunction const & TA)>> m_callbacks;
 			std::Edeque<ShadowDetection::InstantaneousShadowMap> m_unprocessedShadowMaps;
 			TimeAvailableFunction m_TimeAvail; //Most recent time available function
-
-			//This group of fields are only touched in the constructor (before the engine thread starts) and in ModuleMain()
-			torch::jit::script::Module m_module; // TorchScript Model
-			torch::Device m_device;
-			std::Edeque<Eigen::MatrixXf> m_inputHist; // Stores previous shadow maps in the form of Eigen::MatrixXf
-			std::deque<std::chrono::time_point<std::chrono::steady_clock>> m_inputHistTimestamps;
 			
-			void ModuleMain(void);
+			void ModuleMain_LSTM(void);
+			void ModuleMain_ContourFlow(void);
 			
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 			using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
-			//int numImagesProcessed;
-			//int numMicroseconds;
 
         static ShadowPropagationEngine & Instance() { static ShadowPropagationEngine Obj; return Obj; }
 			
 			//Constructors and Destructors
-			ShadowPropagationEngine() : m_abort(false), m_running(false),
-			                            // By default, select CUDA if the hardware supports it 
-			                            m_device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU) {
-				// If CUDA is being used, load the CUDA version of the LSTM, otherwise load the CPU version
-				if (m_device.is_cuda()) {
-					std::cerr << "LibTorch device: CUDA\r\n";
-					m_module = torch::jit
-						::load(Handy::Paths::ThisExecutableDirectory().parent_path()
-						       .string().append("/SRC/Modules/Shadow-Propagation/model_cuda.pt"), m_device);
-				}
-				else {
-					std::cerr << "LibTorch device: CPU\r\n";
-					m_module = torch::jit
-						::load(Handy::Paths::ThisExecutableDirectory().parent_path()
-						       .string().append("/SRC/Modules/Shadow-Propagation/model.pt"), m_device);
-					at::set_num_interop_threads(1); //As far as I can tell, both inter and intra-op parallelism actually slow down
-					at::set_num_threads(1);         //model evaluation while using more CPU. Turn off all LibTorch SMP
-				}
-				m_module.eval();
-				m_engineThread = std::thread(&ShadowPropagationEngine::ModuleMain, this);
+			ShadowPropagationEngine() : m_abort(false), m_running(false) {
+				//m_engineThread = std::thread(&ShadowPropagationEngine::ModuleMain_LSTM, this);
+				m_engineThread = std::thread(&ShadowPropagationEngine::ModuleMain_ContourFlow, this);
 			}
-			~ShadowPropagationEngine() {
-				m_abort = true;
-				if (m_engineThread.joinable())
-					m_engineThread.join();
-			}
+			~ShadowPropagationEngine() { Shutdown(); }
+			inline void Shutdown(void);  //Stop processing and terminate engine thread
 			
 			inline void Start(void);     //Start or restart continuous processing of new shadow maps
 			inline void Stop(void);      //Stop processing
@@ -122,13 +88,18 @@ namespace ShadowPropagation {
 			inline bool GetMostRecentTimeAvailFun(TimeAvailableFunction & TimeAvailFun);
 	};
 
+	inline void ShadowPropagationEngine::Shutdown(void) {
+		m_abort = true;
+		if (m_engineThread.joinable())
+			m_engineThread.join();
+	}
+
 	inline void ShadowPropagationEngine::Start() {
 		std::scoped_lock lock(m_mutex);
 		if (m_running)
 			return;
 
 		m_unprocessedShadowMaps.clear(); //Ditch any old unprocessed data in the buffer
-		m_Starting = true; //Let the module thread know it needs to reset internal state items
 		
 		//Register a callback for handling new shadow maps. Note that our callback just copies the data to a buffer - we don't do any actual
 		//processing here or it would hold up the shadow detection module. The heavy lifting is done in ModuleMain()

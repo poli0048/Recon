@@ -78,17 +78,24 @@ namespace ShadowDetection {
 			std::Evector<ShadowMapHistory> m_History; //Record of all computed shadow maps - add new element when ref frame changes (since registration changes)
 			
 			//These variables can safely be accessed in ProcessFrame without locking since the other methods that modify them fail if module is running
-			cv::Mat m_ReferenceFrame;  //Computed in SetReferenceFrame()
+			cv::Mat m_ReferenceFrame;   //Computed in SetReferenceFrame()
 			std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> m_Fiducials; //Set in SetFiducials() - see method for structure
-			cv::Point3d centroid_ECEF; //Computed in SetFiducials()
-			Eigen::Vector2d center;    //Computed in SetFiducials()
-    			double max_extent;         //Computed in SetFiducials()
-			Eigen::Matrix3d R_cam_ENU; //Computed in SetFiducials()
-    			Eigen::Vector3d t_cam_ENU; //Computed in SetFiducials()
-			struct ocam_model o;       //Set in SetFiducials()
-			cv::Mat ref_descriptors;   //Computed in SetReferenceFrame()
+			Eigen::Vector3d LEAOrigin_ECEF; //Computed in SetFiducials()
+			Eigen::Vector3d ENUOrigin_ECEF; //Computed in SetFiducials()
+			Eigen::Vector2d center;     //Computed in SetFiducials()
+    			double max_extent;          //Computed in SetFiducials()
+			Eigen::Matrix3d R_Cam_ENU;  //Computed in SetFiducials()
+    			Eigen::Vector3d CamCenter_ENU; //Computed in SetFiducials()
+			struct ocam_model o;        //Set in SetFiducials()
+			cv::Mat ref_descriptors;    //Computed in SetReferenceFrame()
 			std::vector<cv::KeyPoint> keypoints_ref; //Computed in SetReferenceFrame()
-			cv::Mat brightest; //Computed in SetReferenceFrame(), updated in ProcessFrame()
+			cv::Mat brightest;          //Computed in SetReferenceFrame(), updated in ProcessFrame()
+			cv::Mat m_apertureMask;     //Mask of which pixels are valid (in raw image space - no distortion correction, etc.)
+
+			//Additional variables that are safe to access in ProcessFrame without locking - used for new method only
+			cv::Mat m_refFrameApertureMask_EN;
+			cv::Mat m_refBrightness_EN;
+			std::vector<std::vector<std::deque<uint8_t>>> m_brightnessHist_EN; //[row][col] -> deque of recent values for the given pixel
 			
 			inline void ModuleMain(void);
 			void ProcessFrame(cv::Mat const & Frame, TimePoint const & Timestamp);
@@ -104,12 +111,8 @@ namespace ShadowDetection {
 			ShadowDetectionEngine() : m_running(false), m_abort(false) {
 				m_engineThread = std::thread(&ShadowDetectionEngine::ModuleMain, this);
 			}
-			~ShadowDetectionEngine() {
-				//Don't call Stop() since this unregisters a callback with the shadow detection module, which may already be destroyed.
-				m_abort = true;
-				if (m_engineThread.joinable())
-					m_engineThread.join();
-			}
+			~ShadowDetectionEngine() { Shutdown(); }
+			inline void Shutdown(void);  //Stop processing and terminate engine thread
 			
 			inline void        Start(std::string const & DroneSerial); //Start or restart continuous processing of fisheye imagery from the given drone
 			inline void        Stop(void);                             //Stop processing
@@ -138,6 +141,12 @@ namespace ShadowDetection {
 			//which is an acceptable hit in exchange for delaying the processing burden until a mission is over.
 			inline void SaveAndFlushShadowMapHistory(void);
 	};
+
+	inline void ShadowDetectionEngine::Shutdown(void) {
+		m_abort = true;
+		if (m_engineThread.joinable())
+			m_engineThread.join();
+	}
 
 	inline void ShadowDetectionEngine::Start(std::string const & DroneSerial) {
 		std::scoped_lock lock(m_mutex);
