@@ -179,6 +179,10 @@ namespace Guidance {
 	void SelectSubregionSequences(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
 	                             std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::vector<std::vector<int>> & Sequences);
 	
+
+	// void RecurseAssignments(std::vector<std::vector<std::vector<int>>> & AllAssignments, std::vector<std::vector<int>> & CurrentAssignments, std::vector<int> AssignableMissions, int MissionIndex, int NumDrones, int NumMissions);
+	// void RecurseSequences(std::vector<std::vector<int>> & AllAssignments, std::vector<std::vector<int>> & CurrentAssignments, std::vector<int> AssignableMissions, int MissionIndex);
+
 	
 	// *********************************************************************************************************************************
 	// ****************************************   GuidanceEngine Inline Functions Definitions   ****************************************

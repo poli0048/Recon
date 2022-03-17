@@ -882,6 +882,65 @@ namespace Guidance {
         return -1;
     }
 
+    void extend(std::vector<int> & v_dest, const std::vector<int> & v_src) {
+        v_dest.reserve(v_dest.size() + distance(v_src.begin(), v_src.end()));
+        v_dest.insert(v_dest.end(), v_src.begin(), v_src.end());
+    }
+
+    void GenerateCombosHelper(std::vector<std::vector<int>> & combos, std::vector<int> & combo, const std::vector<int> & elements, int left, int k) {
+        if (k == 0) {
+            combos.push_back(combo);
+            return;
+        }
+
+        // first time left will be zero
+        for (int i = left; i < elements.size(); i++) {
+            combo.push_back(elements[i]);
+            GenerateCombosHelper(combos, combo, elements, i + 1, k - 1);
+            combo.pop_back();
+        }
+    }
+
+    std::vector<std::vector<int>> GenerateCombos(const std::vector<int> & elements, int k) {
+        std::vector<std::vector<int>> combos;
+        std::vector<int> combo;
+        GenerateCombosHelper(combos, combo, elements, 0, k);
+        return combos;
+    }
+
+    std::vector<std::vector<int>> GeneratePerms(std::vector<int> & elements) {
+        sort(elements.begin(), elements.end());
+        std::vector<std::vector<int>> perms;
+        do {
+            perms.push_back(elements);
+        } while(std::next_permutation(elements.begin(), elements.end()));
+        return perms;
+    }
+
+    void RecurseAssignments(std::vector<std::vector<std::vector<int>>> & AllAssignments, std::vector<std::vector<int>> & CurrentAssignments, const std::vector<int> & AssignableMissions, const int MissionIndex, const int NumDrones, const int NumMissions) {
+        if (MissionIndex == AssignableMissions.size()) {
+            AllAssignments.push_back(CurrentAssignments);
+        } else {
+            for (int drone_idx = 0; drone_idx < NumDrones; drone_idx++) {
+                CurrentAssignments[drone_idx].push_back(MissionIndex);
+                RecurseAssignments(AllAssignments, CurrentAssignments, AssignableMissions, MissionIndex, NumDrones, NumMissions);
+                CurrentAssignments[drone_idx].pop_back();
+            }
+        }
+    }
+
+    void RecurseSequences(std::vector<std::vector<std::vector<int>>> & AllSequences, std::vector<std::vector<int>> & CurrentSequences, int DroneIndex, const int NumDrones) {
+        if (DroneIndex == NumDrones) {
+            AllSequences.push_back(CurrentSequences);
+        } else {
+            std::vector<std::vector<int>> perms = GeneratePerms(CurrentSequences[DroneIndex]);
+            for (std::vector<int> perm : perms) {
+                CurrentSequences[DroneIndex] = perm;
+                RecurseSequences(AllSequences, CurrentSequences, DroneIndex + 1, NumDrones);
+            }
+        }
+    }
+
     //7 - Given a Time Available function, a collection of sub-regions (with their pre-planned missions), and a collection of drone start positions, choose
     //    sequences (of a given length) of sub-regions for each drone to fly, in order. When the mission time exceeds our prediction horizon the time available
     //    function is no longer useful in chosing sub-regions but they can still be chosen in a logical fashion that avoids leaving holes in the map... making the
@@ -896,96 +955,70 @@ namespace Guidance {
         int numDrones = DroneStartPositions.size();
         int numMissions = SubregionMissions.size();
 
+        std::cout << "numDrones: " << numDrones << ", numMissions: " << numMissions << std::endl;
+
+        // Naive
+        // Sequences.resize(numDrones, std::vector<int>());
+
+        // if (numDrones > numMissions) {
+        // } else if (numDrones <= numMissions) {
+        //     for (int i = 0; i < numMissions; i++) {
+        //         Sequences[i % numDrones].push_back(i);
+        //     }
+        // }
+
+        // Depth N Best
+
+        int n = 2, num_to_assign;
+
+        std::vector<std::vector<std::vector<int>>> AllAssignments, AllSequences;
+        std::vector<std::vector<int>> CurrentAssignments, CurrentSequences;
         Sequences.resize(numDrones, std::vector<int>());
 
-        if (numDrones > numMissions) {
-            // 
-        } else if (numDrones <= numMissions) {
-            // int missionIdx = 0;
-            // for (auto drone : m_dronesUnderCommand) {
-            //     m_currentDroneMissions[drone->GetDroneSerial()] = std::make_tuple(0, m_droneMissions[missionIdx++]);
-            // }
-            for (int i = 0; i < numMissions; i++) {
-                Sequences[i % numDrones].push_back(i);
-            }
-
+        std::set<int> MissionIndicesToAssign;
+        for (int i = 0; i < numMissions; i++) {
+            MissionIndicesToAssign.insert(i);
         }
 
-        // Naive Approach 1: Always choose the minDist subregion (that has not already been assigned) as the next subregion to fly to in the sequence
-        
-        // n is the number of subregions and k is the number of drones.
-        // For n vertices, calculate the time remaining to start the subregion (i.e., lowest margin + time to fly from subregion starting point to location where lowest margin takes place)
-        // For n(n-1) / 2 + k * n edges, calculate time between each vertex using EstimateMissionTime.
+        while(!MissionIndicesToAssign.empty()) {
+            num_to_assign = MissionIndicesToAssign.size() < numDrones * n ? MissionIndicesToAssign.size() : numDrones * n;
 
-        // At each step, assignments should minimize the sum of the time (experiment with different rounding precisions; start with 1) it takes for 
-        // each drone to get to their assigned subregion starting point as well as minimize the margin within this set. No assignments should overlap.
+            AllAssignments.clear();
+            AllSequences.clear();
 
-        // std::vector<bool> remainingStartPoints(SubregionMissions.size(), true); // true if not yet traveled to, false if already traveled to or time available exceeded
-        // std::vector<int> timeRemainingToStart(SubregionMissions.size(), -1);;
-        // std::vector<std::vector<int>> timeToEachStartingPosition(DroneStartPositions.size(), std::vector<int>(SubregionMissions.size(), -1)); // need to initialize?
-        // int startTime = 0;
-        // int currentTime = 0;
-        // double targetSpeed = 10;
-
-        // for (int i = 0; i < SubregionMissions.size(); i++) {
-        //     double margin;
-        //     DroneInterface::Waypoint lowestMarginPosition; // populate this during IsPredictedToFinishWithoutShadows
-        //     bool willFinish = IsPredictedToFinishWithoutShadows(TA, SubregionMissions[i], 0, std::chrono::steady_clock::now(), margin);
-
-        //     DroneInterface::WaypointMission startToLowestMarginPosition; // populate this during IsPredictedToFinishWithoutShadows
-
-        //     if (willFinish) {
-        //         timeRemainingToStart[i] = margin + EstimateMissionTime(startToLowestMarginPosition); // write even if negative
-        //     }
-        // }
-
-        // std::vector<DroneInterface::Waypoint> currentDronePositions = DroneStartPositions; // might need to add copy()
-
-        // while (true) {
-        //     // Eventually use modified version of SelectSubRegion(TA, SubregionMissions, StartPos)
-        //     for (int n = 0; SubregionMissions.size(); n++) {
-        //         remainingStartPoints[n] = timeRemainingToStart[n] - currentTime >= 0 ? remainingStartPoints[n] : false;
-        //         if (remainingStartPoints[n]) {
-        //             for (int k = 0; k < currentDronePositions.size(); k++) {
-        //                 timeToEachStartingPosition[k][n] = EstimateMissionTime(currentDronePositions[k], SubregionMissions[n].Waypoints[0], targetSpeed);
-        //             }
-        //         }
-        //     }
-
-        //     // currently doesn't find optimal total
-        //     for (int k = 0; k < currentDronePositions.size(); k++) {
-        //         if (std::find(begin(remainingStartPoints), end(remainingStartPoints), true) == end(remainingStartPoints)) {
-        //             break;
-        //         }
-        //         int minTimeToStartingPosition = timeToEachStartingPosition[k][0];
-        //         int lowestPositiveMargin = -1;
-        //         int missionIndex = -1;
-        //         for (int n = 0; n < SubregionMissions.size(); n++) {
-        //             if (remainingStartPoints[n]) {
-        //                 int timeToStartingPosition = timeToEachStartingPosition[k][n];
-        //                 int timeToSpare = timeRemainingToStart[n] - currentTime - timeToEachStartingPosition[k][n];
-        //                 if (timeToStartingPosition < minTimeToStartingPosition) {
-        //                     minTimeToStartingPosition = timeToStartingPosition;
-        //                     lowestPositiveMargin = timeToSpare;
-        //                     missionIndex = n;
-        //                 } else if (timeToStartingPosition == minTimeToStartingPosition && timeToSpare < lowestPositiveMargin) {
-        //                     lowestPositiveMargin = timeToSpare;
-        //                     missionIndex = n;
-        //                 }
-        //             }
-        //         }
-        //         remainingStartPoints[missionIndex] = false;
-        //         Sequences[k].push_back(missionIndex);
-        //     }
-
-        //     // advance time
-        // }
+            CurrentAssignments.clear();
+            CurrentAssignments.resize(numDrones, std::vector<int>());
+            CurrentSequences.clear();
+            CurrentSequences.resize(numDrones, std::vector<int>());
 
 
+            std::vector<int> MissionIndices(MissionIndicesToAssign.begin(), MissionIndicesToAssign.end());
+
+            std::vector<std::vector<int>> combos = GenerateCombos(MissionIndices, num_to_assign);
+            for (std::vector<int> combo : combos) {
+                for (int drone_idx = 0; drone_idx < numDrones; drone_idx++) {
+                    CurrentAssignments[drone_idx].push_back(combo[0]);
+                    RecurseAssignments(AllAssignments, CurrentAssignments, combo, 1, numDrones, numMissions);
+                    CurrentAssignments[drone_idx].pop_back();
+                }
+            }
+
+            for (std::vector<std::vector<int>> assignment : AllAssignments) {
+                RecurseSequences(AllSequences, CurrentSequences, 0, numDrones);
+            }
+
+
+            std::vector<std::vector<int>> bestSequence;
+            for (std::vector<std::vector<int>> sequence : AllSequences) {
+                // calculate sequence with best coverage, as measured by best coverage and then by minimum maximum fly time
+            }
+
+            for (int i = 0; i < bestSequence.size(); i++) {
+                extend(Sequences[i], bestSequence[i]);
+                for (int j = 0; j < bestSequence[i].size(); j++) {
+                    MissionIndicesToAssign.erase(bestSequence[i][j]);
+                }
+            }
+        }
     }
 }
-
-
-
-
-
