@@ -155,7 +155,7 @@ namespace Guidance {
 	//
 	//Returns: The index of the drone mission (and sub-region) to task the drone to. Returns -1 if none are plausable
 	int SelectSubRegion(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
-	                    DroneInterface::Waypoint const & StartPos);
+	                    DroneInterface::Waypoint const & StartPos, ImagingRequirements const & ImagingReqs);
 	
 	//7 - Given a Time Available function, a collection of sub-regions (with their pre-planned missions), and a collection of drone start positions, choose
 	//    sequences (of a given length) of sub-regions for each drone to fly, in order. When the mission time exceeds our prediction horizon the time available
@@ -166,7 +166,8 @@ namespace Guidance {
 	//DroneStartPositions - Input  - Element k is the starting position of drone k
 	//Sequences           - Output - Element k is a vector of sub-region indices to task drone k to (in order)
 	void SelectSubregionSequnces(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
-	                             std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::vector<std::vector<int>> & Sequences);
+	                             std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::vector<std::vector<int>> & Sequences,
+	                             ImagingRequirements const & ImagingReqs);
 	
 	
 	// *********************************************************************************************************************************
