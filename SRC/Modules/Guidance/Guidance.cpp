@@ -242,19 +242,13 @@ namespace Guidance {
     // *********************************************************************************************************************************
     // *******************************************   Guidance Algorithm Function Definitions   *****************************************
     // *********************************************************************************************************************************
-
-    double GetDistanceBetweenTwoPoints (double const a_latitude, double const a_longitude, double const b_latitude, double const b_longitude){
-        double phi1 = a_latitude * PI/180; // phi in radians
-        double phi2 = b_latitude * PI/180;
-        double deltaphi = (b_latitude-a_latitude) * PI/180;
-        double deltalambda = (b_longitude-a_longitude) * PI/180;
-        //double deltaalt = B.Altitude-A.Altitude;
-
-        double a = sin(deltaphi/2) * sin(deltaphi/2) + cos(phi1) * cos(phi2) * sin(deltalambda/2) * sin(deltalambda/2);
-        double c = 2 * atan2(sqrt(a), sqrt(1-a));
-
-        return radiusEarth * c; // horizontal distance in metres
+    //Get distance between two points at reference ellipsoid altitude. Inputs are in radians. Output is in meters.
+    double GetDistanceBetweenTwoPoints (double a_latitude, double a_longitude, double b_latitude, double b_longitude){
+        Eigen::Vector3d A_ECEF = LLA2ECEF(Eigen::Vector3d(a_latitude, a_longitude, 0.0));
+        Eigen::Vector3d B_ECEF = LLA2ECEF(Eigen::Vector3d(b_latitude, b_longitude, 0.0));
+        return (B_ECEF - A_ECEF).norm();
     }
+
     //1 - Take two points and estimate the time (s) it would take a drone to fly from one to the other (stopped at start and end), assuming a max flight speed (m/s)
     double EstimateMissionTime(DroneInterface::Waypoint const & A, DroneInterface::Waypoint const & B, double TargetSpeed) {
         double delta_altitude = B.RelAltitude - A.RelAltitude;
@@ -874,10 +868,11 @@ namespace Guidance {
     //TA                - Input - Time Available function
     //SubregionMissions - Input - A vector of drone Missions - Element n is the mission for sub-region n.
     //StartPos          - Input - The starting position of the drone (to tell us how far away from each sub-region mission it is)
+    //ImagingReqs       - Input - Parameters specifying speed and row spacing (see definitions in struct declaration)
     //
     //Returns: The index of the drone mission (and sub-region) to task the drone to. Returns -1 if none are plausable
     int SelectSubRegion(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
-                        DroneInterface::Waypoint const & StartPos) {
+                        DroneInterface::Waypoint const & StartPos, ImagingRequirements const & ImagingReqs) {
         //TODO
         return -1;
     }
@@ -949,14 +944,14 @@ namespace Guidance {
     //SubregionMissions   - Input  - A vector of drone Missions - Element n is the mission for sub-region n.
     //DroneStartPositions - Input  - Element k is the starting position of drone k
     //Sequences           - Output - Element k is a vector of sub-region indices to task drone k to (in order)
-    void SelectSubregionSequences(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
-                                 std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::vector<std::vector<int>> & Sequences) {
+    void SelectSubregionSequnces(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
+                                 std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::vector<std::vector<int>> & Sequences,
+                                 ImagingRequirements const & ImagingReqs) {
         
         int numDrones = DroneStartPositions.size();
         int numMissions = SubregionMissions.size();
 
         std::cout << "numDrones: " << numDrones << ", numMissions: " << numMissions << std::endl;
-
 
 
         // Naive

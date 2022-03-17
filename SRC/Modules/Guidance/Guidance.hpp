@@ -166,7 +166,7 @@ namespace Guidance {
 	//
 	//Returns: The index of the drone mission (and sub-region) to task the drone to. Returns -1 if none are plausable
 	int SelectSubRegion(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
-	                    DroneInterface::Waypoint const & StartPos);
+	                    DroneInterface::Waypoint const & StartPos, ImagingRequirements const & ImagingReqs);
 	
 	//7 - Given a Time Available function, a collection of sub-regions (with their pre-planned missions), and a collection of drone start positions, choose
 	//    sequences (of a given length) of sub-regions for each drone to fly, in order. When the mission time exceeds our prediction horizon the time available
@@ -176,8 +176,9 @@ namespace Guidance {
 	//SubregionMissions   - Input  - A vector of drone Missions - Element n is the mission for sub-region n.
 	//DroneStartPositions - Input  - Element k is the starting position of drone k
 	//Sequences           - Output - Element k is a vector of sub-region indices to task drone k to (in order)
-	void SelectSubregionSequences(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
-	                             std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::vector<std::vector<int>> & Sequences);
+	void SelectSubregionSequnces(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
+	                             std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::vector<std::vector<int>> & Sequences,
+	                             ImagingRequirements const & ImagingReqs);
 	
 
 	// void RecurseAssignments(std::vector<std::vector<std::vector<int>>> & AllAssignments, std::vector<std::vector<int>> & CurrentAssignments, std::vector<int> AssignableMissions, int MissionIndex, int NumDrones, int NumMissions);
@@ -250,66 +251,4 @@ namespace Guidance {
 		m_currentDroneMissions.clear();
 		m_surveyRegion.Clear();
 	}
-	// inline void GuidanceEngine::ModuleMain(void) {
-	// 	while (! m_abort) {
-	// 		m_mutex.lock();
-	// 		if (! m_running) {
-	// 			MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_MessageToken1);
-	// 			MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_MessageToken2);
-	// 			MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_MessageToken3);
-	// 			m_mutex.unlock();
-	// 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-	// 			continue;
-	// 		}
-			
-	// 		//We are running - see if we have done the prep work yet. If not, do all the initial setup work that needs to be done
-	// 		if (! m_missionPrepDone) {
-	// 			//A - Partition the survey region
-	// 			//B - Compute pre-planned waypoint missions for each sub-region
-				
-	// 			//TEMP - Just for testing the overlay
-	// 			MapWidget::Instance().m_messageBoxOverlay.AddMessage("Error: This is a message from the guidance module!"s, m_MessageToken1);
-	// 			MapWidget::Instance().m_messageBoxOverlay.AddMessage("Warning - Another message from the guidance module!"s, m_MessageToken2);
-	// 			MapWidget::Instance().m_messageBoxOverlay.AddMessage("Wow - A third message from the guidance module!"s, m_MessageToken3);
-				
-	// 			//Create a sample survey region partition to give to the guidance overlay
-	// 			//std::Evector<PolygonCollection> Partition;
-				
-	// 			std::Evector<PolygonCollection> Partition;
-	// 			PartitionSurveyRegion(m_surveyRegion, Partition, 180.0, m_ImagingReqs);
-
-	// 			DroneInterface::WaypointMission Mission;
-	// 			PlanMission(m_surveyRegion, Mission, m_ImagingReqs);
-	// 			//m_dronesUnderCommand[0]->ExecuteWaypointMission(Mission);
-	// 			m_missionPrepDone = true; //Mark the prep work as done
-
-	// 			std::vector<std::vector<int>> missionSequences;
-	// 			missionSequences.emplace_back();
-	// 			missionSequences.back().push_back(0);
-	// 			missionSequences.back().push_back(1);
-	// 			missionSequences.back().push_back(2);
-	// 			missionSequences.emplace_back();
-	// 			missionSequences.back().push_back(5);
-	// 			missionSequences.back().push_back(4);
-	// 			missionSequences.back().push_back(3);
-	// 			MapWidget::Instance().m_guidanceOverlay.SetDroneMissionSequences(missionSequences);
-	// 		}
-			
-	// 		//If we get here we are executing a mission
-	// 		//1 - Check to see if we need to do anything. We should do an update if:
-	// 		//   A - There are sub-regions without assigned drones and we have drones without an assigned mission
-	// 		//   B - A commanded drone has finished it's assigned mission
-	// 		//   C - A drone is flying a mission and it looks like it's going to get hit with a shadow before it can finish
-	// 		//If we decide there is no work to do, unlock, snooze and continue
-			
-	// 		//2 - We need to do an update - identify which drones need to be re-assigned
-	// 		//If any drone has finished a mission, mark the sub-region it just flew as finished.
-	// 		//For each drone that needs to be given a mission, select an available sub-region (not already flown and not expected to be hit with shadows)
-	// 		//Upload the corresponding mission for that sub-region and update m_currentDroneMissions.
-			
-	// 		//Unlock and snooze - updates shouldn't need to happen in rapid succession so don't worry about snoozing here
-	// 		m_mutex.unlock();
-	// 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-	// 	}
-	// }
 }
