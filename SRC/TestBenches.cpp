@@ -560,7 +560,14 @@ static bool TestBench6(std::string const & Arg) {
 	return false; //Ideally check result somehow and return true on success and false on failure (otherwise manually verify result somehow)
 }
 
-static bool TestBench7(std::string const & Arg)  { return false; }
+static bool TestBench7(std::string const & Arg)  {
+	// Ctrl + Click to copy coordinates to clipboard
+	// ./BIN/Recon -t 7 to run the test
+
+	// Start Becker, Elgin, or Grand Meadow
+	// Modules > ShadowDetection > Start
+	// Need to add video to Simulation-Data-Sets
+}
 static bool TestBench8(std::string const & Arg)  { return false; }
 static bool TestBench9(std::string const & Arg)  { return false; }
 static bool TestBench10(std::string const & Arg) { return false; }
