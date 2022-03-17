@@ -116,19 +116,13 @@ namespace Guidance {
     // *********************************************************************************************************************************
     // *******************************************   Guidance Algorithm Function Definitions   *****************************************
     // *********************************************************************************************************************************
-
-    double GetDistanceBetweenTwoPoints (double const a_latitude, double const a_longitude, double const b_latitude, double const b_longitude){
-        double phi1 = a_latitude * PI/180; // phi in radians
-        double phi2 = b_latitude * PI/180;
-        double deltaphi = (b_latitude-a_latitude) * PI/180;
-        double deltalambda = (b_longitude-a_longitude) * PI/180;
-        //double deltaalt = B.Altitude-A.Altitude;
-
-        double a = sin(deltaphi/2) * sin(deltaphi/2) + cos(phi1) * cos(phi2) * sin(deltalambda/2) * sin(deltalambda/2);
-        double c = 2 * atan2(sqrt(a), sqrt(1-a));
-
-        return radiusEarth * c; // horizontal distance in metres
+    //Get distance between two points at reference ellipsoid altitude. Inputs are in radians. Output is in meters.
+    double GetDistanceBetweenTwoPoints (double a_latitude, double a_longitude, double b_latitude, double b_longitude){
+        Eigen::Vector3d A_ECEF = LLA2ECEF(Eigen::Vector3d(a_latitude, a_longitude, 0.0));
+        Eigen::Vector3d B_ECEF = LLA2ECEF(Eigen::Vector3d(b_latitude, b_longitude, 0.0));
+        return (B_ECEF - A_ECEF).norm();
     }
+    
     //1 - Take two points and estimate the time (s) it would take a drone to fly from one to the other (stopped at start and end), assuming a max flight speed (m/s)
     double EstimateMissionTime(DroneInterface::Waypoint const & A, DroneInterface::Waypoint const & B, double TargetSpeed) {
         double delta_altitude = B.RelAltitude - A.RelAltitude;
