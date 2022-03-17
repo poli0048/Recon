@@ -218,6 +218,9 @@ namespace Guidance {
                 m_flyingMissionStatus[i] = Result;
             }
 
+            MapWidget::Instance().m_guidanceOverlay.SetMissions(m_droneMissions);
+            MapWidget::Instance().m_guidanceOverlay.SetDroneMissionSequences(m_subregionSequences);
+
 
             //If we get here we are executing a mission
             //1 - Check to see if we need to do anything. We should do an update if:
@@ -844,7 +847,7 @@ namespace Guidance {
                 Mission.Waypoints.push_back(newWayPoint);
             }
         }
-        MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
+        //MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
     }
 
     //5 - Take a Time Available function, a waypoint mission, and a progress indicator (where in the mission you are) and detirmine whether or not the drone

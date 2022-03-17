@@ -52,7 +52,7 @@ class VisWidget {
 		float SurveyRegionVertexRadius;         //Vertex radius (in pixels) when editing.
 		float SurveyRegionEdgeThickness;        //Edge thickness (in pixels) when editing.
 		
-		bool GuidanceOverlay_ShowTrianglesInsteadOfPartition;
+		int GuidanceOverlay_Vis; //0=Partition, 1=Triangles, 2=Sequences, 3=Sequences+Missions
 		
 		std::array<float, 3> ShadowMapColor; //RGB in range 0 to 1
 		
@@ -84,7 +84,7 @@ class VisWidget {
 			        CEREAL_NVP(SurveyRegionColor),
 			        CEREAL_NVP(SurveyRegionVertexRadius),
 			        CEREAL_NVP(SurveyRegionEdgeThickness),
-			        CEREAL_NVP(GuidanceOverlay_ShowTrianglesInsteadOfPartition),
+			        CEREAL_NVP(GuidanceOverlay_Vis),
 			        CEREAL_NVP(ShadowMapColor));
 		}
 	
@@ -159,7 +159,7 @@ inline void VisWidget::LoadDefaults(void) {
 	SurveyRegionVertexRadius = 5.0f;
 	SurveyRegionEdgeThickness = 3.0f;
 	
-	GuidanceOverlay_ShowTrianglesInsteadOfPartition = false;
+	GuidanceOverlay_Vis = 0;
 	
 	ShadowMapColor = {0.4f, 0.4f, 0.7f};
 }
@@ -184,6 +184,8 @@ inline void VisWidget::SanitizeState(void) {
 	SurveyRegionVertexRadius  = std::clamp(SurveyRegionVertexRadius,  1.0f, 20.0f);
 	SurveyRegionEdgeThickness = std::clamp(SurveyRegionEdgeThickness, 1.0f, 10.0f);
 	
+	GuidanceOverlay_Vis = std::clamp(GuidanceOverlay_Vis, 0, 4);
+
 	ShadowMapColor[0] = std::clamp(ShadowMapColor[0], 0.0f, 1.0f);
 	ShadowMapColor[1] = std::clamp(ShadowMapColor[1], 0.0f, 1.0f);
 	ShadowMapColor[2] = std::clamp(ShadowMapColor[2], 0.0f, 1.0f);
@@ -339,17 +341,23 @@ inline void VisWidget::Draw() {
 			ImGui::SliderFloat("##Opacity_GuidanceOverlay", &Opacity_GuidanceOverlay, 0.0f, 100.0f, "%.0f");
 			
 			ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
-			
-			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Show Region Decomposition  ").x;
-			ImGui::TextUnformatted("Show Region Partition ");
+			float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Current Plans & Missions  ").x;
+
+			ImGui::TextUnformatted("Region Partition ");
 			ImGui::SameLine(col2Start);
-			if (ImGui::RadioButton("##Show Partition ", !GuidanceOverlay_ShowTrianglesInsteadOfPartition))
-				GuidanceOverlay_ShowTrianglesInsteadOfPartition = false;
-			
-			ImGui::TextUnformatted("Show Region Decomposition ");
+			ImGui::RadioButton("##Region Partition ", &GuidanceOverlay_Vis, 0);
+
+			ImGui::TextUnformatted("Triangle Decomposition ");
 			ImGui::SameLine(col2Start);
-			if (ImGui::RadioButton("##Show Decomposition ", GuidanceOverlay_ShowTrianglesInsteadOfPartition))
-				GuidanceOverlay_ShowTrianglesInsteadOfPartition = true;
+			ImGui::RadioButton("##Triangle Decomposition ", &GuidanceOverlay_Vis, 1);
+			
+			ImGui::TextUnformatted("Current Plans ");
+			ImGui::SameLine(col2Start);
+			ImGui::RadioButton("##Current Plans ", &GuidanceOverlay_Vis, 2);
+
+			ImGui::TextUnformatted("Current Plans & Missions ");
+			ImGui::SameLine(col2Start);
+			ImGui::RadioButton("##Current Plans & Missions ", &GuidanceOverlay_Vis, 3);
 			
 			ImGui::EndPopup();
 		}
