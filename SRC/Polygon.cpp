@@ -1,20 +1,24 @@
 //This module provides geometry utilities needed for working with Polygons
 //Author: Bryan Poling
-//Copyright (c) 2021 Sentek Systems, LLC. All rights reserved. 
+//Copyright (c) 2021 Sentek Systems, LLC. All rights reserved.
 
 //System Includes
 #include <tuple>
 #include <limits>
 
 //External Includes
+#include "HandyImGuiInclude.hpp"
 #include "../../eigen/Eigen/LU"
+#include "../../eigen/Eigen/Geometry"
+//#include <opencv2/opencv.hpp>  //Only needed for debug and visualization
+//#include <opencv2/core.hpp>    //Only needed for debug and visualization
+//#include <opencv2/imgproc.hpp> //Only needed for debug and visualization
+//#include <opencv2/highgui.hpp> //Only needed for debug and visualization
 
 //Project Includes
 #include "Polygon.hpp"
 #include "Earcut.hpp"
-
 #include "Maps/MapUtils.hpp"
-#include<Eigen/Geometry>
 
 #define PI 3.14159265358979
 #define TOLERANCE 1e-10
@@ -69,7 +73,7 @@ Eigen::Vector2d LineSegment::ProjectPoint(Eigen::Vector2d const & Point) const {
     }
 }
 
-//Returns the distance to the nearset end of the line segment
+//Returns the distance to the nearest end of the line segment
 double LineSegment::GetDistanceToNearestEndpoint(Eigen::Vector2d const & Point) const {
     return std::min((Point - m_endpoint1).norm(), (Point - m_endpoint2).norm());
 }
@@ -77,9 +81,18 @@ double LineSegment::GetDistanceToNearestEndpoint(Eigen::Vector2d const & Point) 
 //Compute the intersection of two line segments. Returns true if they intersect and false otherwise.
 //If this function returns false, the value of Intersection could be anything - don't use it.
 bool LineSegment::ComputeIntersection(LineSegment const & Other, Eigen::Vector2d & Intersection) const {
+    //If we can tell quickly that an intersection is impossible based on segment lengths and separation,
+    //then return false and skip the work of solving a linear system.
+    double totalLength = this->GetLength() + Other.GetLength();
+    Eigen::Vector2d thisCenter  = 0.5*this->m_endpoint1 + 0.5*this->m_endpoint2;
+    Eigen::Vector2d otherCenter = 0.5*Other.m_endpoint1 + 0.5*Other.m_endpoint2;
+    double centerSep = (otherCenter - thisCenter).norm();
+    if (centerSep > 0.5*totalLength)
+        return false;
+
     Eigen::Matrix2d R;
     R << 0, -1,
-    1,  0;
+         1,  0;
 
     if (this->IsDegenerate()) {
         Intersection = m_endpoint1;
@@ -167,6 +180,200 @@ bool LineSegment::ComputeInteriorIntersection(LineSegment const & Other, Eigen::
         return false;
 }
 
+//Take two line segments and check for overlap and intersections. If the segments intersect at a point on the interior of at least one
+//of the segments or overlap over a set of positive length (e.g. (0,0)-(2,0) and (1,0)-(3,0) have overlap (1,0)-(2,0)) then new segments
+//are computed that cover the same path as the input segments but have the property that the computed segments can only intersect each
+//other at endpoints. Note that when we say "covers the same path", we are only interested in paths of positive length. Isolated points
+//are removed and not represented in the output segments. For instance, if the inputs are the segment (0,0)-(1,0) and the point (which
+//is a degenerate line segment) (3,3), then the output will just be the segment (0,0)-(1,0). This function does not typically merge
+//co-linear, overlapping segments. The only cases where it will is if one of the input or computed segments is so short that it is
+//deemed degenerate. This is so that one can (relatively) safely sanitize pairs of conflicting segments in an iterative fashion
+//without having to worry about oscillatory behavior.
+//
+//When the segments don't intersect or only intersect at endpoints, the function returns false.
+//When modification is needed (split or merge), Dst is appended with the new segments that will replace both A and B and we return true.
+bool LineSegment::SanitizeSegments(LineSegment const & A, LineSegment const & B, std::Evector<LineSegment> & Dst) {
+    //If both segments are points, then they don't cover any length and they can both be dropped
+    bool ADegen = A.IsDegenerate();
+    bool BDegen = B.IsDegenerate();
+    if (ADegen && BDegen)
+        return true;
+    else if (ADegen || BDegen) {
+        //Exactly one of the segments is degenerate - If the degenerate segment is contained in the non-degenerate segment
+        //it can be absorbed by the non-degenerate segment. If it isn't contained we can remove the degenerate segment since
+        //we don't care about isolated points. In both cases the result is the same... we keep the non-degenerate segment
+        //and drop the degenerate one.
+        LineSegment const & nonDegenSegment(ADegen ? B : A);
+        Dst.push_back(nonDegenSegment);
+        return true;
+    }
+    else {
+        //Neither segment is degenerate - this is the typical case
+
+        //If we can quickly and cheaply rule out any intersection, do so now
+        double totalLength = A.GetLength() + B.GetLength();
+        Eigen::Vector2d ACenter = 0.5*A.m_endpoint1 + 0.5*A.m_endpoint2;
+        Eigen::Vector2d BCenter = 0.5*B.m_endpoint1 + 0.5*B.m_endpoint2;
+        double centerSep = (BCenter - ACenter).norm();
+        if (centerSep > 0.5*totalLength)
+            return false; //No intersection is possible
+
+        //An intersection is possible
+        Eigen::Vector2d a  = A.m_endpoint1;
+        Eigen::Vector2d b  = A.m_endpoint2;
+        Eigen::Vector2d v1 = b - a;
+        v1.normalize();                        //Unit vector pointing along line
+        Eigen::Vector2d n1(-1.0*v1(1), v1(0)); //Unit Normal vector to line 1
+
+        Eigen::Vector2d c  = B.m_endpoint1;
+        Eigen::Vector2d d  = B.m_endpoint2;
+        Eigen::Vector2d v2 = d - c;
+        v2.normalize();                        //Unit vector pointing along line
+        Eigen::Vector2d n2(-1.0*v2(1), v2(0)); //Unit Normal vector to line 2
+
+        //Equation of line 1: v dot n1 = a dot n1
+        //Equation of line 2: v dot n2 = c dot n2
+        //The solution to this system is the intersection, if one exists
+        Eigen::Matrix2d M;
+        M << n1(0), n1(1),
+             n2(0), n2(1);
+        Eigen::Vector2d rhs(a.dot(n1), c.dot(n2));
+
+        Eigen::Matrix2d MInv;
+        bool invertible;
+        double determinant;
+        M.computeInverseAndDetWithCheck(MInv, determinant, invertible);
+        if (! invertible) {
+            //The lines have the same slope to machine precision. If the segments intersect it could be at
+            //a point or over a segment of positive length.
+            if ((ACenter - BCenter).dot(n1) > TOLERANCE)
+                //The line segments are parallel but not co-linear
+                return false;
+            else {
+                //The line segments are co-linear - see if they intersect or overlap
+                if (A.ContainsPoint(B.m_endpoint1) || A.ContainsPoint(B.m_endpoint2) ||
+                    B.ContainsPoint(A.m_endpoint1) || B.ContainsPoint(A.m_endpoint2)) {
+                    //The segments overlap
+                	double alpha1 = (A.m_endpoint1 - ACenter).dot(v1);
+                    double alpha2 = (A.m_endpoint2 - ACenter).dot(v1);
+                    double alpha3 = (B.m_endpoint1 - ACenter).dot(v1);
+                    double alpha4 = (B.m_endpoint2 - ACenter).dot(v1);
+
+                    std::vector<double> alphas = {alpha1, alpha2, alpha3, alpha4};
+                    std::vector<int> indices = {0, 1, 2, 3};
+                    std::sort(indices.begin(), indices.end(), [&alphas](int i1, int i2) {return alphas[i1] < alphas[i2];});
+
+                    std::Evector<Eigen::Vector2d> sortedPoints;
+                    sortedPoints.reserve(4);
+                    for (int index : indices) {
+                    	switch (index) {
+                    		case 0: sortedPoints.push_back(A.m_endpoint1); break;
+                    		case 1: sortedPoints.push_back(A.m_endpoint2); break;
+                    		case 2: sortedPoints.push_back(B.m_endpoint1); break;
+                    		case 3: sortedPoints.push_back(B.m_endpoint2); break;
+                    	}
+                    }
+
+                    double seg1Length = (sortedPoints[1] - sortedPoints[0]).norm();
+                    double seg2Length = (sortedPoints[2] - sortedPoints[1]).norm();
+                    double seg3Length = (sortedPoints[3] - sortedPoints[2]).norm();
+
+                    if (((seg1Length < TOLERANCE) && (seg2Length < TOLERANCE)) ||
+                        ((seg2Length < TOLERANCE) && (seg3Length < TOLERANCE)) ||
+                        ((seg1Length < TOLERANCE) && (seg3Length < TOLERANCE))) {
+                    	//All 3 segments or any 2 are too short. Combine into a single segment
+                    	Dst.emplace_back(sortedPoints[0], sortedPoints[3]);
+                    	return true;
+                    }
+
+                    //If we get here at most 1 segment is degenerate
+                    if ((seg1Length >= TOLERANCE) && (seg2Length >= TOLERANCE) && (seg3Length >= TOLERANCE)) {
+                    	Dst.emplace_back(sortedPoints[0], sortedPoints[1]);
+                    	Dst.emplace_back(sortedPoints[1], sortedPoints[2]);
+                    	Dst.emplace_back(sortedPoints[2], sortedPoints[3]);
+                    	return true;
+                    }
+
+                    //If we get here then exactly 1 segment is degenerate. Since we are in a 2-segments in, 2-segments out
+                    //situation, we need to check carefully whether our output is equivilant to the input.
+                    LineSegment seg1, seg2;
+                    if (seg1Length < TOLERANCE) {
+                    	seg1 = LineSegment(sortedPoints[0], sortedPoints[2]);
+                    	seg2 = LineSegment(sortedPoints[2], sortedPoints[3]);
+                    }
+                    else if (seg2Length < TOLERANCE) {
+                    	Eigen::Vector2d midpoint = 0.5*sortedPoints[1] + 0.5*sortedPoints[2];
+                    	seg1 = LineSegment(sortedPoints[0], midpoint);
+                    	seg2 = LineSegment(midpoint, sortedPoints[3]);
+                    }
+                    else {
+                    	seg1 = LineSegment(sortedPoints[0], sortedPoints[1]);
+                    	seg2 = LineSegment(sortedPoints[1], sortedPoints[3]);
+                    }
+                    if ((AreEquivalent(seg1, A) && AreEquivalent(seg2, B)) || (AreEquivalent(seg1, B) && AreEquivalent(seg2, A)))
+                    	return false;
+                    else {
+                    	Dst.push_back(seg1);
+                    	Dst.push_back(seg2);
+                    	return true;
+                    }
+                }
+                else
+                    return false; //The segments are co-linear but there is a gap between them
+            }
+        }
+
+        //If we get this far, the lines intersect somewhere. Lets find the intersection.
+        Eigen::Vector2d Intersection = MInv * rhs;
+
+        //The segments intersect if the intersection point is on both line segments.
+        double projLine1 = (Intersection - a).dot(v1);
+        double projLine2 = (Intersection - c).dot(v2);
+        if ((projLine1 >= 0.0) && (projLine1 <= (b - a).norm()) && (projLine2 >= 0.0) && (projLine2 <= (d - c).norm())) {
+            //The segments intersect
+            bool AInterior = (A.GetDistanceToNearestEndpoint(Intersection) > TOLERANCE);
+            bool BInterior = (B.GetDistanceToNearestEndpoint(Intersection) > TOLERANCE);
+            if (AInterior && BInterior) {
+                Dst.emplace_back(A.m_endpoint1, Intersection);
+                Dst.emplace_back(Intersection, A.m_endpoint2);
+                Dst.emplace_back(B.m_endpoint1, Intersection);
+                Dst.emplace_back(Intersection, B.m_endpoint2);
+                return true;
+            }
+            else if (AInterior) {
+                Dst.emplace_back(A.m_endpoint1, Intersection);
+                Dst.emplace_back(Intersection, A.m_endpoint2);
+                Dst.push_back(B);
+                return true;
+            }
+            else if (BInterior) {
+                Dst.emplace_back(B.m_endpoint1, Intersection);
+                Dst.emplace_back(Intersection, B.m_endpoint2);
+                Dst.push_back(A);
+                return true;
+            }
+            else
+                return false;
+        }
+        else
+            return false; //The segments do not intersect
+    }
+}
+
+//Returns true if the overlap between two segments contains at least one point that is not an endpoint of one of the segments
+bool LineSegment::HasInteriorOverlap(LineSegment const & A, LineSegment const & B) {
+	std::Evector<LineSegment> outSegments;
+	return SanitizeSegments(A, B, outSegments);
+}
+
+bool LineSegment::AreEquivalent(LineSegment const & A, LineSegment const & B) {
+	if (((A.m_endpoint1 - B.m_endpoint1).norm() < TOLERANCE) && ((A.m_endpoint2 - B.m_endpoint2).norm() < TOLERANCE))
+		return true;
+	if (((A.m_endpoint1 - B.m_endpoint2).norm() < TOLERANCE) && ((A.m_endpoint2 - B.m_endpoint1).norm() < TOLERANCE))
+		return true;
+	return false;
+}
+
 
 // ************************************************************************************************************************************************
 // **********************************************************   SimplePolygon Definitions   *******************************************************
@@ -210,48 +417,38 @@ void Triangle::Bisect(Triangle & subTriangleADC, Triangle & subTriangleABD){
 
 // Converts a Triangle to a Simple Polygon
 SimplePolygon Triangle::ToSimplePolygon(){
-    return SimplePolygon({this->m_pointA, this->m_pointB, this->m_pointC});
+	return SimplePolygon({this->m_pointA, this->m_pointB, this->m_pointC});
 }
 
 // Converts a Triangle to a Polygon
 Polygon Triangle::ToPolygon(){
-    return Polygon(SimplePolygon({this->m_pointA, this->m_pointB, this->m_pointC}));
+	return Polygon(SimplePolygon({this->m_pointA, this->m_pointB, this->m_pointC}));
 }
 
 // Checks if two triangles have the same points in the same order
-bool Triangle::isSameTriangle(Triangle const & otherTriangle){
-    if(this->m_pointA == otherTriangle.m_pointA && this->m_pointB == otherTriangle.m_pointB && this->m_pointC == otherTriangle.m_pointC ) {
-        return true;
-    }
-    return false;
+bool Triangle::isSameTriangle(Triangle const & otherTriangle) {
+	return ((this->m_pointA == otherTriangle.m_pointA) &&
+		   (this->m_pointB == otherTriangle.m_pointB) &&
+		   (this->m_pointC == otherTriangle.m_pointC));
 }
 
-//Get the area (m^2) of a triangle whose coordiantes are in NM
+//Get the area (m^2) of a triangle whose coordinates are in NM. This is the area assuming each point is at a WGS84 altitude of 0.
+//That is, the triangle is assumed to be right on the reference ellipsoid. For relatively small triangles, this will be a very close
+//approximation to the area at different altitudes.
 double Triangle::GetArea(){
-    //Alt is unnecessary and will be removed
-    //Each point of the triangle converted to LatLon
-    Eigen::Vector2d a_latlon;
-    Eigen::Vector2d b_latlon;
-    Eigen::Vector2d c_latlon;
-    a_latlon = NMToLatLon(this->m_pointA);
-    b_latlon = NMToLatLon(this->m_pointB);
-    c_latlon = NMToLatLon(this->m_pointC);
+	//Convert each point in the triangle to ECEF
+	Eigen::Vector2d A_latlon = NMToLatLon(this->m_pointA);
+	Eigen::Vector2d B_latlon = NMToLatLon(this->m_pointB);
+	Eigen::Vector2d C_latlon = NMToLatLon(this->m_pointC);
+	Eigen::Vector3d A_ECEF   = LLA2ECEF(Eigen::Vector3d(A_latlon(0), A_latlon(1), 0.0));
+	Eigen::Vector3d B_ECEF   = LLA2ECEF(Eigen::Vector3d(B_latlon(0), B_latlon(1), 0.0));
+	Eigen::Vector3d C_ECEF   = LLA2ECEF(Eigen::Vector3d(C_latlon(0), C_latlon(1), 0.0));
 
-    //Constants for ABC to be converted to ECEF
-    Eigen::Vector3d A_XYZ; A_XYZ << a_latlon(0), a_latlon(1), 0.0;
-    Eigen::Vector3d B_XYZ; B_XYZ << b_latlon(0), b_latlon(1), 0.0;
-    Eigen::Vector3d C_XYZ; C_XYZ << c_latlon(0), c_latlon(1), 0.0;
-
-    //ECEF of ABC
-    Eigen::Vector3d A_ECEF = LLA2ECEF(A_XYZ);
-    Eigen::Vector3d B_ECEF = LLA2ECEF(B_XYZ);
-    Eigen::Vector3d C_ECEF = LLA2ECEF(C_XYZ);
-
-    //Vector between two points in LatLon
-    Eigen::Vector3d ab_vector = A_ECEF - B_ECEF;
-    Eigen::Vector3d ac_vector = B_ECEF - C_ECEF;
-    return 0.5 * (ac_vector.cross(ab_vector)).norm();
+	Eigen::Vector3d ab_vector = A_ECEF - B_ECEF;
+	Eigen::Vector3d ac_vector = B_ECEF - C_ECEF;
+	return 0.5*(ac_vector.cross(ab_vector)).norm();
 }
+
 // Like Bisect, but we bisect to the intersection
 // Return false if no intersection. Do not use triangles
 bool Triangle::BisectIntersection(const Eigen::Vector2d & Intersection, Triangle & subTriangleADC, Triangle & subTriangleABD){
@@ -296,13 +493,9 @@ bool Triangle::BisectIntersection(const Eigen::Vector2d & Intersection, Triangle
     subTriangleADC.m_pointC = uniqueP1;
     subTriangleABD.m_pointC = uniqueP2;
     return true;
-
 }
 
-
-
 bool insideColinear(LineSegment const lineA, Eigen::Vector2d pointB){
-
     bool t1, t2, t3, t4, t5, t6;
     t3 = false;
     t4 = false;
@@ -368,7 +561,7 @@ bool SimplePolygon::CheckIntersect(SimplePolygon const & otherPolygon, std::vect
 
 
 // Returns true if two polygons given share at least one side
-bool SimplePolygon::CheckAdjacency (SimplePolygon const & otherPolygon){
+bool SimplePolygon::CheckAdjacency(SimplePolygon const & otherPolygon){
     Eigen::Vector2d Intersection;
     bool IsInteriorThis;
     bool IsInteriorOther;
@@ -424,6 +617,11 @@ Eigen::Vector2d SimplePolygon::ProjectPoint(Eigen::Vector2d const & Point) const
         return Point;
 
     //If we get here, the point is outside of the polygon or possibly on the boundary. The closest point will be on the boundary.
+    return ProjectPointToBoundary(Point);
+}
+
+//Get the point on the boundary of the polygon that is nearest to the provided point
+Eigen::Vector2d SimplePolygon::ProjectPointToBoundary(Eigen::Vector2d const & Point) const {
     std::Evector<LineSegment> segments = GetLineSegments();
     Eigen::Vector2d BestCandidatePoint = Point; //Default return value if we don't have any segments for some reason
     double distToBestCandidate = -1.0; //Negative indicates not initialized yet
@@ -438,6 +636,40 @@ Eigen::Vector2d SimplePolygon::ProjectPoint(Eigen::Vector2d const & Point) const
     return BestCandidatePoint;
 }
 
+//Get the point on the boundary of the polygon that is nearest to the provided point and get the index of the closest vertex
+Eigen::Vector2d SimplePolygon::ProjectPointToBoundary(Eigen::Vector2d const & Point, size_t & ClosestVertexIndex) const {
+    //Handle degenerate cases
+    ClosestVertexIndex = 0U;
+    if (m_vertices.empty())
+        return Point;
+    if (m_vertices.size() == 1U)
+        return m_vertices[0];
+
+    //Find the segment containing the closest point to the given point
+    size_t BestStartVertexIndex = 0U;
+    double BestSegmentProjectionDist = std::nan("");
+    Eigen::Vector2d ProjectionToBestSegment = Eigen::Vector2d::Zero();
+    for (size_t n = 0; n < m_vertices.size(); n++) {
+        LineSegment segment(m_vertices[n], n + 1U < m_vertices.size() ? m_vertices[n + 1U] : m_vertices[0]);
+        Eigen::Vector2d projection = segment.ProjectPoint(Point);
+        double dist = (projection - Point).norm();
+        if (std::isnan(BestSegmentProjectionDist) || (dist < BestSegmentProjectionDist)) {
+            BestStartVertexIndex = n;
+            BestSegmentProjectionDist = dist;
+            ProjectionToBestSegment = projection;
+        }
+    }
+
+    //Now check which endpoint of the segment containing the projection is closer to the given point
+    size_t indexA = BestStartVertexIndex;
+    size_t indexB = (indexA + 1U < m_vertices.size()) ? indexA + 1U : 0U;
+    double distFromPointA = (Point - m_vertices[indexA]).norm();
+    double distFromPointB = (Point - m_vertices[indexB]).norm();
+    ClosestVertexIndex = (distFromPointA < distFromPointB) ? indexA : indexB;
+
+    return ProjectionToBestSegment;
+}
+
 //Test to see if polygon contains a point in its interior (not especially stable on the boundary)
 bool SimplePolygon::ContainsPoint(Eigen::Vector2d const & Point) const {
     // Test to see if a point is inside a polygon. Based on code from: http://geomalgorithms.com/a03-_inclusion.html. Copyright info:
@@ -447,7 +679,7 @@ bool SimplePolygon::ContainsPoint(Eigen::Vector2d const & Point) const {
     if (m_vertices.size() < 3U)
         return false;
 
-    //Append first point to end and peform winding number test
+    //Append first point to end and perform winding number test
     std::Evector<Eigen::Vector2d> V = m_vertices;
     V.push_back(V.front());
     return (PointIsInsidePolygonHelper_wn_PnPoly(Point, V) != 0);
@@ -573,136 +805,329 @@ bool SimplePolygon::IntersectsWith(SimplePolygon const & OtherPoly) const {
     return false;
 }
 
+//TODO:
+//Optimizations in history structure and updates in shadow detection module
+//Final cleanup in shadow detection module + commit
+
 //Trace the outline of the polygonal object represented by m_vertices. Compute new vertices from the outline that traces the object and keeps
 //it's interior to the left. If m_vertices already defined a valid simple polygon and kept the interior to the left this should (I hope) leave
 //the object essentially unchanged, except it might add vertices if the polygon touched itself at an isolated point, but the shape should be the same.
+//
+//This is actually more challenging than it seems and most simple approaches leave edge cases that give poor results, like clipping
+//off large portions of the object. This function is rather complex, but most of the complexity is there to better handle strange edge
+//cases. At a high level, the algorithm has several steps:
+//1 - Build a collection of line segments representing the original object
+//2 - Iteratively sanitize the line segments and replace elements as necessary to get segments that only intersect one another at endpoints
+//3 - Build a graph where vertices are endpoints of segments and edges exist between vertices that are connected by a segment
+//4 - Iteratively prune leaf nodes in the graph until none remain.
+//5 - Select a vertex that we know is on the outer trace of the polygon and a first edge that keeps the interior to the left
+//6 - Select the next node from those adjacent to the last one that maximizes the internal angle with the last segment.
+//    Repeat this until we come back to the first node. We allow traversing edges multiple times at this stage.
+//7 - The processing thus far does a good job of removing interior cruft and giving us an outline of the original shape, but
+//    there may be multiple components that each independently contain area and which are only connected to each other through
+//    chains of segments that enclose no area. These would not have been removed during leaf pruning since they aren't actually leaves.
+//    In this state we may have an object that does not obey our rules for a simple polygon because there are self intersections.
+//    We identify the largest component and prune off all smaller components.
 void SimplePolygon::Sanitize(void) {
-    //If the polygon is degenerate, there is no "good" answer here. Just leave it alone.
-    if (m_vertices.size() < 3U)
-        return;
+	//If the polygon is degenerate, there is no "good" answer here. Just leave it alone.
+	if (m_vertices.size() < 3U)
+		return;
 
-    //Build a collection of line segments that form the full polygon and break them at intersections so the resulting segments can only intersect at nodes.
-    std::Evector<LineSegment> segments = GetLineSegments();
-    segments = BreakAtIntersections(segments);
+	//Build a collection of line segments that form the full polygon and break them at intersections so the resulting segments can only intersect at nodes.
+	std::Evector<LineSegment> segments = GetLineSegments();
+	segments = SanitizeCollectionOfSegments(segments);
 
-    //Note that breaking line segments happens exactly (the new interior node is exactly the same in the resulting segments).
-    //Also, the segments extracted from the polygon exactly cover the boundary (nodes that are supposed to be the same are exacty the same).
-    //The only error introduced is round-off error in computing the placement of interior nodes when segments intersect.
+	//Note that when segments are sanitized, the new path should be nearly exactly the same as the original path. When a segment is
+	//split into two segments, the point where the original segment was split will be an endpoint of both output line segments.
+	//However, some new segments may contain endpoints that were not endpoints of the initial segment and there can be some round-off
+	//error in the computation of these points.
 
-    //Change our representation to a node graph
-    std::Evector<Eigen::Vector2d> NodeLocations; NodeLocations.reserve(segments.size());
-    std::vector<std::vector<int>> AdjacentNodes; AdjacentNodes.reserve(segments.size());
-    for (auto const & segment : segments) {
-        int endpoint1Index = -1;
-        int endpoint2Index = -1;
-        for (size_t n = 0U; n < NodeLocations.size(); n++) {
-            if ((segment.m_endpoint1 - NodeLocations[n]).norm() < TOLERANCE)
-                endpoint1Index = int(n);
-            if ((segment.m_endpoint2 - NodeLocations[n]).norm() < TOLERANCE)
-                endpoint2Index = int(n);
-            if ((endpoint1Index >= 0) && (endpoint2Index >= 0))
-                break;
-        }
+	//Change our representation to a node graph
+	std::Evector<Eigen::Vector2d> NodeLocations;        NodeLocations.reserve(segments.size());
+	std::vector<std::unordered_set<int>> AdjacentNodes; AdjacentNodes.reserve(segments.size());
+	for (auto const & segment : segments) {
+		int endpoint1Index = -1;
+		int endpoint2Index = -1;
+		for (size_t n = 0U; n < NodeLocations.size(); n++) {
+			if ((segment.m_endpoint1 - NodeLocations[n]).norm() < TOLERANCE)
+				endpoint1Index = int(n);
+			if ((segment.m_endpoint2 - NodeLocations[n]).norm() < TOLERANCE)
+				endpoint2Index = int(n);
+			if ((endpoint1Index >= 0) && (endpoint2Index >= 0))
+				break;
+		}
 
-        if (endpoint1Index < 0) {
-            endpoint1Index = (int) NodeLocations.size();
-            NodeLocations.push_back(segment.m_endpoint1);
-            AdjacentNodes.emplace_back();
-        }
-        if (endpoint2Index < 0) {
-            endpoint2Index = (int) NodeLocations.size();
-            NodeLocations.push_back(segment.m_endpoint2);
-            AdjacentNodes.emplace_back();
-        }
+		if (endpoint1Index < 0) {
+			endpoint1Index = (int) NodeLocations.size();
+			NodeLocations.push_back(segment.m_endpoint1);
+			AdjacentNodes.emplace_back();
+		}
+		if (endpoint2Index < 0) {
+			endpoint2Index = (int) NodeLocations.size();
+			NodeLocations.push_back(segment.m_endpoint2);
+			AdjacentNodes.emplace_back();
+		}
 
-        AdjacentNodes[endpoint1Index].push_back(endpoint2Index);
-        AdjacentNodes[endpoint2Index].push_back(endpoint1Index);
-    }
+		AdjacentNodes[endpoint1Index].insert(endpoint2Index);
+		AdjacentNodes[endpoint2Index].insert(endpoint1Index);
+	}
 
-    //Find an extremal node to begin traversal with - we choose the left-most node of those with min Y value
-    double minY = std::numeric_limits<double>::infinity();
-    for (Eigen::Vector2d point : NodeLocations)
-        minY = std::min(minY, point(1));
-    double minX = std::numeric_limits<double>::infinity();
-    int extremalNodeIndex = 0;
-    for (int index = 0; index < (int) NodeLocations.size(); index++) {
-        Eigen::Vector2d point = NodeLocations[index];
-        if (point(1) == minY) {
-            if (point(0) < minX) {
-                minX = point(0);
-                extremalNodeIndex = index;
-            }
-        }
-    }
+	//Iteratively identify leaf nodes to prune from the graph until none remain
+	std::unordered_set<int> indicesToPrune;
+	while (true) {
+		bool leavesFound = false;
+		for (int n = 0; n < (int) AdjacentNodes.size(); n++) {
+			if (indicesToPrune.count(n) > 0U)
+				continue; //This node is already marked for deletion - skip it
+			int numberOfAdjacentNodes = 0;
+			for (int adjacentNodeIndex : AdjacentNodes[n]) {
+				if (indicesToPrune.count(adjacentNodeIndex) == 0U)
+					numberOfAdjacentNodes++;
+			}
+			//std::cerr << "Node " << n << ": Adjacent nodes: " << numberOfAdjacentNodes << "\r\n";
+			if (numberOfAdjacentNodes <= 1) {
+				indicesToPrune.insert(n);
+				leavesFound = true;
+			}
+		}
+		if (! leavesFound)
+			break;
+	}
+	//if (! indicesToPrune.empty())
+	//	std::cerr << "Pruning " << (int) indicesToPrune.size() << " leaf nodes.\r\n";
+	//Re-build our graph data structures without the pruned nodes
+	std::vector<int> oldIndexToNewIndex(NodeLocations.size());
+	for (int oldIndex = 0; oldIndex < (int) NodeLocations.size(); oldIndex++) {
+		//The new index is the old index minus the number of nodes with lower indices marked for deletion
+		//If this node is marked for deletion, we use -1 for the new index
+		if (indicesToPrune.count(oldIndex) > 0U)
+			oldIndexToNewIndex[oldIndex] = -1;
+		else {
+			int numberOfNodesWithLowerIndicesMarkedForDeletion = 0;
+			for (int index : indicesToPrune) {
+				if (index < oldIndex)
+					numberOfNodesWithLowerIndicesMarkedForDeletion++;
+			}
+			oldIndexToNewIndex[oldIndex] = oldIndex - numberOfNodesWithLowerIndicesMarkedForDeletion;
+		}
+	}
+	{
+		std::Evector<Eigen::Vector2d> NewNodeLocations;        NewNodeLocations.reserve(NodeLocations.size());
+		std::vector<std::unordered_set<int>> NewAdjacentNodes; NewAdjacentNodes.reserve(NodeLocations.size());
+		for (int oldIndex = 0; oldIndex < (int) NodeLocations.size(); oldIndex++) {
+			if (oldIndexToNewIndex[oldIndex] >= 0) {
+				NewNodeLocations.push_back(NodeLocations[oldIndex]);
+				NewAdjacentNodes.emplace_back();
+				for (int adjacentNodeOldIndex : AdjacentNodes[oldIndex]) {
+					if (oldIndexToNewIndex[adjacentNodeOldIndex] >= 0)
+						NewAdjacentNodes.back().insert(oldIndexToNewIndex[adjacentNodeOldIndex]);
+				}
+			}
+		}
+		NodeLocations.swap(NewNodeLocations);
+		AdjacentNodes.swap(NewAdjacentNodes);
+	}
 
-    //We will populate a new polygonal object and store it as a sequence of node indices... starting with the one we just found.
-    std::vector<int> trajectory;
-    trajectory.reserve(NodeLocations.size());
-    trajectory.push_back(extremalNodeIndex);
+	//If there is nothing left after pruning, then stop here
+	if (NodeLocations.size() < 3U) {
+		m_vertices.clear();
+		return;
+	}
 
-    //Choose the first edge to be the one closest to direction (1,0). All edges move up from this node because of how it was chosen
-    {
-        double maxInternalAngle = -1.0;
-        int bextNextNodeIndex = -1;
-        for (int nodeIndex : AdjacentNodes[extremalNodeIndex]) {
-            Eigen::Vector2d A = NodeLocations[extremalNodeIndex] - Eigen::Vector2d(1.0, 0.0);
-            Eigen::Vector2d B = NodeLocations[extremalNodeIndex];
-            Eigen::Vector2d C = NodeLocations[nodeIndex];
-            double internalAngle = getInternalAngle(A, B, C);
-            if ((bextNextNodeIndex < 0) || (internalAngle > maxInternalAngle)) {
-                maxInternalAngle = internalAngle;
-                bextNextNodeIndex = nodeIndex;
-            }
-        }
-        if (bextNextNodeIndex < 0) {
-            std::cerr << "Internal Error in SimplePolygon::Sanitize - Failed to select second vertex.\r\n";
-            m_vertices.clear();
-            return;
-        }
-        trajectory.push_back(bextNextNodeIndex);
-        RemoveEdgeFromAdjacencyMap(AdjacentNodes, extremalNodeIndex, bextNextNodeIndex);
-    }
+	//Find an extremal node to begin traversal with - we choose the left-most node of those with min Y value
+	double minY = std::numeric_limits<double>::infinity();
+	for (Eigen::Vector2d point : NodeLocations)
+		minY = std::min(minY, point(1));
+	double minX = std::numeric_limits<double>::infinity();
+	int extremalNodeIndex = 0;
+	for (int index = 0; index < (int) NodeLocations.size(); index++) {
+		Eigen::Vector2d point = NodeLocations[index];
+		if (point(1) == minY) {
+			if (point(0) < minX) {
+				minX = point(0);
+				extremalNodeIndex = index;
+			}
+		}
+	}
+	//std::cerr << "NodeLocations.size(): " << NodeLocations.size() << "\r\n";
+	//std::cerr << "AdjacentNodes.size(): " << AdjacentNodes.size() << "\r\n";
+	//std::cerr << "Starting node: " << extremalNodeIndex << "\r\n";
 
-    //Now traverse edges, one at a time - removing each from the adjacency map once it's traversed. We always select the edge with maximal internal angle
-    //with the last edge. This keeps us following the outermost boundary of the polygonal object. We are done when we get back to our first node.
-    while (true) {
-        int currentNodeIndex  = trajectory[trajectory.size() - 1U];
-        int previousNodeIndex = trajectory[trajectory.size() - 2U];
+	//We will populate a new polygonal object and store it as a sequence of node indices... starting with the one we just found.
+	std::vector<int> trajectory;
+	trajectory.reserve(NodeLocations.size());
+	trajectory.push_back(extremalNodeIndex);
 
-        Eigen::Vector2d A = NodeLocations[previousNodeIndex];
-        Eigen::Vector2d B = NodeLocations[currentNodeIndex];
+	//We keep track of the number of times each segment is traversed
+	std::unordered_map<std::tuple<int,int>, int> edgeUseTallies; //<lowIndex, highIndex> --> number of times this edge is traversed
 
-        double maxInternalAngle = -1.0;
-        int bextNextNodeIndex = -1;
-        for (int nodeIndex : AdjacentNodes[currentNodeIndex]) {
-            Eigen::Vector2d C = NodeLocations[nodeIndex];
-            double internalAngle = getInternalAngle(A, B, C);
-            if (internalAngle > maxInternalAngle) {
-                maxInternalAngle = internalAngle;
-                bextNextNodeIndex = nodeIndex;
-            }
-        }
-        if (bextNextNodeIndex < 0) {
-            std::cerr << "Internal Warning in SimplePolygon::Sanitize - Stuck at node with no more adjacent nodes. Closing from here.\r\n";
-            trajectory.push_back(trajectory.front());
-            break;
-        }
-        else {
-            trajectory.push_back(bextNextNodeIndex);
-            RemoveEdgeFromAdjacencyMap(AdjacentNodes, currentNodeIndex, bextNextNodeIndex);
-        }
+	//Choose the first edge to be the one closest to direction (1,0). All edges move up from this node because of how it was chosen
+	{
+		double maxInternalAngle = -1.0;
+		int bextNextNodeIndex = -1;
+		for (int nodeIndex : AdjacentNodes[extremalNodeIndex]) {
+			//std::cerr << "Checking node with index " << nodeIndex << "\r\n";
+			Eigen::Vector2d A = NodeLocations[extremalNodeIndex] - Eigen::Vector2d(1.0, 0.0);
+			Eigen::Vector2d B = NodeLocations[extremalNodeIndex];
+			Eigen::Vector2d C = NodeLocations[nodeIndex];
+			double internalAngle = getInternalAngle(A, B, C);
+			if ((bextNextNodeIndex < 0) || (internalAngle > maxInternalAngle)) {
+				maxInternalAngle = internalAngle;
+				bextNextNodeIndex = nodeIndex;
+			}
+		}
+		if (bextNextNodeIndex < 0) {
+			std::cerr << "Internal Error in SimplePolygon::Sanitize - Failed to select second vertex.\r\n";
+			m_vertices.clear();
+			return;
+		}
+		trajectory.push_back(bextNextNodeIndex);
+		edgeUseTallies[std::make_tuple(std::min(extremalNodeIndex, bextNextNodeIndex), std::max(extremalNodeIndex, bextNextNodeIndex))]++;
+	}
 
-        //Test regular termination condition
-        if (trajectory.front() == trajectory.back())
-            break;
-    }
+	//Now traverse edges, one at a time. In each step we select the next edge that maximizes the internal angle with the last edge.
+	//This keeps us on the outermost boundary of the object. We are done when we get back to the node we started at.
+	//We do not modify the graph while we go so we deliberately allow edges to be traversed multiple times. This is important
+	//to prevent clipping if there are multiple components that are only connected by a single path. However, it also introduces
+	//some risk. If we remove an edge from the graph in each step then we have a guaranteed stopping condition since we will eventually
+	//run out of edges, even if something unexpected happens. However, since we don't do this we would be relying on a more theoretical
+	//guarantee that we should eventually reach the starting node again. To be safe, we also have a failsafe to ensure that even if
+	//there are some edge cases that we haven't thought of, this stage will always eventually finish. We want to make sure that our only
+	//failure mode is a bad final polygon... not an infinite loop.
+	while (true) {
+		int currentNodeIndex  = trajectory[trajectory.size() - 1U];
+		int previousNodeIndex = trajectory[trajectory.size() - 2U];
 
-    //Complete the object with the new vertices (remember that the first node is repeated at the end of trajectory so it should be removed)
-    trajectory.pop_back();
-    m_vertices.clear();
-    m_vertices.reserve(trajectory.size());
-    for (int index : trajectory)
-        m_vertices.push_back(NodeLocations[index]);
+		if (AdjacentNodes[currentNodeIndex].size() == 1U) {
+			//If there is only one option of where to go from here then the "choice" is easy
+			int nextNodeIndex = *(AdjacentNodes[currentNodeIndex].begin());
+			trajectory.push_back(nextNodeIndex);
+			edgeUseTallies[std::make_tuple(std::min(currentNodeIndex, nextNodeIndex), std::max(currentNodeIndex, nextNodeIndex))]++;
+		}
+		else {
+			//We have multiple options for where to go from here. Choose the segment with max internal angle
+			Eigen::Vector2d A = NodeLocations[previousNodeIndex];
+			Eigen::Vector2d B = NodeLocations[currentNodeIndex];
+
+			double maxInternalAngle = -1.0;
+			int bextNextNodeIndex = -1;
+			for (int nodeIndex : AdjacentNodes[currentNodeIndex]) {
+				//Never go directly back to the last node (remember all leaves have been pruned so this should never be necessary)
+				//This test is important because going back in the exact direction we came from is the case where the internal
+				//angle toggles between 0 and 2*pi, meaning round off error determines whether this looks like the best or worst
+				//option. Thus, we need to manually exclude this option.
+				if (nodeIndex == previousNodeIndex)
+					continue;
+				Eigen::Vector2d C = NodeLocations[nodeIndex];
+				double internalAngle = getInternalAngle(A, B, C);
+				if (internalAngle > maxInternalAngle) {
+					maxInternalAngle = internalAngle;
+					bextNextNodeIndex = nodeIndex;
+				}
+			}
+			//Note: this case should never happen now since we don't edit the adjacency map as we go.
+			//This should only be possible at a leaf node and we are supposed to have trimmed all leaf nodes already.
+			if (bextNextNodeIndex < 0) {
+				std::cerr << "Internal Error in SimplePolygon::Sanitize(). We seem to be stuck at a leaf node even though there ";
+				std::cerr << "shouldn't be any. Closing from here - this will probably clip off some of the object.\r\n";
+				std::cerr << "Last vertex: " << trajectory.back() << "\r\n";
+				trajectory.push_back(trajectory.front());
+				edgeUseTallies[std::make_tuple(std::min(currentNodeIndex, trajectory.front()), std::max(currentNodeIndex, trajectory.front()))]++;
+				break;
+			}
+			else {
+				trajectory.push_back(bextNextNodeIndex);
+				edgeUseTallies[std::make_tuple(std::min(currentNodeIndex, bextNextNodeIndex), std::max(currentNodeIndex, bextNextNodeIndex))]++;
+			}
+		}
+
+		//Test regular termination condition
+		if (trajectory.front() == trajectory.back())
+			break;
+
+		//Test failsafe termination condition
+		if (trajectory.size() > 2U*NodeLocations.size()) {
+			std::cerr << "Internal error in SimplePolygon::Sanitize(): New trajectory is unreasonably long. This most likely ";
+			std::cerr << "means that our outline trace is going in circles, which shouldn't happen. Closing from here - ";
+			std::cerr << "this will probably clip off some of the object.\r\n";
+			trajectory.push_back(trajectory.front());
+			break;
+		}
+	}
+	trajectory.pop_back(); //Remove the last node since there is an implicit connection between the last and first nodes
+
+	//Since we now allow edges to be traversed multiple times the current trajectory is not guaranteed to meet our
+	//requirements for a simple polygon. We need to identify the largest simple polygon component and prune off any
+	//sections that are only connected to the main components through a single edge or chain of edges.
+	//
+	//There are some options for how to do this. We could throw out all nodes in our graph that were not traversed and then
+	//do an all-node-to-all-node max flow computation. If two nodes have a max flow between them of 1 it means that all
+	//paths between them go through a bottleneck, which means they are in different components, as we have defined them.
+	//That is rather expensive though, so we do something else. We travel down the trajectory that we just found, node by node,
+	//and assign a label to each node. When we traverse an edge that is only used one time in our trajectory we assign the same
+	//label as the previous node. When we traverse an edge that is used multiple times in our trajectory we must be moving between
+	//components so we change our current label based on the number of times we have traversed the edge so far. If it's our first
+	//time we get a new, unused label. If it is our second use of the edge we are returning to a component and so we go back to the
+	//label used by that component. When we are done, we select the label with the greatest number of vertices and prune all nodes
+	//that were assigned a different label. We could also use area to pick the dominant component, but vertex count is faster.
+	//
+	//It seems that we should never see an edge used more than twice in a trajectory formed by a max-internal-angle trace so
+	//we shouldn't need to worry about 3rd, 4th, or later crossings of an edge. I'm not certain though that this is guaranteed.
+	//We treat later crossings the same as the second crossing, even though they probably shouldn't happen.
+	{
+		if (trajectory.empty()) {
+			m_vertices.clear();
+			return;
+		}
+
+		//We keep track of how many times each edge is traversed
+		std::unordered_map<std::tuple<int,int>, int> edgeTracker; //<lowIndex, highIndex> --> number of times this edge is traversed
+		std::unordered_map<int, int> numVerticesByLabel; //label --> tally
+
+		std::vector<int> nodeLabels(trajectory.size());
+		nodeLabels[0] = 0;
+		numVerticesByLabel[0]++;
+		for (size_t trajIndex = 1U; trajIndex < trajectory.size(); trajIndex++) {
+			int lastIndex = trajectory[trajIndex - 1U];
+			int thisIndex = trajectory[trajIndex];
+			std::tuple<int, int> edgeKey(std::min(lastIndex, thisIndex), std::max(lastIndex, thisIndex));
+			if (edgeUseTallies.at(edgeKey) == 1U)
+				nodeLabels[trajIndex] = nodeLabels[trajIndex - 1U];
+			else {
+				//We are crossing an edge that is used multiple times
+				if (edgeTracker[edgeKey] == 0U) {
+					//This is our first crossing into a new component - get a new label
+					int newLabel = 0;
+					while (numVerticesByLabel.count(newLabel) > 0U)
+						newLabel++;
+					nodeLabels[trajIndex] = newLabel;
+				}
+				//If this isn't our first time traversing this edge, then we don't actually need to assign a label
+				//to the current node since it already has one and we want to go back to using that label
+			}
+			edgeTracker[edgeKey]++;
+			numVerticesByLabel[nodeLabels[trajIndex]]++;
+		}
+
+		int mainLabel = 0;
+		int numVerticesInBiggestComponent = -1;
+		for (auto const & kv : numVerticesByLabel) {
+			int label = kv.first;
+			int numVertices = kv.second;
+			if ((numVerticesInBiggestComponent < 0) || (numVertices > numVerticesInBiggestComponent)) {
+				mainLabel = label;
+				numVerticesInBiggestComponent = numVertices;
+			}
+		}
+
+		//We want to prune off all nodes that are not in the dominant group
+		m_vertices.clear();
+		m_vertices.reserve(trajectory.size());
+		for (size_t trajIndex = 0U; trajIndex < trajectory.size(); trajIndex++) {
+			if (nodeLabels[trajIndex] == mainLabel)
+				m_vertices.push_back(NodeLocations[trajectory[trajIndex]]);
+		}
+	}
 }
 
 
@@ -770,13 +1195,13 @@ bool Polygon::IsValid(void) const {
 
 //Returns true if this polygon intersects with the given "other" polygon. Not stable if the intersection has 0 area.
 bool Polygon::IntersectsWith(Polygon const & OtherPoly) const {
-    //We have a non-empty intersection if the boundery polygons intersect (neglecting holes) and it is not the case that the boundary of
+    //We have a non-empty intersection if the boundary polygons intersect (neglecting holes) and it is not the case that the boundary of
     //one polygon is contained within a hole of the other polygon. Keep in mind that a Polygon, as we have defined it,
     //cannot have separate, disjoint components - this simplifies the logic here. If the boundary polygons don't intersect
     //as simple polygons then clearly there is no intersection. Thus, we restrict our focus to the case that they do
     //intersect (as simple polygons... that is, ignoring holes).
     //
-    //Claim: It is not the case that one poly is comletely in a hole of the other => Non-empty intersection
+    //Claim: It is not the case that one poly is completely in a hole of the other => Non-empty intersection
     //Prove by contradiction. Assume empty intersection.
     //Define the "simple closure" of a polygon to be the closure of the outer boundary simple polygon.
     //Again, if the simple closures of A and B don't intersect then clearly A and B don't intersect so we are only looking at
@@ -961,66 +1386,112 @@ void PolygonCollection::Triangulate(std::Evector<Triangle> & Triangles) const {
 // *********************************************************   Public Function Definitions   ******************************************************
 // ************************************************************************************************************************************************
 
-//Take a collection of line segments and break all intersecting pairs of segments into fragments. The result is a collection of line segments covering
-//the same path as the original collection, but with segments that (usually) only intersect at endpoints and not along edges. We say usually because there
-//may be some odd behavior if parallel segments overlap over a length > 0.
-//Tested over some relatively simple (but not completely trivial) test cases and this seems to be working correctly (1/29/2021)
-std::Evector<LineSegment> BreakAtIntersections(std::Evector<LineSegment> const & InputSegments) {
-    std::Evector<LineSegment> Segments = InputSegments;
-    std::Evector<LineSegment> outputSegments;
-    outputSegments.reserve(2U*InputSegments.size());
-    while (! Segments.empty()) {
-        //Create a vector containing a single segment and remove it from the Segments vector
-        std::Evector<LineSegment> SegmentsA(1U, Segments.back());
-        Segments.pop_back();
+//Take a collection of line segments and break/merge as needed to get a new collection that covers the same path but for
+//which segments can only intersect at vertices.
+std::Evector<LineSegment> SanitizeCollectionOfSegments(std::Evector<LineSegment> const & InputSegments) {
+	//First we build a graph where each node represents a segment and nodes are adjacent if the segments share a non-empty interior intersection
+	std::vector<std::vector<int>> adjacencyMap(InputSegments.size());
+	for (int n = 0; n < (int) InputSegments.size(); n++) {
+		for (int m = n + 1; m < (int) InputSegments.size(); m++) {
+			if (LineSegment::HasInteriorOverlap(InputSegments[n], InputSegments[m])) {
+				adjacencyMap[n].push_back(m);
+				adjacencyMap[m].push_back(n);
+			}
+		}
+	}
 
-        //Create a container to hold fragments of the remaining segments when split by the segment we removed
-        std::Evector<LineSegment> SegmentsB;
-        SegmentsB.reserve(2U*Segments.size());
+	//Break the segments into clusters where there are no non-vertex intersections between segments in different clusters
+	std::vector<std::unordered_set<int>> clusters;
+	std::unordered_set<int> availableNodes;
+	for (int n = 0; n < (int) InputSegments.size(); n++)
+		availableNodes.insert(n);
+	while (! availableNodes.empty()) {
+		int seedNode = *(availableNodes.begin());
+		clusters.emplace_back();
+		clusters.back().insert(seedNode);
+		availableNodes.erase(seedNode);
+		while (true) {
+			std::unordered_set<int> newNodes;
+			for (int n : clusters.back()) {
+				for (int m : adjacencyMap[n]) {
+					if (clusters.back().count(m) == 0U)
+						newNodes.insert(m);
+				}
+			}
+			if (newNodes.empty())
+				break;
+			else {
+				clusters.back().insert(newNodes.begin(), newNodes.end());
+				for (int index : newNodes)
+					availableNodes.erase(index);
+			}
+		}
+	}
 
-        //Go through each remaining segment and see if it intersects any fragment of the removed segment. If not, we just put in SegmentsB.
-        //If so, we fracture both segments.
-        for (size_t n = 0U; n < Segments.size(); n++) {
-            LineSegment segmentB = Segments[n];
-            bool intersectionFound = false;
-            for (size_t m = 0U; m < SegmentsA.size(); m++) {
-                LineSegment segmentA = SegmentsA[m];
-                Eigen::Vector2d intersection;
-                bool IsInteriorA, IsInteriorB;
-                if (segmentA.ComputeInteriorIntersection(segmentB, intersection, IsInteriorA, IsInteriorB)) {
-                    //There is an interior intersection between segments A and B
-                    if (IsInteriorA) {
-                        //We need to fracture the A segment
-                        SegmentsA[m] = LineSegment(segmentA.m_endpoint1, intersection);
-                        SegmentsA.push_back(LineSegment(intersection, segmentA.m_endpoint2));
-                    }
+	//Now, within each cluster, iteratively sanitize pairs until there are no more internal overlaps. When done, copy the segments of
+	//each sanitized cluster to a single vector of output segments.
+	std::Evector<LineSegment> outputSegments;
+	outputSegments.reserve(InputSegments.size());
+	for (size_t clusterIndex = 0U; clusterIndex < clusters.size(); clusterIndex++) {
+		//Sanitize cluster "clusterIndex"
+		std::Evector<LineSegment> clusterSegments;
+		clusterSegments.reserve(clusters[clusterIndex].size());
+		for (int n : clusters[clusterIndex])
+			clusterSegments.push_back(InputSegments[n]);
+		if (clusterSegments.size() > 1U) {
+			int numPasses = 0;
+			for (; numPasses < 100; numPasses++) {
+				std::Evector<LineSegment> newSegments;
+				bool actionPerformed = false;
+				for (size_t indexA = 0; indexA < clusterSegments.size(); indexA++) {
+					for (size_t indexB = indexA + 1U; indexB < clusterSegments.size(); indexB++) {
+						if (LineSegment::SanitizeSegments(clusterSegments[indexA], clusterSegments[indexB], newSegments)) {
+							/*std::cerr << "Sanitization action performed.\r\n";
+							std::cerr << "Original segments:\r\n";
+							std::cerr << clusterSegments[indexA] << "\r\n";
+							std::cerr << clusterSegments[indexB] << "\r\n";
+							std::cerr << "New segments:\r\n";
+							for (auto const & seg : newSegments)
+								std::cerr << seg << "\r\n";
+							std::cerr << "\r\n";*/
 
-                    if (IsInteriorB) {
-                        SegmentsB.push_back(LineSegment(segmentB.m_endpoint1, intersection));
-                        SegmentsB.push_back(LineSegment(intersection, segmentB.m_endpoint2));
-                    }
-                    else
-                        SegmentsB.push_back(segmentB);
+							//Replace original segments with new segments
+							if (newSegments.empty()) {
+								clusterSegments.erase(clusterSegments.begin() + indexB); //Erase element in last position first
+								clusterSegments.erase(clusterSegments.begin() + indexA); //Erase element in first position second
+							}
+							else if (newSegments.size() == 1U) {
+								clusterSegments[indexA] = newSegments[0];
+								clusterSegments.erase(clusterSegments.begin() + indexB);
+							}
+							else {
+								clusterSegments[indexA] = newSegments[0];
+								clusterSegments[indexB] = newSegments[1];
+								for (size_t n = 2U; n < newSegments.size(); n++)
+									clusterSegments.push_back(newSegments[n]);
+							}
+							actionPerformed = true;
+							break;
+						}
+					}
+					if (actionPerformed)
+						break;
+				}
 
-                    //The segments in the A vector or fragments of a single segment. If we intersected with one of them
-                    //we canot possibly intersect another, so there is no need to continue checking fragments.
-                    intersectionFound = true;
-                    break;
-                }
-            }
-            if (! intersectionFound)
-                SegmentsB.push_back(segmentB);
-        }
+				//Stopping condition is going through a full loop without finding interior overlaps/intersections
+				if (! actionPerformed)
+					break;
+			}
+			if (numPasses >= 100) {
+				std::cerr << "Warning in SanitizeCollectionOfSegments(): Excessive number of actions needed to sanitize cluster ";
+				std::cerr << "of line segments. Possible oscillatory behavior in pairwise segment sanitization.";
+			}
+		}
+		outputSegments.insert(outputSegments.end(), clusterSegments.begin(), clusterSegments.end());
+	}
 
-        //At this point, all of our original segments are covered by fragments held in SegmentsA and SegmentsB. Furthermore, none of
-        //the fragments in SegmentsA have interior intersections with any of fragments in either SegmentsA or SegmentsB.
-        outputSegments.insert(outputSegments.end(), SegmentsA.begin(), SegmentsA.end());
-        Segments.swap(SegmentsB);
-    }
-
-    return outputSegments;
+	return outputSegments;
 }
-//omqueeg
 
 // ************************************************************************************************************************************************
 // ********************************************************   Internal Function Definitions   *****************************************************
@@ -1053,14 +1524,14 @@ static double getInternalAngle(Eigen::Vector2d const & A, Eigen::Vector2d const 
 
 //Try to remove an edge from a graph adjacency map. The edge need not exist, but IndexA and IndexB must be valid node indices.
 static void RemoveEdgeFromAdjacencyMap(std::vector<std::vector<int>> & AdjacentNodes, int IndexA, int IndexB) {
-    //Remove IndexB from the adjacent nodes vector for IndexA
-    auto it = std::find(AdjacentNodes[IndexA].begin(), AdjacentNodes[IndexA].end(), IndexB);
-    if (it != AdjacentNodes[IndexA].end())
-        AdjacentNodes[IndexA].erase(it);
-    //Remove IndexA from the adjacent nodes vector for IndexB
-    it = std::find(AdjacentNodes[IndexB].begin(), AdjacentNodes[IndexB].end(), IndexA);
-    if (it != AdjacentNodes[IndexB].end())
-        AdjacentNodes[IndexB].erase(it);
+	//Remove IndexB from the adjacent nodes vector for IndexA
+	auto it = std::find(AdjacentNodes[IndexA].begin(), AdjacentNodes[IndexA].end(), IndexB);
+	if (it != AdjacentNodes[IndexA].end())
+		AdjacentNodes[IndexA].erase(it);
+	//Remove IndexA from the adjacent nodes vector for IndexB
+	it = std::find(AdjacentNodes[IndexB].begin(), AdjacentNodes[IndexB].end(), IndexA);
+	if (it != AdjacentNodes[IndexB].end())
+		AdjacentNodes[IndexB].erase(it);
 }
 
 //Return true if the given 3 points are co-linear and false otherwise

@@ -193,8 +193,6 @@ namespace Guidance {
             }
             
             if (m_dronesToTask) {
-
-
                 m_dronesToTask = false;
             }
 

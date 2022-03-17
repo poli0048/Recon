@@ -7,6 +7,7 @@
 #include "MapWidget.hpp"
 #include "VisWidget.hpp"
 #include "../Modules/Guidance/Guidance.hpp"
+#include "MyGui.hpp"
 
 //Select a color based on an items index in a container of size N. This is for selecting colors to render objects in that will generally
 //result in high visual distinction between objects with nearby indices. Opacity is on a [0,1] scale
@@ -139,10 +140,27 @@ void GuidanceOverlay::Draw_Partition(Eigen::Vector2d const & CursorPos_NM, ImDra
 			ImVec2 textSize = ImGui::CalcTextSize(label.c_str());
 			double textSizeMaxDim = double(std::max(textSize.x, textSize.y));
 			if (minDimLength > textSizeMaxDim)
-				MyGui::AddText(DrawList, Centroid_SS, IM_COL32(0, 0, 0, 255), label.c_str(), NULL, true, true);
+				MyGui::AddText(DrawList, Centroid_SS, IM_COL32(255, 255, 255, 255), label.c_str(), NULL, true, true);
 		}
 	}
 }
+
+//Get a point inside the given component that is roughly near the center of the first polygon in the component poly collection
+//The returned point is in Normalized Mercator. CompIndex must be a valid index - this is not checked.
+Eigen::Vector2d GuidanceOverlay::GetCentralPointForComponentOfPartition(size_t CompIndex) {
+	PolygonCollection const & polyCollection(m_SurveyRegionPartition[CompIndex]);
+	Polygon const & poly(polyCollection.m_components[0]);
+	SimplePolygon const & boundary(poly.m_boundary);
+	std::Evector<Eigen::Vector2d> const & vertices(boundary.GetVertices());
+
+	Eigen::Vector2d centroid(0.0, 0.0);
+	for (Eigen::Vector2d const & v : vertices)
+		centroid += v;
+	if (! vertices.empty())
+		centroid /= double(vertices.size());
+
+	return boundary.ProjectPoint(centroid);
+} 
 
 //Called in the draw loop for the map widget
 void GuidanceOverlay::Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds) {
@@ -223,7 +241,10 @@ void GuidanceOverlay::Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDrawL
 				int compIndex = (m_Sequences[droneIndex])[missionNumber];
 				if ((compIndex >= 0) && (compIndex < (int) m_SurveyRegionPartition.size())) {
 					taskedDrones[compIndex] = droneIndex;
-					labels[compIndex] = "Drone "s + std::to_string(droneIndex) + "\n"s + "Mission "s + std::to_string(missionNumber);
+					
+					//labels[compIndex] = "Drone "s + std::to_string(droneIndex + 1) + "\n"s + "Mission "s + std::to_string(missionNumber);
+					if (missionNumber == 0)
+						labels[compIndex] = "Drone "s + std::to_string(droneIndex + 1);
 				}
 			}
 		}
@@ -237,7 +258,27 @@ void GuidanceOverlay::Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDrawL
 		}
 
 		Draw_Partition(CursorPos_NM, DrawList, CursorInBounds, colors, labels);
-		//TODO: Draw visual indicators connecting the components in each sequence
+
+		//Draw visual indication of mission sequences
+		for (int droneIndex = 0; droneIndex < (int) m_Sequences.size(); droneIndex++) {
+			for (int missionNumber = 0; missionNumber + 1 < (int) m_Sequences[droneIndex].size(); missionNumber++) {
+				int comp1Index = (m_Sequences[droneIndex])[missionNumber];
+				int comp2Index = (m_Sequences[droneIndex])[missionNumber + 1];
+				if ((comp1Index >= 0) && (comp1Index < (int) m_SurveyRegionPartition.size()) &&
+				    (comp2Index >= 0) && (comp2Index < (int) m_SurveyRegionPartition.size())) {
+					Eigen::Vector2d comp1Center_NM = GetCentralPointForComponentOfPartition(size_t(comp1Index));
+					Eigen::Vector2d comp2Center_NM = GetCentralPointForComponentOfPartition(size_t(comp2Index));
+					Eigen::Vector2d comp1Center_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(comp1Center_NM);
+					Eigen::Vector2d comp2Center_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(comp2Center_NM);
+
+					Eigen::Vector2d A_SS = 0.8*comp1Center_SS + 0.2*comp2Center_SS;
+					Eigen::Vector2d B_SS = 0.2*comp1Center_SS + 0.8*comp2Center_SS;
+
+					ImVec4 colorVec4(1.0f, 1.0f, 1.0f, opacity/100.0f);
+					MyGui::AddArrow(DrawList, A_SS, B_SS, ImGui::GetColorU32(colorVec4), 3.0f, 0.8f*ImGui::GetFontSize());
+				}
+			}
+		}
 	}
 	else if (VisWidget::Instance().GuidanceOverlay_Vis == 3) {
 		//Draw current plans & Missions

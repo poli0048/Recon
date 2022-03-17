@@ -60,7 +60,7 @@ TimeAvailableOverlay::TimeAvailableOverlay() {
 		//Set hard-coded vis parameters
 		std::vector<std::tuple<uint8_t,uint8_t,uint8_t>> const & cmap = Colormaps::GetColormap(Colormap::RedToBlue);
 		uint16_t CmapMinVal = 0;  //Time available for low end of colormap (seconds)
-		uint16_t CmapMaxVal = 10; //Time available for high end of colormap (seconds)
+		uint16_t CmapMaxVal = 20; //Time available for high end of colormap (seconds)
 		
 		std::vector<uint8_t> data(TAFun.TimeAvailable.rows * TAFun.TimeAvailable.cols * 4, 0);
 		int index = 0;

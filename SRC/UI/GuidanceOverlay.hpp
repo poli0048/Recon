@@ -31,6 +31,10 @@ class GuidanceOverlay {
 		void Draw_Partition(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds,
 		                    std::vector<ImU32> const & Colors, std::vector<std::string> const & Labels);
 		
+		//Get a point inside the given component that is roughly near the center of the first polygon in the component poly collection
+		//The returned point is in Normalized Mercator. CompIndex must be a valid index - this is not checked.
+		Eigen::Vector2d GetCentralPointForComponentOfPartition(size_t CompIndex);
+		
 		//void DrawLines(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
 		//void DrawCircles(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
 		
