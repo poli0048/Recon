@@ -1,6 +1,6 @@
 //Recon is a GIS system for storing scene and obstacle data for drones and is a multi-vehicle ground control station
 //Author: Bryan Poling
-//Copyright (c) 2020 Sentek Systems, LLC. All rights reserved. 
+//Copyright (c) 2020 Sentek Systems, LLC. All rights reserved.
 
 //System Includes
 #include <cstdio>
@@ -28,6 +28,8 @@
 #include "Modules/GNSS-Receiver/GNSSReceiver.hpp"
 #include "UI/CommandWidget.hpp"
 #include "UI/VehicleControlWidget.hpp"
+#include "Modules/Shadow-Detection/ShadowDetection.hpp"
+#include "Modules/Shadow-Propagation/ShadowPropagation.hpp"
 
 #if defined IS_WINDOWS
 	#include <tchar.h>
@@ -337,6 +339,12 @@ int main(int argc, const char * argv[]) {
 	ReconUI & ui = ReconUI::Instance();
 	ui.Log = &log;
 	app.Main(&ui);
+
+	//Stop the shadow modules - this is done manually to ensure that nothing those threads are using gets yanked from under them
+	//when various module are destroyed. The shadow detection engine may have a pointer to a drone, and the shadow propagation
+	//engine relies on the shadow detection engine, so we shut them down in reverse order.
+	ShadowPropagation::ShadowPropagationEngine::Instance().Shutdown();
+	ShadowDetection::ShadowDetectionEngine::Instance().Shutdown();
 	
 	//Destroy context for ImPlot
 	ImPlot::DestroyContext();

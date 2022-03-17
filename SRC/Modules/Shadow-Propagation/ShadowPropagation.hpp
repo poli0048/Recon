@@ -1,10 +1,11 @@
 //This module provides the main interface for the shadow propagation system
 //Authors: Bryan Poling
-//Copyright (c) 2021 Sentek Systems, LLC. All rights reserved. 
+//Copyright (c) 2021 Sentek Systems, LLC. All rights reserved.
 #pragma once
 
 //System Includes
 #include <vector>
+#include <deque>
 #include <string>
 #include <thread>
 #include <mutex>
@@ -17,13 +18,14 @@
 #include "../../EigenAliases.h"
 #include "../Shadow-Detection/ShadowDetection.hpp"
 
+
 namespace ShadowPropagation {
 	//Class for a time-stamped, geo-registered time available function - each pixel corresponds to a patch of ground. We use type uint16_t and
-	//interperet the value for a pixel as the number of seconds that patch of ground is expected to be free of shadows (measured from the timestamp).
-	//If we don't see anything in our forcast that is expected to hit a given pixel then the pixel is predicted to be clear for the full prediction
+	//interpret the value for a pixel as the number of seconds that patch of ground is expected to be free of shadows (measured from the timestamp).
+	//If we don't see anything in our forecast that is expected to hit a given pixel then the pixel is predicted to be clear for the full prediction
 	//horizon. That horizon is different for different pixels though (e.g. a pixel on our periphery may have almost no prediction horizon), and it may not
-	//be easy to estimate the horizon for a given pixel (it depends on cloud speed and direction). It is likily also not very actionable information so
-	//to avoid the added complexity of trying to estimate this we will just use a sentinal value to indicate this condition (that nothing currently visible
+	//be easy to estimate the horizon for a given pixel (it depends on cloud speed and direction). It is likely also not very actionable information so
+	//to avoid the added complexity of trying to estimate this we will just use a sentinel value to indicate this condition (that nothing currently visible
 	//is expected to hit a given pixel). We will use std::numeric_limits<uint16_t>::max() to indicate this.
 	class TimeAvailableFunction {
 		public:
@@ -46,32 +48,32 @@ namespace ShadowPropagation {
 	class ShadowPropagationEngine {
 		private:
 			std::thread       m_engineThread;
-			bool              m_running;
 			std::atomic<bool> m_abort;
-			std::mutex        m_mutex;
-			int               m_callbackHandle; //Handle for this objects shadow detection engine callback
+
+			//m_mutex protects all variables in this group
+			std::mutex m_mutex;
+			bool m_running;       //Whether the module is currently running or not
+			int m_callbackHandle; //Handle for this objects shadow detection engine callback
 			std::unordered_map<int, std::function<void(TimeAvailableFunction const & TA)>> m_callbacks;
-			
-			std::Evector<ShadowDetection::InstantaneousShadowMap> m_unprocessedShadowMaps;
+			std::Edeque<ShadowDetection::InstantaneousShadowMap> m_unprocessedShadowMaps;
 			TimeAvailableFunction m_TimeAvail; //Most recent time available function
 			
-			inline void ModuleMain(void);
+			void ModuleMain_LSTM(void);
+			void ModuleMain_ContourFlow(void);
 			
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 			using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
-			
-			static ShadowPropagationEngine & Instance() { static ShadowPropagationEngine Obj; return Obj; }
+
+        static ShadowPropagationEngine & Instance() { static ShadowPropagationEngine Obj; return Obj; }
 			
 			//Constructors and Destructors
-			ShadowPropagationEngine() : m_running(false), m_abort(false) {
-				m_engineThread = std::thread(&ShadowPropagationEngine::ModuleMain, this);
+			ShadowPropagationEngine() : m_abort(false), m_running(false) {
+				//m_engineThread = std::thread(&ShadowPropagationEngine::ModuleMain_LSTM, this);
+				m_engineThread = std::thread(&ShadowPropagationEngine::ModuleMain_ContourFlow, this);
 			}
-			~ShadowPropagationEngine() {
-				m_abort = true;
-				if (m_engineThread.joinable())
-					m_engineThread.join();
-			}
+			~ShadowPropagationEngine() { Shutdown(); }
+			inline void Shutdown(void);  //Stop processing and terminate engine thread
 			
 			inline void Start(void);     //Start or restart continuous processing of new shadow maps
 			inline void Stop(void);      //Stop processing
@@ -86,12 +88,19 @@ namespace ShadowPropagation {
 			inline bool GetMostRecentTimeAvailFun(TimeAvailableFunction & TimeAvailFun);
 	};
 
+	inline void ShadowPropagationEngine::Shutdown(void) {
+		m_abort = true;
+		if (m_engineThread.joinable())
+			m_engineThread.join();
+	}
+
 	inline void ShadowPropagationEngine::Start() {
 		std::scoped_lock lock(m_mutex);
-		m_unprocessedShadowMaps.clear(); //Ditch any old unprocessed data in the buffer
-		//Note: Also reset any state data relating to internal models
 		if (m_running)
 			return;
+
+		m_unprocessedShadowMaps.clear(); //Ditch any old unprocessed data in the buffer
+		
 		//Register a callback for handling new shadow maps. Note that our callback just copies the data to a buffer - we don't do any actual
 		//processing here or it would hold up the shadow detection module. The heavy lifting is done in ModuleMain()
 		m_callbackHandle = ShadowDetection::ShadowDetectionEngine::Instance().RegisterCallback([this](ShadowDetection::InstantaneousShadowMap const & NewMap) {
@@ -113,8 +122,8 @@ namespace ShadowPropagation {
 		std::scoped_lock lock(m_mutex);
 		return m_running;
 	}
-	
-	//Regester callback for new TA functions (returns handle)
+
+	//Register callback for new TA functions (returns handle)
 	inline int ShadowPropagationEngine::RegisterCallback(std::function<void(TimeAvailableFunction const & TA)> Callback) {
 		std::scoped_lock lock(m_mutex);
 		int token = 0;
@@ -129,55 +138,7 @@ namespace ShadowPropagation {
 		std::scoped_lock lock(m_mutex);
 		m_callbacks.erase(Handle);
 	}
-	
-	//If this function gets large (and it easily could), drop the "inline" specifier and move it to a CPP file.
-	//This will likily be needed anyways because some external libraries may be used in here and we don't want
-	//to include their headers in a header file.
-	inline void ShadowPropagationEngine::ModuleMain(void) {
-		while (! m_abort) {
-			m_mutex.lock();
-			if (! m_running) {
-				m_mutex.unlock();
-				std::this_thread::sleep_for(std::chrono::milliseconds(100));
-				continue;
-			}
-			
-			if (m_unprocessedShadowMaps.empty()) {
-				//There are no unprocessed shadow maps todeal with
-				m_mutex.unlock();
-				std::this_thread::sleep_for(std::chrono::milliseconds(100));
-				continue;
-			}
-			
-			//If we get here, we have unprocessed shadow maps to deal with
-			//TODO: *********************************************************************************
-			//TODO: ***************************** Magic sauce goes here *****************************
-			//TODO: *********************************************************************************
-			//Compute new Time Available function by some means
-			ShadowDetection::InstantaneousShadowMap & map(m_unprocessedShadowMaps[0]);
-			
-			
-			//Update m_TimeAvail
-			//Note: It might be a good idea to check if the buffer m_unprocessedShadowMaps is getting too large.
-			//This is an indicator that we are falling behind real time. Even if we can't handle missing data gracefully we should
-			//try to have a plan for this since if we fall behind real time our TA functions become worthless. Can we reset the model
-			//and only process every other shadow map? This doubling the time step would be like shadows are moving twice as fast, but
-			//a model trained for one time step may fork for another... just an idea.
-			
-			//Call any registered callbacks
-			for (auto const & kv : m_callbacks)
-				kv.second(m_TimeAvail);
-			
-			m_unprocessedShadowMaps.erase(m_unprocessedShadowMaps.begin()); //Will cause re-allocation but the buffer is small so don't worry about it
-			//TODO: *********************************************************************************
-			//TODO: *********************************************************************************
-			//TODO: *********************************************************************************
-			
-			//Unlock but don't snooze if we actually did work
-			m_mutex.unlock();
-		}
-	}
-	
+
 	inline bool ShadowPropagationEngine::GetTimestampOfMostRecentTimeAvailFun(TimePoint & Timestamp) {
 		std::scoped_lock lock(m_mutex);
 		if ((m_TimeAvail.TimeAvailable.rows == 0) || (m_TimeAvail.TimeAvailable.cols == 0))

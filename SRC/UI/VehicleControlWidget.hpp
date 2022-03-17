@@ -1686,12 +1686,10 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 					}
 					
 					if (ImGui::MenuItem("Start Feed", NULL, false, true)) {
-						//If the drone is actually a simulated drone we need to set the source video file
-						/*DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(& drone);
-						if (mySimDrone != nullptr) {
+						//If the drone is actually a simulated drone we need to tell it to feed imagery in real time
+						DroneInterface::SimulatedDrone * mySimDrone = dynamic_cast<DroneInterface::SimulatedDrone *>(& drone);
+						if (mySimDrone != nullptr)
 							mySimDrone->SetRealTime(true);
-							mySimDrone->SetSourceVideoFile(GetPathForSimVideoInput());
-						}*/
 						drone.StartDJICamImageFeed(myState.m_targetFPS);
 					}
 				}

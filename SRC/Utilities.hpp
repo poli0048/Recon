@@ -182,6 +182,53 @@ inline bool str2int(std::string str, int & Value) {
 	}
 }
 
+template<typename ValueType> ValueType getMedian(std::vector<ValueType> const & values) {
+	std::vector<ValueType> valueVecLocal;
+	valueVecLocal.insert(valueVecLocal.begin(), values.cbegin(), values.cend());
+	return getMedian(valueVecLocal, true);
+}
+
+//Return the median of a collection of floats or doubles - return 0.0 for an empty input collection
+//If the input container is a vector and you don't care if its values are re-arranged, you can set the SortInPlace flag to speed up processing
+template<typename ValueType> ValueType getMedian(std::vector<ValueType> & values, bool SortInPlace) {
+	std::vector<ValueType> valueVecLocal;
+	std::vector<ValueType> * valueVec;
+	if (SortInPlace)
+		valueVec = &(values);
+	else {
+		valueVecLocal.insert(valueVecLocal.begin(), values.cbegin(), values.cend());
+		valueVec = &(valueVecLocal);
+	}
+	
+	//Handle special cases (size equals 0, 1, or 2)
+	if (valueVec->empty()) {
+		fprintf(stderr,"Warning: Can't take median of empty collection.\r\n");
+		return(0.0);
+	}
+	else if (valueVec->size() == 1U)
+		return (*valueVec)[0];
+	else if (valueVec->size() == 2U)
+		return (ValueType(0.5)*(*valueVec)[0] + ValueType(0.5)*(*valueVec)[1]);
+	
+	//Handle case that there are 3 or more elements
+	if (valueVec->size() % 2U == 1U) {
+		//Odd number of elements
+		size_t medianIndex = (valueVec->size() - 1U) / 2U;
+		std::nth_element(valueVec->begin(), valueVec->begin() + medianIndex, valueVec->end());
+		return (*valueVec)[medianIndex];
+	}
+	else {
+		//Even number of elements
+		size_t medianIndex1 = (valueVec->size() - 2U) / 2U;
+		size_t medianIndex2 = medianIndex1 + 1U;
+		std::nth_element(valueVec->begin(), valueVec->begin() + medianIndex1, valueVec->end());
+		ValueType val1 = (*valueVec)[medianIndex1];
+		std::nth_element(valueVec->begin(), valueVec->begin() + medianIndex2, valueVec->end());
+		ValueType val2 = (*valueVec)[medianIndex2];
+		return (ValueType(0.5)*val1 + ValueType(0.5)*val2);
+	}
+}
+
 cv::Mat GetRefFrame(std::filesystem::path const & DatasetPath);
 
 //Return the path of the first .MOV file in the given folder (lexicographically)

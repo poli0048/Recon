@@ -228,12 +228,32 @@ inline void MainMenu::Draw() {
 					dronePtr->SetSourceVideoFile(GetSimVideoFilePath(DatasetFolder / "Dataset-1 (Becker 7-24-2020)"));
 				MapWidget::Instance().StartAnimation(lat - eps, lat + eps, lon - eps, lon + eps);
 			}
+			if (MyGui::MenuItem(u8"\uf04b", labelMargin, "Elgin (1 Drone)")) {
+				double lat = 44.129353*PI/180.0;
+				double lon = -92.293964*PI/180.0;
+				double alt = 329.18;
+				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
+				auto dronePtr = DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation B1"s, Eigen::Vector3d(lat, lon, alt));
+				if (dronePtr != nullptr)
+					dronePtr->SetSourceVideoFile(GetSimVideoFilePath(DatasetFolder / "Dataset-6 (Elgin 7-27-2020)"));
+				MapWidget::Instance().StartAnimation(lat - eps, lat + eps, lon - eps, lon + eps);
+			}
+			if (MyGui::MenuItem(u8"\uf04b", labelMargin, "Grand Meadow (1 Drone)")) {
+				double lat = 43.622595*PI/180.0;
+				double lon = -92.561887*PI/180.0;
+				double alt = 421.54;
+				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
+				auto dronePtr = DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation C1"s, Eigen::Vector3d(lat, lon, alt));
+				if (dronePtr != nullptr)
+					dronePtr->SetSourceVideoFile(GetSimVideoFilePath(DatasetFolder / "Dataset-8 (Grand Meadow 7-8-2020)"));
+				MapWidget::Instance().StartAnimation(lat - eps, lat + eps, lon - eps, lon + eps);
+			}
 			if (MyGui::MenuItem(u8"\uf04b", labelMargin, "Lamberton (1 Drone)")) {
 				double lat = 44.236124*PI/180.0;
 				double lon = -95.308418*PI/180.0;
 				double alt = 345.03;
 				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
-				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation A2"s, Eigen::Vector3d(lat, lon, alt));
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation D1"s, Eigen::Vector3d(lat, lon, alt));
 				MapWidget::Instance().StartAnimation(lat - eps, lat + eps, lon - eps, lon + eps);
 			}
 			if (MyGui::MenuItem(u8"\uf04b", labelMargin, "Lamberton (3 Drones - Config 1)")) {
@@ -241,15 +261,15 @@ inline void MainMenu::Draw() {
 				double lon = -95.308418*PI/180.0;
 				double alt = 345.03;
 				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
-				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation A3"s, Eigen::Vector3d(lat, lon, alt));
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation E1"s, Eigen::Vector3d(lat, lon, alt));
 				
 				lat = 44.236120*PI/180.0;
 				lon = -95.308018*PI/180.0;
-				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation B3"s, Eigen::Vector3d(lat, lon, alt));
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation E2"s, Eigen::Vector3d(lat, lon, alt));
 				
 				lat = 44.236544*PI/180.0;
 				lon = -95.307398*PI/180.0;
-				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation C3"s, Eigen::Vector3d(lat, lon, alt));
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation E3"s, Eigen::Vector3d(lat, lon, alt));
 				MapWidget::Instance().StartAnimation(lat - eps, lat + eps, lon - eps, lon + eps);
 			}
 			if (MyGui::MenuItem(u8"\uf04b", labelMargin, "Lamberton (3 Drones - Config 2)")) {
@@ -257,15 +277,15 @@ inline void MainMenu::Draw() {
 				double lon = -95.309292*PI/180.0;
 				double alt = 345.03;
 				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
-				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation A4"s, Eigen::Vector3d(lat, lon, alt));
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation F1"s, Eigen::Vector3d(lat, lon, alt));
 				
 				lat = 44.239201*PI/180.0;
 				lon = -95.304062*PI/180.0;
-				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation B4"s, Eigen::Vector3d(lat, lon, alt));
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation F2"s, Eigen::Vector3d(lat, lon, alt));
 				
 				lat = 44.236248*PI/180.0;
 				lon = -95.307414*PI/180.0;
-				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation C4"s, Eigen::Vector3d(lat, lon, alt));
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation F3"s, Eigen::Vector3d(lat, lon, alt));
 				MapWidget::Instance().StartAnimation(lat - 2.0*eps, lat + 2.0*eps, lon - 2.0*eps, lon + 2.0*eps);
 			}
 			if (MyGui::MenuItem(u8"\uf04b", labelMargin, "Lamberton (4 Drones - Config 1)")) {
@@ -273,19 +293,19 @@ inline void MainMenu::Draw() {
 				double lon = -95.309292*PI/180.0;
 				double alt = 345.03;
 				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
-				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation A5"s, Eigen::Vector3d(lat, lon, alt));
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation G1"s, Eigen::Vector3d(lat, lon, alt));
 				
 				lat = 44.239201*PI/180.0;
 				lon = -95.304062*PI/180.0;
-				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation B5"s, Eigen::Vector3d(lat, lon, alt));
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation G2"s, Eigen::Vector3d(lat, lon, alt));
 				
 				lat = 44.236248*PI/180.0;
 				lon = -95.307414*PI/180.0;
-				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation C5"s, Eigen::Vector3d(lat, lon, alt));
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation G3"s, Eigen::Vector3d(lat, lon, alt));
 
 				lat = 44.236123*PI/180.0;
 				lon = -95.308413*PI/180.0;
-				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation D5"s, Eigen::Vector3d(lat, lon, alt));
+				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation G4"s, Eigen::Vector3d(lat, lon, alt));
 				MapWidget::Instance().StartAnimation(lat - 2.0*eps, lat + 2.0*eps, lon - 2.0*eps, lon + 2.0*eps);
 			}
 			unsigned int NumSimDrones = DroneInterface::DroneManager::Instance().NumSimulatedDrones();

@@ -21,9 +21,15 @@ const cv::Size BOARD_SIZE = cv::Size(7, 5);
 const cv::Size FINAL_SIZE = cv::Size(1280, 720);
 
 // Helper function: Bilinear interpolation for image pixels
-inline cv::Vec3b getColorSubpixHelper(const cv::Mat& img, cv::Point2d pt) {
+inline uint8_t getColorSubpixHelper_UC1(cv::Mat const & Img, cv::Point2d Pt) {
     cv::Mat patch;
-    cv::getRectSubPix(img, cv::Size(1, 1), pt, patch);
+    cv::getRectSubPix(Img, cv::Size(1, 1), Pt, patch);
+    return patch.at<uint8_t>(0, 0);
+}
+
+inline cv::Vec3b getColorSubpixHelper_UC3(cv::Mat const & Img, cv::Point2d Pt) {
+    cv::Mat patch;
+    cv::getRectSubPix(Img, cv::Size(1, 1), Pt, patch);
     return patch.at<cv::Vec3b>(0, 0);
 }
 
