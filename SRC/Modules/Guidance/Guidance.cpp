@@ -957,6 +957,8 @@ namespace Guidance {
 
         std::cout << "numDrones: " << numDrones << ", numMissions: " << numMissions << std::endl;
 
+
+
         // Naive
         // Sequences.resize(numDrones, std::vector<int>());
 
@@ -967,9 +969,10 @@ namespace Guidance {
         //     }
         // }
 
-        // Depth N Best
 
-        int n = 2, num_to_assign;
+
+        // Depth N Best
+        int n = 2, num_to_assign, max_coverage = 0;
 
         std::vector<std::vector<std::vector<int>>> AllAssignments, AllSequences;
         std::vector<std::vector<int>> CurrentAssignments, CurrentSequences;
@@ -1008,9 +1011,38 @@ namespace Guidance {
             }
 
 
-            std::vector<std::vector<int>> bestSequence;
+            int distance = -1, min_max_distance = -1;
+            bool reset_distance = true;
+            
+
+            std::vector<std::vector<int>> bestSequence = AllSequences[0], preSequence;
             for (std::vector<std::vector<int>> sequence : AllSequences) {
                 // calculate sequence with best coverage, as measured by best coverage and then by minimum maximum fly time
+                preSequence = Sequences;
+                for (int i = 0; i < numDrones; i++) {
+                    extend(preSequence[i], sequence[i]);
+                }
+
+                int coverage = 0; // = getCoverage();
+
+                if (coverage >= max_coverage) {
+                    distance = 0;
+                    for (int i = 0; i < numDrones; i++) {
+                        //starting_location = drones[drone_idx]
+                        if (!Sequences[i].empty()) {
+                            // starting_location = missions[sequences[drone_idx].end()]
+                        }
+                        //distance += getSequenceLength(startingLocation, end of sequence)
+                    }
+                }
+                
+                if ((coverage > max_coverage) || ((coverage == max_coverage) && (reset_distance || distance < min_max_distance))) {
+                    max_coverage = coverage;
+                    bestSequence = sequence;
+                    min_max_distance = distance;
+                    reset_distance = false;
+                }
+
             }
 
             for (int i = 0; i < bestSequence.size(); i++) {
