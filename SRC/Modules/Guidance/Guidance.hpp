@@ -181,6 +181,34 @@ namespace Guidance {
 	                             ImagingRequirements const & ImagingReqs);
 	
 
+	// Extends v_dest with v_src
+    void extend(std::vector<int> & v_dest, const std::vector<int> & v_src);
+	
+	// GenerateCombos helper function
+	void GenerateCombosHelper(std::vector<std::vector<int>> & combos, std::vector<int> & combo, const std::vector<int> & elements, int left, int k);
+	
+	// Recursively generates all combinations of elements of length k
+	std::vector<std::vector<int>> GenerateCombos(const std::vector<int> & elements, int k);
+	
+	// Recurisvely generates all permutations of elements of length elements.size()
+	std::vector<std::vector<int>> GeneratePerms(std::vector<int> & elements);
+	
+	// Input: Assignable missions and number of drones i.e., <1, 3, 7, 0>, 3
+    // Output: Every unordered way to assign missions to drones i.e., [3, 1] [7] [0]
+	void RecurseAssignments(std::vector<std::vector<std::vector<int>>> & AllAssignments, std::vector<std::vector<int>> & CurrentAssignments, 
+							const std::vector<int> & AssignableMissions, const int MissionIndex, const int NumDrones);
+	
+	// Input: Unordered way to assign missions to drones i.e., [3, 1] [7] [0]
+    // Output: All ordered ways to assign missions to drones i.e., [3, 1] [7] [0], [1, 3] [7] [0]
+	void RecurseSequences(std::vector<std::vector<std::vector<int>>> & AllSequences, std::vector<std::vector<int>> & CurrentSequences, 
+						  int DroneIndex, const int NumDrones);
+	
+	// Return the number of subregions that can be completely imaged given TA
+	int GetCoverage(std::vector<int> & MissionDurations, ShadowPropagation::TimeAvailableFunction const & TA, 
+					std::vector<DroneInterface::WaypointMission> const & SubregionMissions, std::vector<std::vector<int>> & Sequences, 
+					std::vector<DroneInterface::Waypoint> StartPositions, ImagingRequirements const & ImagingReqs, const int NumDrones);
+
+
 	// *********************************************************************************************************************************
 	// ****************************************   GuidanceEngine Inline Functions Definitions   ****************************************
 	// *********************************************************************************************************************************

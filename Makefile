@@ -57,7 +57,7 @@ LINK_FLAGS            = -fdiagnostics-color=auto -static-libstdc++ -static-libgc
 RECON_SRCFILES = $(wildcard SRC/*.cpp) $(wildcard SRC/UI/*.cpp) $(wildcard SRC/Maps/*.cpp) $(wildcard SRC/Modules/DJI-Drone-Interface/*.cpp) \
                  $(wildcard SRC/Modules/Guidance/*.cpp) $(wildcard SRC/Modules/Shadow-Detection/*.cpp) $(wildcard SRC/Modules/Shadow-Propagation/*.cpp) \
                  $(wildcard SRC/Modules/GNSS-Receiver/*.cpp) $(wildcard SRC/Modules/Coverage-planning/Navigation/*.cpp)
-# RECON_SRCFILES = $(wildcard SRC/Modules/Guidance/*.cpp)
+#RECON_SRCFILES = $(wildcard SRC/Modules/Guidance/*.cpp)
 #Build list of additional (external) source files.
 EXTERNAL_SRCFILES = ../restclient-cpp/source/connection.cc \
                     ../restclient-cpp/source/helpers.cc \

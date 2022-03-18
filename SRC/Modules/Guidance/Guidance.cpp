@@ -918,13 +918,13 @@ namespace Guidance {
 
     // Input: Assignable missions and number of drones i.e., <1, 3, 7, 0>, 3
     // Output: Every unordered way to assign missions to drones i.e., [3, 1] [7] [0]
-    void RecurseAssignments(std::vector<std::vector<std::vector<int>>> & AllAssignments, std::vector<std::vector<int>> & CurrentAssignments, const std::vector<int> & AssignableMissions, const int MissionIndex, const int NumDrones, const int NumMissions) {
+    void RecurseAssignments(std::vector<std::vector<std::vector<int>>> & AllAssignments, std::vector<std::vector<int>> & CurrentAssignments, const std::vector<int> & AssignableMissions, const int MissionIndex, const int NumDrones) {
         if (MissionIndex == AssignableMissions.size()) {
             AllAssignments.push_back(CurrentAssignments);
         } else {
             for (int drone_idx = 0; drone_idx < NumDrones; drone_idx++) {
                 CurrentAssignments[drone_idx].push_back(AssignableMissions[MissionIndex]);
-                RecurseAssignments(AllAssignments, CurrentAssignments, AssignableMissions, MissionIndex, NumDrones, NumMissions);
+                RecurseAssignments(AllAssignments, CurrentAssignments, AssignableMissions, MissionIndex + 1, NumDrones);
                 CurrentAssignments[drone_idx].pop_back();
             }
         }
@@ -1041,14 +1041,14 @@ namespace Guidance {
             for (std::vector<int> combo : combos) {
                 for (int drone_idx = 0; drone_idx < numDrones; drone_idx++) {
                     CurrentAssignments[drone_idx].push_back(combo[0]);
-                    RecurseAssignments(AllAssignments, CurrentAssignments, combo, 1, numDrones, numMissions);
+                    RecurseAssignments(AllAssignments, CurrentAssignments, combo, 1, numDrones);
                     CurrentAssignments[drone_idx].pop_back();
                 }
             }
 
             // Generate all ordered ways to fly drone through assignments
             for (std::vector<std::vector<int>> assignment : AllAssignments) {
-                RecurseSequences(AllSequences, CurrentSequences, 0, numDrones);
+                RecurseSequences(AllSequences, assignment, 0, numDrones);
             }
 
 
