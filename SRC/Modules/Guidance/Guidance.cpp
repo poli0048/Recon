@@ -244,26 +244,23 @@ namespace Guidance {
     // *********************************************************************************************************************************
     // *******************************************   Guidance Algorithm Function Definitions   *****************************************
     // *********************************************************************************************************************************
-    //Get distance between two points at reference ellipsoid altitude. Inputs are in radians. Output is in meters.
-    double GetDistanceBetweenTwoPoints (double a_latitude, double a_longitude, double b_latitude, double b_longitude){
-        Eigen::Vector3d A_ECEF = LLA2ECEF(Eigen::Vector3d(a_latitude, a_longitude, 0.0));
-        Eigen::Vector3d B_ECEF = LLA2ECEF(Eigen::Vector3d(b_latitude, b_longitude, 0.0));
-        return (B_ECEF - A_ECEF).norm();
-    }
-
     //1 - Take two points and estimate the time (s) it would take a drone to fly from one to the other (stopped at start and end), assuming a max flight speed (m/s)
     double EstimateMissionTime(DroneInterface::Waypoint const & A, DroneInterface::Waypoint const & B, double TargetSpeed) {
-        double delta_altitude = B.RelAltitude - A.RelAltitude;
-        double delta_horizontal = GetDistanceBetweenTwoPoints(A.Latitude, A.Longitude, B.Latitude, B.Longitude);
-
-        return sqrt(pow(delta_altitude,2) + pow(delta_horizontal,2))/TargetSpeed;
+        Eigen::Vector3d A_ECEF = LLA2ECEF(Eigen::Vector3d(A.Latitude, A.Longitude, 0.0)); //A - projected to ref ellipsoid
+        Eigen::Vector3d B_ECEF = LLA2ECEF(Eigen::Vector3d(B.Latitude, B.Longitude, 0.0)); //B - projected to ref ellipsoid
+        double horizontalDist  = (B_ECEF - A_ECEF).norm();
+        double verticalDist = std::fabs(B.RelAltitude - A.RelAltitude);
+        double dist = std::sqrt(horizontalDist*horizontalDist + verticalDist*verticalDist);
+        return dist/TargetSpeed;
     }
 
     //2 - Take a waypoint mission and estimate the time (s) it will take a drone to fly it (not including take-off and landing, or movement to the region).
     //    Support both the mode where we come to a stop at each waypoint and the mode where we do not stop at waypoints (CurvedTrajectory field of Mission)
-    double EstimateMissionTime(DroneInterface::WaypointMission const & Mission) {
-        //TODO
-        return 0.0;
+    double EstimateMissionTime(DroneInterface::WaypointMission const & Mission, double TargetSpeed) {
+        double totalTime = 0.0;
+        for (int waypointIndex = 0; waypointIndex + 1 < (int) Mission.Waypoints.size(); waypointIndex++)
+            totalTime += EstimateMissionTime(Mission.Waypoints[waypointIndex], Mission.Waypoints[waypointIndex+1], TargetSpeed);
+        return totalTime;
     }
 
     //3.1 Helper Function -- Gets the "score" (estimated flight time) of a triangle based on a square.

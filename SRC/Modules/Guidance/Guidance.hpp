@@ -118,7 +118,7 @@ namespace Guidance {
 	
 	//2 - Take a waypoint mission and estimate the time (s) it will take a drone to fly it (not including take-off and landing, or movement to the region).
 	//    Support both the mode where we come to a stop at each waypoint and the mode where we do not stop at waypoints (CurvedTrajectory field of Mission)
-	double EstimateMissionTime(DroneInterface::WaypointMission const & Mission);
+	double EstimateMissionTime(DroneInterface::WaypointMission const & Mission, double TargetSpeed);
 	
 	//3 - Take a survey region, and break it into sub-regions of similar size that can all be flown in approximately the same flight time (argument).
 	//    A good partition uses as few components as possible for a given target execution time. Hueristically, this generally means simple shapes.
