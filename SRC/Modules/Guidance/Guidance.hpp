@@ -190,7 +190,7 @@ namespace Guidance {
 	// Recursively generates all combinations of elements of length k
 	std::vector<std::vector<int>> GenerateCombos(const std::vector<int> & elements, int k);
 	
-	// Recurisvely generates all permutations of elements of length elements.size()
+	// Recursively generates all permutations of elements of length elements.size()
 	std::vector<std::vector<int>> GeneratePerms(std::vector<int> & elements);
 	
 	// Input: Assignable missions and number of drones i.e., <1, 3, 7, 0>, 3

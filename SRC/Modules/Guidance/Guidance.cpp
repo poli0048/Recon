@@ -18,6 +18,7 @@
 //Project Includes
 #include "Guidance.hpp"
 #include "../../UI/VehicleControlWidget.hpp"
+#include "../../Utilities.hpp"
 //#include "../../EigenAliases.h"
 //#include "../../SurveyRegionManager.hpp"
 //#include "../../Polygon.hpp"
@@ -903,7 +904,7 @@ namespace Guidance {
         return combos;
     }
 
-    // Recurisvely generates all permutations of elements of length elements.size()
+    // Recursively generates all permutations of elements of length elements.size()
     std::vector<std::vector<int>> GeneratePerms(std::vector<int> & elements) {
         sort(elements.begin(), elements.end());
         std::vector<std::vector<int>> perms;
@@ -959,18 +960,29 @@ namespace Guidance {
 
                 // Add time from current position to starting waypoint of mission
                 DroneStartTime += std::chrono::seconds((int) EstimateMissionTime(DronePos, currentMission.Waypoints[0], ImagingReqs.TargetSpeed));
+                std::cout << "Time to starting waypoint " << (int) EstimateMissionTime(DronePos, currentMission.Waypoints[0], ImagingReqs.TargetSpeed) << ", ";
 
                 if (IsPredictedToFinishWithoutShadows(TA, currentMission, 0, DroneStartTime, Margin)) {
                     coverage++;
+                    std::cout << "Mission " << destWaypointIndex << " expected to finish: TRUE, ";
+                } else {
+                    std::cout << "Mission " << destWaypointIndex << " expected to finish: FALSE, ";
                 }
+                std::cout << "Margin: " << Margin << ", ";
 
-                // Add time to fly mission, currently defaulting to 20 seconds
-                DroneStartTime += std::chrono::seconds(10);
+                // Add time to fly mission
+                // DroneStartTime += std::chrono::seconds(20);
+                DroneStartTime += std::chrono::seconds((int) EstimateMissionTime(currentMission, ImagingReqs.TargetSpeed));
+                std::cout << "Time to next waypoint " << (int) EstimateMissionTime(currentMission, ImagingReqs.TargetSpeed) << std::endl;
                 
                 // Set current position to last waypoint of mission
                 DronePos = currentMission.Waypoints.back();
+
+                // time from starting location of drone to first waypoint of next mission
+                // time to fly mission
+                // time from last waypoint of mission to first waypoint of next mission
             }
-            MissionDurations.push_back(std::chrono::duration_cast<std::chrono::seconds>(DroneStartTime - NowTime).count());
+            MissionDurations.push_back(SecondsElapsed(NowTime, DroneStartTime));
         }
 
         return coverage; 
@@ -1043,6 +1055,8 @@ namespace Guidance {
                 }
             }
 
+            std::cout << "Number of assignments: " << AllAssignments.size() << std::endl;
+
             // Generate all ordered ways to fly drone through assignments
             for (std::vector<std::vector<int>> assignment : AllAssignments) {
                 RecurseSequences(AllSequences, assignment, 0, numDrones);
@@ -1052,6 +1066,8 @@ namespace Guidance {
             int mission_time = -1, min_max_mission_time = -1;
             bool reset_mission_time = true;
             
+            std::cout << "Number of sequences: " << AllSequences.size() << std::endl;
+
             // Iterate through all ordered sequences to find the best one as measured by best coverage and then by minimum maximum fly time across all drones
             std::vector<std::vector<int>> bestSequence = AllSequences[0], newSequence;
             for (std::vector<std::vector<int>> sequence : AllSequences) {
