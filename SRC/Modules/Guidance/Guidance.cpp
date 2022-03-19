@@ -852,10 +852,59 @@ namespace Guidance {
     //Margin             - Output - The lowest the TA ever gets under the drone during the mission
     //
     //Returns: True if expected to finish without shadows and false otherwise
+
+    float custom_lerp(float a, float b, float t)
+    {
+        return a + t * (b - a);
+    }
+
+    float TimeRemainingAtPos(ShadowPropagation::TimeAvailableFunction const & TA, float Latitude, float Longitude){
+        int height = TA.TimeAvailable.size().height;
+        int width = TA.TimeAvailable.size().width;
+
+        //Lerp Equation: Percentage = (Current - Max) / (Min - Max)
+        float Lat_Fraction = (Latitude - TA.LR_LL[0]) / (TA.UR_LL[0] - TA.LR_LL[0]);
+        float Lon_Fraction = (Longitude - TA.LL_LL[1]) / (TA.LR_LL[1] - TA.LL_LL[1]);
+
+        //Convert the percentage of the Latitude/Longitude in the Matrix to actual indicies.
+        int Lat_Index = (int)round((height - 1) * Lat_Fraction);
+        int Lon_Index = (int)round((width - 1) * Lon_Fraction);
+
+        return TA.TimeAvailable.at<uint16_t>(Lat_Index, Lon_Index);
+    }
+
     bool IsPredictedToFinishWithoutShadows(ShadowPropagation::TimeAvailableFunction const & TA, DroneInterface::WaypointMission const & Mission,
                                            double DroneStartWaypoint, std::chrono::time_point<std::chrono::steady_clock> DroneStartTime, double & Margin) {
-        //TODO
-        return false;
+
+        double fractional_initial_position = fmod(DroneStartWaypoint, 1);
+        double elapsed_time = 0.0;
+        double time_incriment = 1.0; //in Seconds
+        Margin = std::nan("");
+        for (int i = (int)DroneStartWaypoint; i < Mission.Waypoints.size()-1; i++){
+
+            Eigen::Vector3d PosA = LLA2ECEF(Eigen::Vector3d(Mission.Waypoints[i].Latitude, Mission.Waypoints[i].Longitude, 0));
+            Eigen::Vector3d PosB = LLA2ECEF(Eigen::Vector3d(Mission.Waypoints[i+1].Latitude, Mission.Waypoints[i+1].Longitude, 0));
+            Eigen::Vector3d PosC = PosA - PosB;
+
+            float delta_time = PosC.norm() / Mission.Waypoints[i].Speed;
+
+            for (float p = fractional_initial_position; p < 1.0; p += (time_incriment/delta_time) ){
+                //Linear Interpolation(s)
+                float current_lat = custom_lerp(Mission.Waypoints[i].Latitude, Mission.Waypoints[i+1].Latitude, p);
+                float current_lon = custom_lerp(Mission.Waypoints[i].Longitude, Mission.Waypoints[i+1].Longitude, p);
+
+                float timeRemaining = TimeRemainingAtPos(TA, current_lat, current_lon);
+                float currentTime = (p - fractional_initial_position) * delta_time + elapsed_time;
+
+                if (std::isnan(Margin) || Margin > currentTime - timeRemaining){
+                    Margin = currentTime - timeRemaining;
+                }
+                if (Margin < 0.0){return false;}
+            }
+            elapsed_time += (1 - fractional_initial_position) * delta_time;
+            fractional_initial_position = 0.0;
+        }
+        return true;
     }
 
     //6 - Given a Time Available function, a collection of sub-regions (with their pre-planned missions), and a start position for a drone, select a sub-region
