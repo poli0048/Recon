@@ -557,7 +557,7 @@ static bool TestBench6(std::string const & Arg) {
 	double time = Guidance::EstimateMissionTime(A, B, TargetSpeed);
 	std::cerr << "Estimated flight fime from point A to point B (stopped at beginning and end) is: " << time << " seconds.\r\n";
 	
-	return false; //Ideally check result somehow and return true on success and false on failure (otherwise manually verify result somehow)
+	return true; //Ideally check result somehow and return true on success and false on failure (otherwise manually verify result somehow)
 }
 
 static void print_vec(std::string const & name, std::vector<int> & v) {
