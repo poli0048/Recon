@@ -1140,11 +1140,8 @@ namespace Guidance {
                 //     }
                 //     distance = *max_element(MissionDurations.begin(), MissionDurations.end());
                 // }
-                coverage = max_coverage;
                 // Update best coverage and min_max_distance
                 if ((coverage > max_coverage) || ((coverage == max_coverage) && (reset_mission_time || mission_time < min_max_mission_time))) {
-                    std::cout << "MISSION TIME: " << mission_time << std::endl;
-                    std::cout << "MIN_MAX_MISSION TIME: " << min_max_mission_time << std::endl;
                     // std::cout << max_coverage << std::endl;
                     max_coverage = coverage;
                     bestSequence = sequence;
