@@ -172,7 +172,7 @@ namespace Guidance {
 
                 // Populate m_currentDroneMissions based on subregion sequences
                 for (size_t i = 0; i < m_dronesUnderCommand.size(); i++) {
-                    if (m_subregionSequences[i].size() >= 1) {
+                    if ((int) m_subregionSequences[i].size() >= 1) {
                         int missionIndex = m_subregionSequences[i][0];
                         m_currentDroneMissions[m_dronesUnderCommand[i]->GetDroneSerial()] = std::make_tuple(0, m_droneMissions[missionIndex]);
                     }
@@ -205,7 +205,7 @@ namespace Guidance {
                 drone->IsCurrentlyExecutingWaypointMission(Result, Timestamp);
                 if ((Result != m_flyingMissionStatus[i]) && (Result == false)) {
                     std::get<0>(m_currentDroneMissions[drone->GetDroneSerial()])++;
-                    if (m_subregionSequences[i].size() > std::get<0>(m_currentDroneMissions[drone->GetDroneSerial()])) {
+                    if ((int) m_subregionSequences[i].size() > std::get<0>(m_currentDroneMissions[drone->GetDroneSerial()])) {
                         int missionIndex = m_subregionSequences[i][std::get<0>(m_currentDroneMissions[drone->GetDroneSerial()])];
                         std::get<1>(m_currentDroneMissions[drone->GetDroneSerial()]) = m_droneMissions[missionIndex];
                         DroneInterface::WaypointMission Mission = std::get<1>(m_currentDroneMissions[drone->GetDroneSerial()]);
@@ -869,7 +869,6 @@ namespace Guidance {
         //Convert the percentage of the Latitude/Longitude in the Matrix to actual indicies.
         int Lat_Index = (int)round((height - 1) * Lat_Fraction);
         int Lon_Index = (int)round((width - 1) * Lon_Fraction);
-
         return TA.TimeAvailable.at<uint16_t>(Lat_Index, Lon_Index);
     }
 
@@ -880,22 +879,18 @@ namespace Guidance {
         double elapsed_time = 0.0;
         double time_incriment = 1.0; //in Seconds
         Margin = std::nan("");
-        for (int i = (int)DroneStartWaypoint; i < Mission.Waypoints.size()-1; i++){
-
+        for (int i = (int)DroneStartWaypoint; i < (int) Mission.Waypoints.size()-1; i++){
             Eigen::Vector3d PosA = LLA2ECEF(Eigen::Vector3d(Mission.Waypoints[i].Latitude, Mission.Waypoints[i].Longitude, 0));
             Eigen::Vector3d PosB = LLA2ECEF(Eigen::Vector3d(Mission.Waypoints[i+1].Latitude, Mission.Waypoints[i+1].Longitude, 0));
             Eigen::Vector3d PosC = PosA - PosB;
 
             float delta_time = PosC.norm() / Mission.Waypoints[i].Speed;
-
             for (float p = fractional_initial_position; p < 1.0; p += (time_incriment/delta_time) ){
                 //Linear Interpolation(s)
                 float current_lat = custom_lerp(Mission.Waypoints[i].Latitude, Mission.Waypoints[i+1].Latitude, p);
                 float current_lon = custom_lerp(Mission.Waypoints[i].Longitude, Mission.Waypoints[i+1].Longitude, p);
-
                 float timeRemaining = TimeRemainingAtPos(TA, current_lat, current_lon);
                 float currentTime = (p - fractional_initial_position) * delta_time + elapsed_time;
-
                 if (std::isnan(Margin) || Margin > currentTime - timeRemaining){
                     Margin = currentTime - timeRemaining;
                 }
@@ -938,7 +933,7 @@ namespace Guidance {
         }
 
         // first time left will be zero
-        for (int i = left; i < elements.size(); i++) {
+        for (size_t i = left; i < elements.size(); i++) {
             combo.push_back(elements[i]);
             GenerateCombosHelper(combos, combo, elements, i + 1, k - 1);
             combo.pop_back();
@@ -966,7 +961,7 @@ namespace Guidance {
     // Input: Assignable missions and number of drones i.e., <1, 3, 7, 0>, 3
     // Output: Every unordered way to assign missions to drones i.e., [3, 1] [7] [0]
     void RecurseAssignments(std::vector<std::vector<std::vector<int>>> & AllAssignments, std::vector<std::vector<int>> & CurrentAssignments, const std::vector<int> & AssignableMissions, const int MissionIndex, const int NumDrones) {
-        if (MissionIndex == AssignableMissions.size()) {
+        if (MissionIndex == (int) AssignableMissions.size()) {
             AllAssignments.push_back(CurrentAssignments);
         } else {
             for (int drone_idx = 0; drone_idx < NumDrones; drone_idx++) {
@@ -1004,25 +999,25 @@ namespace Guidance {
         for (int drone_idx = 0; drone_idx < NumDrones; drone_idx++) {
             DroneStartTime = NowTime;
             DroneInterface::Waypoint DronePos = StartPositions[drone_idx];
-            for (int destWaypointIndex = 0; destWaypointIndex < Sequences[drone_idx].size(); destWaypointIndex++) {
+            for (size_t destWaypointIndex = 0; destWaypointIndex < Sequences[drone_idx].size(); destWaypointIndex++) {
                 DroneInterface::WaypointMission currentMission = SubregionMissions[Sequences[drone_idx][destWaypointIndex]];
 
                 // Add time from current position to starting waypoint of mission
                 DroneStartTime += std::chrono::seconds((int) EstimateMissionTime(DronePos, currentMission.Waypoints[0], ImagingReqs.TargetSpeed));
-                std::cout << "Time to starting waypoint " << (int) EstimateMissionTime(DronePos, currentMission.Waypoints[0], ImagingReqs.TargetSpeed) << ", ";
+                // std::cout << "Time to starting waypoint " << (int) EstimateMissionTime(DronePos, currentMission.Waypoints[0], ImagingReqs.TargetSpeed) << ", ";
 
                 if (IsPredictedToFinishWithoutShadows(TA, currentMission, 0, DroneStartTime, Margin)) {
                     coverage++;
-                    std::cout << "Mission " << destWaypointIndex << " expected to finish: TRUE, ";
+                    // std::cout << "Mission " << destWaypointIndex << " expected to finish: TRUE, ";
                 } else {
-                    std::cout << "Mission " << destWaypointIndex << " expected to finish: FALSE, ";
+                    // std::cout << "Mission " << destWaypointIndex << " expected to finish: FALSE, ";
                 }
-                std::cout << "Margin: " << Margin << ", ";
+                // std::cout << "Margin: " << Margin << ", ";
 
                 // Add time to fly mission
                 // DroneStartTime += std::chrono::seconds(20);
                 DroneStartTime += std::chrono::seconds((int) EstimateMissionTime(currentMission, ImagingReqs.TargetSpeed));
-                std::cout << "Time to next waypoint " << (int) EstimateMissionTime(currentMission, ImagingReqs.TargetSpeed) << std::endl;
+                // std::cout << "Time to next waypoint " << (int) EstimateMissionTime(currentMission, ImagingReqs.TargetSpeed) << std::endl;
                 
                 // Set current position to last waypoint of mission
                 DronePos = currentMission.Waypoints.back();
@@ -1068,7 +1063,7 @@ namespace Guidance {
 
 
         // Depth N Best
-        int n = 2, num_to_assign, max_coverage = 0;
+        int n = 1, num_to_assign, max_coverage = 0;
 
         std::vector<std::vector<std::vector<int>>> AllAssignments, AllSequences;
         std::vector<std::vector<int>> CurrentAssignments, CurrentSequences;
@@ -1081,7 +1076,7 @@ namespace Guidance {
 
         // Keep looping until all missions have been assigned
         while(!MissionIndicesToAssign.empty()) {
-            num_to_assign = MissionIndicesToAssign.size() < numDrones * n ? MissionIndicesToAssign.size() : numDrones * n;
+            num_to_assign = (int) MissionIndicesToAssign.size() < numDrones * n ? MissionIndicesToAssign.size() : numDrones * n;
 
             AllAssignments.clear();
             AllSequences.clear();
@@ -1145,9 +1140,12 @@ namespace Guidance {
                 //     }
                 //     distance = *max_element(MissionDurations.begin(), MissionDurations.end());
                 // }
-                
+                coverage = max_coverage;
                 // Update best coverage and min_max_distance
                 if ((coverage > max_coverage) || ((coverage == max_coverage) && (reset_mission_time || mission_time < min_max_mission_time))) {
+                    std::cout << "MISSION TIME: " << mission_time << std::endl;
+                    std::cout << "MIN_MAX_MISSION TIME: " << min_max_mission_time << std::endl;
+                    // std::cout << max_coverage << std::endl;
                     max_coverage = coverage;
                     bestSequence = sequence;
                     min_max_mission_time = mission_time;
@@ -1156,9 +1154,9 @@ namespace Guidance {
             }
 
             // Remove missions that were assigned
-            for (int i = 0; i < bestSequence.size(); i++) {
+            for (size_t i = 0; i < bestSequence.size(); i++) {
                 extend(Sequences[i], bestSequence[i]);
-                for (int j = 0; j < bestSequence[i].size(); j++) {
+                for (size_t j = 0; j < bestSequence[i].size(); j++) {
                     MissionIndicesToAssign.erase(bestSequence[i][j]);
                 }
             }
