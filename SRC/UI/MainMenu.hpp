@@ -228,6 +228,34 @@ inline void MainMenu::Draw() {
 					dronePtr->SetSourceVideoFile(GetSimVideoFilePath(DatasetFolder / "Dataset-1 (Becker 7-24-2020)"));
 				MapWidget::Instance().StartAnimation(lat - eps, lat + eps, lon - eps, lon + eps);
 			}
+			if (MyGui::MenuItem(u8"\uf04b", labelMargin, "Becker (4 Drones)")) {
+				double lat = 45.344097*PI/180.0;
+				double lon = -93.858990*PI/180.0;
+				double alt = 289.56;
+				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
+				auto dronePtr = DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation AA1"s, Eigen::Vector3d(lat, lon, alt));
+				if (dronePtr != nullptr)
+					dronePtr->SetSourceVideoFile(GetSimVideoFilePath(DatasetFolder / "Dataset-1 (Becker 7-24-2020)"));
+				
+				lat = 45.344312*PI/180.0;
+				lon = -93.859413*PI/180.0;
+				dronePtr = DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation AA2"s, Eigen::Vector3d(lat, lon, alt));
+				if (dronePtr != nullptr)
+					dronePtr->SetSourceVideoFile(GetSimVideoFilePath(DatasetFolder / "Dataset-1 (Becker 7-24-2020)"));
+
+				lat = 45.344732*PI/180.0;
+				lon = -93.860105*PI/180.0;
+				dronePtr = DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation AA3"s, Eigen::Vector3d(lat, lon, alt));
+				if (dronePtr != nullptr)
+					dronePtr->SetSourceVideoFile(GetSimVideoFilePath(DatasetFolder / "Dataset-1 (Becker 7-24-2020)"));
+
+				lat = 45.345191*PI/180.0;
+				lon = -93.860719*PI/180.0;
+				dronePtr = DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation AA4"s, Eigen::Vector3d(lat, lon, alt));
+				if (dronePtr != nullptr)
+					dronePtr->SetSourceVideoFile(GetSimVideoFilePath(DatasetFolder / "Dataset-1 (Becker 7-24-2020)"));
+				MapWidget::Instance().StartAnimation(lat - eps, lat + eps, lon - eps, lon + eps);
+			}
 			if (MyGui::MenuItem(u8"\uf04b", labelMargin, "Elgin (1 Drone)")) {
 				double lat = 44.129353*PI/180.0;
 				double lon = -92.293964*PI/180.0;
