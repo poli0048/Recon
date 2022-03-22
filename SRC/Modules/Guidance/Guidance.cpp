@@ -869,6 +869,12 @@ namespace Guidance {
         //Convert the percentage of the Latitude/Longitude in the Matrix to actual indicies.
         int Lat_Index = (int)round((height - 1) * Lat_Fraction);
         int Lon_Index = (int)round((width - 1) * Lon_Fraction);
+        Lat_Index = std::clamp(Lat_Index, 0, height  - 1);
+        Lon_Index = std::clamp(Lon_Index, 0, width  - 1);
+
+        if (TA.TimeAvailable.rows == 0 || TA.TimeAvailable.cols == 0) {
+            return std::nanf("");
+        }
         return TA.TimeAvailable.at<uint16_t>(Lat_Index, Lon_Index);
     }
 
@@ -891,10 +897,10 @@ namespace Guidance {
                 float current_lon = custom_lerp(Mission.Waypoints[i].Longitude, Mission.Waypoints[i+1].Longitude, p);
                 float timeRemaining = TimeRemainingAtPos(TA, current_lat, current_lon);
                 float currentTime = (p - fractional_initial_position) * delta_time + elapsed_time;
-                if (std::isnan(Margin) || Margin > currentTime - timeRemaining){
+                if (!std::isnan(timeRemaining) && (std::isnan(Margin) || Margin > currentTime - timeRemaining)){
                     Margin = currentTime - timeRemaining;
                 }
-                if (Margin < 0.0){return false;}
+                if (!std::isnan(Margin) && Margin < 0.0){return false;}
             }
             elapsed_time += (1 - fractional_initial_position) * delta_time;
             fractional_initial_position = 0.0;
