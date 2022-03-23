@@ -67,6 +67,7 @@ namespace Guidance {
 			std::Evector<PolygonCollection> m_surveyRegionPartition;
 			
 			std::vector<DroneInterface::WaypointMission> m_completedDroneMissions;
+			std::set<int> m_missionIndicesToAssign;
 			std::vector<std::vector<int>> m_subregionSequences;
 
 			std::vector<DroneInterface::WaypointMission> m_droneMissions;
@@ -100,7 +101,8 @@ namespace Guidance {
 			bool AddLowFlier(std::string const & Serial); //Add a drone to the collection of low fliers and start commanding it
 			bool RemoveLowFlier(std::string const & Serial); //Stop commanding the drone with the given serial
 			bool IsRunning(void); //Returns true if currently commanding a mission, false otherwise
-			
+			void RefreshSequence(void);
+
 			inline std::vector<std::string> GetSerialsOfDronesUnderCommand(void);
 			inline std::string GetMissionStatusStr(void); //Get status string for current mission
 			inline std::string GetMissionProgressStr(void); //Get progress string for current mission
@@ -177,7 +179,7 @@ namespace Guidance {
 	//DroneStartPositions - Input  - Element k is the starting position of drone k
 	//Sequences           - Output - Element k is a vector of sub-region indices to task drone k to (in order)
 	void SelectSubregionSequences(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
-	                             std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::vector<std::vector<int>> & Sequences,
+	                             std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::set<int> MissionIndicesToAssign, std::vector<std::vector<int>> & Sequences,
 	                             ImagingRequirements const & ImagingReqs);
 	
 

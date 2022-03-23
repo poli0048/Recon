@@ -657,6 +657,42 @@ static bool TestBench8(std::string const & Arg)  {
 }
 static bool TestBench9(std::string const & Arg)  { 
 	// Test SelectSubregionSequences()
+	ShadowPropagation::TimeAvailableFunction TA;
+	std::vector<DroneInterface::WaypointMission> SubregionMissions;
+	std::vector<std::vector<int>> Sequences;
+	std::vector<DroneInterface::Waypoint> DroneStartPositions;
+	DroneInterface::WaypointMission wm;
+	DroneInterface::Waypoint w;
+	w.Latitude = 34;
+	w.Longitude = 40;
+	w.RelAltitude = 10;
+	wm.Waypoints.push_back(w);
+
+	for (int d = 1; d < 6; d++) {
+		for (int m = 3; m < 11; m++) {
+			SubregionMissions.clear();
+			DroneStartPositions.clear();
+			for (int i = 0; i < m; i++) {
+				SubregionMissions.push_back(wm);
+			}
+			for (int i = 0; i < d; i++) {
+				DroneStartPositions.push_back(w);
+			}
+			std::set<int> MissionIndicesToAssign;
+			for (int i = 0; i < m; i++) {
+				MissionIndicesToAssign.insert(i);    
+			}
+
+			Guidance::ImagingRequirements ImagingReqs;
+			ImagingReqs.TargetSpeed = 10;
+			std::chrono::time_point<std::chrono::steady_clock> T0 = std::chrono::steady_clock::now();
+			SelectSubregionSequences(TA, SubregionMissions, DroneStartPositions, MissionIndicesToAssign, Sequences, ImagingReqs);
+			std::chrono::time_point<std::chrono::steady_clock> T1 = std::chrono::steady_clock::now();
+			double processingTime_A = SecondsElapsed(T0, T1);
+			std::cerr << "Sequencing: " << m << ", " << d << ", " << processingTime_A*1000.0 << " ms\r\n";
+		}
+	}
+
 	return true;
 }
 static bool TestBench10(std::string const & Arg) { return false; }
