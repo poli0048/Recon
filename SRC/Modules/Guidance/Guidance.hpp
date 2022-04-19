@@ -56,10 +56,13 @@ namespace Guidance {
 			int               m_MessageToken3;
 			
 			bool m_missionPrepDone;
-			bool m_dronesToTask;
+			// bool m_dronesToTask;
 
 			std::vector<DroneInterface::Drone *> m_dronesUnderCommand; //pointers to the drones we are allowed to command for current mission
 			std::unordered_map<std::string, std::tuple<int, DroneInterface::WaypointMission>> m_currentDroneMissions; //Serial -> (missionNum, Mission)
+			std::chrono::time_point<std::chrono::steady_clock> m_TA_timestamp;
+			bool m_TA_initialized;
+			int m_coverageExpected;
 			
 			//Add additional necessary state data to keep track of mission progress, etc.
 			PolygonCollection m_surveyRegion;
@@ -206,9 +209,9 @@ namespace Guidance {
 						  int DroneIndex, const int NumDrones);
 	
 	// Return the number of subregions that can be completely imaged given TA
-	int GetCoverage(std::vector<int> & MissionDurations, ShadowPropagation::TimeAvailableFunction const & TA, 
-					std::vector<DroneInterface::WaypointMission> const & SubregionMissions, std::vector<std::vector<int>> & Sequences, 
-					std::vector<DroneInterface::Waypoint> StartPositions, ImagingRequirements const & ImagingReqs, const int NumDrones);
+	int GetCoverage(std::vector<int> & PredictedCoverage, std::vector<int> & MissionDurations, ShadowPropagation::TimeAvailableFunction const & TA, 
+					std::vector<DroneInterface::WaypointMission> const & SubregionMissions, std::vector<std::vector<int>> const & Sequences, 
+					std::vector<DroneInterface::Waypoint> const & StartPositions, ImagingRequirements const & ImagingReqs, const int NumDrones);
 
 
 	// *********************************************************************************************************************************
