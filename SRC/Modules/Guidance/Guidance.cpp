@@ -54,7 +54,6 @@ namespace Guidance {
         if (m_dronesUnderCommand.size() == LowFlierSerials.size()) {
             m_running = true;
             m_missionPrepDone = false; //This will trigger the pre-planning work that needs to happen for a new mission
-            m_TA_initialized = false;
             return true;
         }
         else
@@ -126,7 +125,9 @@ namespace Guidance {
     // Decides whether sequence should be updated or not, and if so, executes those missions
     void GuidanceEngine::RefreshSequence(void) {
 
-        ShadowPropagation::TimeAvailableFunction TA;
+        //m_TA is kept up to date in the main loop now. We don't need to update it here anymore, but we do still need
+        //to properly handle the case that we have never received a TA function (in which case m_TA_initialized will be false)
+        /*ShadowPropagation::TimeAvailableFunction TA;
 
         // if uninitialized, init it
         if (!m_TA_initialized) {
@@ -145,7 +146,7 @@ namespace Guidance {
                     m_TA_initialized = true;
                 }
             }
-        }
+        }*/
 
         std::vector<int> currentMissionIndices;
 
@@ -190,19 +191,19 @@ namespace Guidance {
         m_subregionSequences.clear();
         static int prevNumMissions = 0;
         // Select subregion sequences
-        SelectSubregionSequences(TA, m_droneMissions, m_droneStartPositions, m_missionIndicesToAssign, m_subregionSequences, m_ImagingReqs);
+        SelectSubregionSequences(m_TA, m_droneMissions, m_droneStartPositions, m_missionIndicesToAssign, m_subregionSequences, m_ImagingReqs);
         std::cout << "Size of mission indices: " << m_missionIndicesToAssign.size() << std::endl;
 
-        // Below, we compare coverage of new best sequence to recalculate coverage (based on updated TA) of the previous best found sequence
+        // Below, we compare coverage of new best sequence to recalculate coverage (based on updated m_TA) of the previous best found sequence
         // We only care about comparison of new coverage to old coverage if old coverage > 0 (because why would we care if it was 0 before? anything would be better than that)
         if (m_coverageExpected > 0) {
             std::cout << currentSequences.size() << std::endl;
             std::cout << m_dronesUnderCommand.size() << std::endl;
-            currentSequenceCoverageExpected = GetCoverage(PredictedCoverage, MissionDurations, TA, m_droneMissions, currentSequences, m_droneStartPositions, m_ImagingReqs, m_dronesUnderCommand.size());
+            currentSequenceCoverageExpected = GetCoverage(PredictedCoverage, MissionDurations, m_TA, m_droneMissions, currentSequences, m_droneStartPositions, m_ImagingReqs, m_dronesUnderCommand.size());
             PredictedCoverage.clear();
             MissionDurations.clear();
         }
-        newSequenceCoverageExpected = GetCoverage(PredictedCoverage, MissionDurations, TA, m_droneMissions, m_subregionSequences, m_droneStartPositions, m_ImagingReqs, m_dronesUnderCommand.size());
+        newSequenceCoverageExpected = GetCoverage(PredictedCoverage, MissionDurations, m_TA, m_droneMissions, m_subregionSequences, m_droneStartPositions, m_ImagingReqs, m_dronesUnderCommand.size());
         std::cout << "current coverage: " << currentSequenceCoverageExpected << ", new coverage: " << newSequenceCoverageExpected << std::endl;
         
 
@@ -218,7 +219,7 @@ namespace Guidance {
         }
         std::cout << ">" << std::endl;
 
-        // If the number of missions left to assign has changed (i.e., mission was completed), or if using new TA, new sequence coverage > old sequence coverage
+        // If the number of missions left to assign has changed (i.e., mission was completed), or if using new m_TA, new sequence coverage > old sequence coverage
         if (m_missionIndicesToAssign.size() != prevNumMissions || newSequenceCoverageExpected > currentSequenceCoverageExpected) {
             m_coverageExpected = newSequenceCoverageExpected;
             std::vector<bool> startMissionFromBeginning;
@@ -304,6 +305,28 @@ namespace Guidance {
 
                 m_missionPrepDone = true; //Mark the prep work as done
             }
+
+            //Make sure we have the most recent TA function (if any are available)
+            std::chrono::time_point<std::chrono::steady_clock> newTimestamp;
+            if (ShadowPropagation::ShadowPropagationEngine::Instance().GetTimestampOfMostRecentTimeAvailFun(newTimestamp)) {
+                //A TA function is available and we now have it's timestamp
+                if ((!m_TA_initialized) || (newTimestamp > m_TA.Timestamp)) {
+                    ShadowPropagation::ShadowPropagationEngine::Instance().GetMostRecentTimeAvailFun(m_TA);
+                    m_TA_initialized = true;
+                }
+            }
+
+            //Debug Only - update partition labels with whether or not each component would be finished before shadows if started now
+            std::vector<std::string> partitionLabels;
+            partitionLabels.reserve(m_surveyRegionPartition.size());
+            for (size_t compIndex = 0U; compIndex < m_surveyRegionPartition.size(); compIndex++) {
+                double margin = 0.0;
+                bool willFinish = IsPredictedToFinishWithoutShadows(m_TA, m_droneMissions[compIndex], 0.0, std::chrono::steady_clock::now(), margin);
+                std::string label = willFinish ? "Will Finish"s : "Will Not Finish"s;
+                label += "\nMargin: "s + std::to_string(margin);
+                partitionLabels.push_back(label);
+            }
+            MapWidget::Instance().m_guidanceOverlay.SetPartitionLabels(partitionLabels);
 
             std::chrono::time_point<std::chrono::steady_clock> NowTimestamp = std::chrono::steady_clock::now();
             if (SecondsElapsed(MostRecentSequenceTimestamp, NowTimestamp) > refresh_period) {
@@ -975,7 +998,14 @@ namespace Guidance {
         return a + t * (b - a);
     }
 
+    //Samples a TA function at a given Lat and Lon (in radians). Returns the time available at the given location. If the TA function
+    //contains the sential value (indicating no shadow for the forseeable future) or if the sample point is not in bounds
+    //of the TA function, we return NaN, which should be interpreted optimistically. That is, if we get NaN from this function,
+    //we should assume the area is available for as long as we need.
     float TimeRemainingAtPos(ShadowPropagation::TimeAvailableFunction const & TA, float Latitude, float Longitude){
+        if (TA.TimeAvailable.rows == 0 || TA.TimeAvailable.cols == 0)
+            return std::nanf("");
+
         int height = TA.TimeAvailable.size().height;
         int width = TA.TimeAvailable.size().width;
 
@@ -983,25 +1013,18 @@ namespace Guidance {
         float Lat_Fraction = (Latitude - TA.LR_LL[0]) / (TA.UR_LL[0] - TA.LR_LL[0]);
         float Lon_Fraction = (Longitude - TA.LL_LL[1]) / (TA.LR_LL[1] - TA.LL_LL[1]);
 
-        //Convert the percentage of the Latitude/Longitude in the Matrix to actual indicies.
-        int Lat_Index = (int)round((height - 1) * Lat_Fraction);
-        int Lon_Index = (int)round((width - 1) * Lon_Fraction);
-        // Lat_Index = std::clamp(Lat_Index, 0, height  - 1);
-        // Lon_Index = std::clamp(Lon_Index, 0, width  - 1);
+        //Convert the fractions, or normalized image coordinates (0-1) to rounded actual coordinates
+        int Lat_Index = (int) std::round(float(height - 1) * Lat_Fraction);
+        int Lon_Index = (int) std::round(float(width - 1) * Lon_Fraction);
 
-        if (TA.TimeAvailable.rows == 0 || TA.TimeAvailable.cols == 0) {
+        if ((Lat_Index < 0) || (Lat_Index + 1 > height) || (Lon_Index < 0) || (Lon_Index + 1 > width))
             return std::nanf("");
-        }
 
-        if (Lat_Index < 0 || Lat_Index + 1 > height || Lon_Index < 0 || Lon_Index + 1 > width) {
+        //If we get here the sample point is in the bounds of the TA function
+        uint16_t SampledTA = TA.TimeAvailable.at<uint16_t>(height - 1 - Lat_Index, Lon_Index);
+
+        if (SampledTA == std::numeric_limits<uint16_t>::max())
             return std::nanf("");
-        }
-
-        uint16_t SampledTA = TA.TimeAvailable.at<uint16_t>(Lat_Index, Lon_Index);
-
-        if (SampledTA == std::numeric_limits<uint16_t>::max()) {
-            return std::nanf("");
-        }
         
         return (float) SampledTA;
     }
@@ -1025,12 +1048,10 @@ namespace Guidance {
                 float current_lon = custom_lerp(Mission.Waypoints[i].Longitude, Mission.Waypoints[i+1].Longitude, p);
                 float timeRemaining = TimeRemainingAtPos(TA, current_lat, current_lon);
                 float currentTime = (p - fractional_initial_position) * delta_time + elapsed_time;
-                if (!std::isnan(timeRemaining) && (std::isnan(Margin) || Margin > currentTime - timeRemaining)){
-                    Margin = currentTime - timeRemaining;
-                }
-                if (!std::isnan(Margin) && Margin < 0.0){
+                if ((! std::isnan(timeRemaining)) && (std::isnan(Margin) || (Margin > timeRemaining - currentTime)))
+                    Margin = timeRemaining - currentTime;
+                if ((! std::isnan(Margin)) && (Margin < 0.0))
                     return false;
-                }
             }
             elapsed_time += (1 - fractional_initial_position) * delta_time;
             fractional_initial_position = 0.0;

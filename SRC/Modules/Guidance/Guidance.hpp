@@ -60,8 +60,8 @@ namespace Guidance {
 
 			std::vector<DroneInterface::Drone *> m_dronesUnderCommand; //pointers to the drones we are allowed to command for current mission
 			std::unordered_map<std::string, std::tuple<int, DroneInterface::WaypointMission>> m_currentDroneMissions; //Serial -> (missionNum, Mission)
-			std::chrono::time_point<std::chrono::steady_clock> m_TA_timestamp;
-			bool m_TA_initialized;
+			ShadowPropagation::TimeAvailableFunction m_TA;
+			bool m_TA_initialized = false;
 			int m_coverageExpected;
 			
 			//Add additional necessary state data to keep track of mission progress, etc.
@@ -73,12 +73,12 @@ namespace Guidance {
 			std::set<int> m_missionIndicesToAssign;
 			std::vector<std::vector<int>> m_subregionSequences;
 
-			std::vector<DroneInterface::WaypointMission> m_droneMissions;
+			std::vector<DroneInterface::WaypointMission> m_droneMissions; //Item n covers component n of the partition
 			std::vector<DroneInterface::Waypoint> m_droneStartPositions;
 			std::vector<bool> m_flyingMissionStatus;
 			//other items... e.g. the partition of the survey region, pre-planned waypoint missions for each, a vector of completed sub-regions, etc.
 			
-			inline void ModuleMain(void);
+			void ModuleMain(void);
 			
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW /*May not be needed - check for fixed-size Eigen data types in fields*/
