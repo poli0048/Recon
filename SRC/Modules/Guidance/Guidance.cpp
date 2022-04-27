@@ -150,7 +150,7 @@ namespace Guidance {
 
         std::vector<int> currentMissionIndices;
 
-        // Get the mission indices that are currently being flone by drones and print them out
+        // Get the mission indices that are currently being flown by drones and print them out
         if (!m_currentDroneMissions.empty() && !m_subregionSequences.empty()) {
             std::cout << "Current Mission Indices: ";
             for (size_t i = 0; i < m_dronesUnderCommand.size(); i++) {
@@ -166,7 +166,6 @@ namespace Guidance {
             std::cout << std::endl;
         }
 
-        m_currentDroneMissions.clear();
         m_flyingMissionStatus.clear();
         m_droneStartPositions.clear();
 
@@ -221,6 +220,7 @@ namespace Guidance {
 
         // If the number of missions left to assign has changed (i.e., mission was completed), or if using new m_TA, new sequence coverage > old sequence coverage
         if (m_missionIndicesToAssign.size() != prevNumMissions || newSequenceCoverageExpected > currentSequenceCoverageExpected) {
+            m_currentDroneMissions.clear();
             m_coverageExpected = newSequenceCoverageExpected;
             std::vector<bool> startMissionFromBeginning;
             std::cout << "New Mission Indices: ";
@@ -251,6 +251,7 @@ namespace Guidance {
                 if (m_currentDroneMissions.count(drone->GetDroneSerial())) {
                     // only start mission again if flag for starting mission from the beginning is set
                     if (startMissionFromBeginning[i]) {
+                        std::cout << "Starting mission " << i << " from beginning." << std::endl;
                         DroneInterface::WaypointMission Mission = std::get<1>(m_currentDroneMissions[drone->GetDroneSerial()]);
                         drone->ExecuteWaypointMission(Mission);
                     }
@@ -260,7 +261,7 @@ namespace Guidance {
                 }
             }
         } else {
-            // Criteria for changing sequence met, so reset any state that has changed while running this function to what it has been
+            // Criteria for changing sequence not met, so reset any state that has changed while running this function to what it has been
             m_coverageExpected = currentSequenceCoverageExpected;
             m_subregionSequences = currentSequences;
         }
