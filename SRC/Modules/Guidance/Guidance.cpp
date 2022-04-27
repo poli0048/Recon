@@ -1136,7 +1136,7 @@ namespace Guidance {
         for (int drone_idx = 0; drone_idx < NumDrones; drone_idx++) {
             DroneStartTime = NowTime;
             DroneInterface::Waypoint DronePos = StartPositions[drone_idx];
-            PredictedCoverage.push_back(0);
+            PredictedCoverage.push_back(0); // this is just for printing, you can ignore this
             for (size_t destWaypointIndex = 0; destWaypointIndex < Sequences[drone_idx].size(); destWaypointIndex++) {
                 DroneInterface::WaypointMission currentMission = SubregionMissions[Sequences[drone_idx][destWaypointIndex]];
                 // Add time from current position to starting waypoint of mission
