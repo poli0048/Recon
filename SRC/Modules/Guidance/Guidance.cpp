@@ -124,30 +124,6 @@ namespace Guidance {
 
     // Decides whether sequence should be updated or not, and if so, executes those missions
     void GuidanceEngine::RefreshSequence(void) {
-
-        //m_TA is kept up to date in the main loop now. We don't need to update it here anymore, but we do still need
-        //to properly handle the case that we have never received a TA function (in which case m_TA_initialized will be false)
-        /*ShadowPropagation::TimeAvailableFunction TA;
-
-        // if uninitialized, init it
-        if (!m_TA_initialized) {
-            ShadowPropagation::ShadowPropagationEngine::Instance().GetTimestampOfMostRecentTimeAvailFun(m_TA_timestamp);
-        }
-
-        // if yes initialized, compare the timestamps of the class variable TA and the one from the shadow prop instance TA
-        std::chrono::time_point<std::chrono::steady_clock> newTimestamp;
-        if (ShadowPropagation::ShadowPropagationEngine::Instance().GetTimestampOfMostRecentTimeAvailFun(newTimestamp)) {
-            if ((newTimestamp > m_TA_timestamp) || !m_TA_initialized) {
-                //We should have a new time available function
-                std::cout << "New TA timestamp detected" << std::endl;
-                if (ShadowPropagation::ShadowPropagationEngine::Instance().GetMostRecentTimeAvailFun(TA)) {
-                    std::cout << "Updated TA" << std::endl;
-                    m_TA_timestamp = newTimestamp;
-                    m_TA_initialized = true;
-                }
-            }
-        }*/
-
         std::vector<int> currentMissionIndices, newMissionIndices;
 
         // Get the mission indices that are currently being flown by drones and print them out
@@ -206,13 +182,13 @@ namespace Guidance {
         std::cout << "current coverage: " << currentSequenceCoverageExpected << ", new coverage: " << newSequenceCoverageExpected << std::endl;
         
 
-        std::cout << "sequence: <";
+        std::cout << "current sequence: <";
         for (auto sequence : currentSequences) {
             print_vec("", sequence);
         }
         std::cout << ">" << std::endl;
 
-        std::cout << "sequence: <";
+        std::cout << "potential new sequence: <";
         for (auto sequence : m_subregionSequences) {
             print_vec("", sequence);
         }
@@ -237,7 +213,7 @@ namespace Guidance {
             m_currentDroneMissions.clear();
             m_coverageExpected = newSequenceCoverageExpected;
             std::vector<bool> startMissionFromBeginning;
-            std::cout << "New Mission Indices: ";
+            std::cout << "Confirmed New Mission Indices: ";
             for (size_t i = 0; i < m_dronesUnderCommand.size(); i++) {
                 // if there's at least one sequence assigned to the drone
                 if ((int) m_subregionSequences[i].size() >= 1) {
@@ -301,8 +277,6 @@ namespace Guidance {
             if (! m_missionPrepDone) {
                 double TargetFlightTime = 100;
 
-                // m_flyingMissionStatus.clear();
-
                 PartitionSurveyRegion(m_surveyRegion, m_surveyRegionPartition, TargetFlightTime, m_ImagingReqs);
 
                 for (auto partition : m_surveyRegionPartition) {
@@ -348,9 +322,7 @@ namespace Guidance {
                     std::cout << "\nREFRESHING SEQUENCE" << std::endl;
                     RefreshSequence();
                     MostRecentSequenceTimestamp = std::chrono::steady_clock::now();
-                    // refresh_period = 10.0;
             }
-
 
             for (size_t i = 0; i < m_dronesUnderCommand.size(); i++) {
                 bool Result;
@@ -372,6 +344,7 @@ namespace Guidance {
                 m_flyingMissionStatus[i] = Result;
             }
 
+            // Track incomplete missions for the sake of turning completed missions blue in guidance overlay.
             std::vector<std::vector<int>> m_subregionSequencesIncomplete;
             for (size_t i = 0; i < m_dronesUnderCommand.size(); i++) {
                 auto drone = m_dronesUnderCommand[i];
@@ -379,7 +352,6 @@ namespace Guidance {
                 std::vector<int> incompleteMissions(m_subregionSequences[i].begin() + missionNum, m_subregionSequences[i].end());
                 m_subregionSequencesIncomplete.push_back(incompleteMissions);
             }
-
 
             MapWidget::Instance().m_guidanceOverlay.SetMissions(m_droneMissions);
             MapWidget::Instance().m_guidanceOverlay.SetDroneMissionSequences(m_subregionSequencesIncomplete);
@@ -1186,35 +1158,15 @@ namespace Guidance {
                 DroneInterface::WaypointMission currentMission = SubregionMissions[Sequences[drone_idx][destWaypointIndex]];
                 // Add time from current position to starting waypoint of mission
                 DroneStartTime += std::chrono::seconds((int) EstimateMissionTime(DronePos, currentMission.Waypoints[0], ImagingReqs.TargetSpeed));
-                // std::cout << "Time to starting waypoint " << (int) EstimateMissionTime(DronePos, currentMission.Waypoints[0], ImagingReqs.TargetSpeed) << ", ";
-                // std::chrono::time_point<std::chrono::steady_clock> T0 = std::chrono::steady_clock::now();
                 if (IsPredictedToFinishWithoutShadows(TA, currentMission, 0, DroneStartTime, Margin)) {
                     coverage++;
                     if (destWaypointIndex == 0) {
                         PredictedCoverage[drone_idx]++;
                     }
-                    // std::cout << "Predicted to finish" << std::endl;
-                    // std::cout << "Mission " << destWaypointIndex << " expected to finish: TRUE, ";
-                } else {
-                    // std::cout << "Predicted not to finish" << std::endl;
-                    // std::cout << "Mission " << destWaypointIndex << " expected to finish: FALSE, ";
                 }
-                // std::cout << "Margin: " << Margin << ", ";
-                // processingTime = SecondsElapsed(T0, std::chrono::steady_clock::now());
-                // // std::cerr << "IsPredictedToFinishWithoutShadows: " << processingTime*1000.0 << " ms" << std::endl;
-                // T0 = std::chrono::steady_clock::now();
                 // Add time to fly mission
-                // DroneStartTime += std::chrono::seconds(20);
                 DroneStartTime += std::chrono::seconds((int) EstimateMissionTime(currentMission, ImagingReqs.TargetSpeed));
-                // // std::cout << "Time to next waypoint " << (int) EstimateMissionTime(currentMission, ImagingReqs.TargetSpeed) << std::endl;
-                // processingTime = SecondsElapsed(T0, std::chrono::steady_clock::now());
-                // // std::cerr << "EstimateMissionTime: " << processingTime*1000.0 << " ms" << std::endl;
-                // Set current position to last waypoint of mission
                 DronePos = currentMission.Waypoints.back();
-
-                // time from starting location of drone to first waypoint of next mission
-                // time to fly mission
-                // time from last waypoint of mission to first waypoint of next mission
             }
             MissionDurations.push_back(SecondsElapsed(NowTime, DroneStartTime));
         }
@@ -1237,9 +1189,6 @@ namespace Guidance {
         int numDrones = DroneStartPositions.size();
         int numMissions = SubregionMissions.size();
 
-        // std::cout << "numDrones: " << numDrones << ", numMissions: " << numMissions << std::endl;
-
-
         // Naive
         // Sequences.resize(numDrones, std::vector<int>());
 
@@ -1259,19 +1208,7 @@ namespace Guidance {
         std::vector<std::vector<int>> CurrentAssignments, CurrentSequences;
         Sequences.resize(numDrones, std::vector<int>());
 
-        // std::set<int> MissionIndicesToAssign;
-        // for (int i = 0; i < numMissions; i++) {
-        //     MissionIndicesToAssign.insert(i);
-        // }
-
         std::vector<int> BestPredictedCoverage;
-
-
-        // TODO:
-        // Prioritize sequences that cover unclouded regions first
-        // Figuring out when we're too far into a mission to retask (subregions are small enough such that retask cost is small)
-        // Hover when nothing useful can be done
-        // Fix bug when mission is finished and all drones are retasked for some reason
 
         // Keep looping until all missions have been assigned
         while(!MissionIndicesToAssign.empty()) {
@@ -1305,9 +1242,7 @@ namespace Guidance {
             }
 
             processingTime = SecondsElapsed(T0, std::chrono::steady_clock::now());
-			// std::cerr << "RecurseAssignments: " << processingTime*1000.0 << " ms" << std::endl;
             T0 = std::chrono::steady_clock::now();
-            // std::cout << "Number of assignments: " << AllAssignments.size() << std::endl;
 
             // Generate all ordered ways to fly drone through assignments
             for (std::vector<std::vector<int>> assignment : AllAssignments) {
@@ -1315,13 +1250,10 @@ namespace Guidance {
             }
 
             processingTime = SecondsElapsed(T0, std::chrono::steady_clock::now());
-			// std::cerr << "RecurseSequences: " << processingTime*1000.0 << " ms" << std::endl;
             T0 = std::chrono::steady_clock::now();
             int mission_time = -1, min_max_mission_time = -1;
             bool reset_mission_time = true;
             
-            // std::cout << "Number of sequences: " << AllSequences.size() << std::endl;
-
             // Iterate through all ordered sequences to find the best one as measured by best coverage and then by minimum maximum fly time across all drones
             std::vector<std::vector<int>> bestSequence = AllSequences[0], newSequence;
             for (std::vector<std::vector<int>> sequence : AllSequences) {
@@ -1338,20 +1270,6 @@ namespace Guidance {
                 int start_unclouded = std::accumulate(PredictedCoverage.begin(), PredictedCoverage.end(), 0);
                 mission_time = *max_element(MissionDurations.begin(), MissionDurations.end());
 
-
-                // If coverage better than ever seen, also calculate min max distance. 
-                // In future, this could save on recalculating previous mission times, and instead calculate just the appended potential sequence time
-                // if (coverage >= max_coverage) {
-                //     distance = 0;
-                //     for (int i = 0; i < numDrones; i++) {
-                //         DroneInterface::Waypoint startPos = DroneStartPositions[i]; 
-                //         if (!Sequences[i].empty()) {
-                //             startPos = SubregionMissions[i].Waypoints[Sequences[i].size() - 1];
-                //         }
-                //         MissionDurations.push_back(duration starting from startPos);
-                //     }
-                //     distance = *max_element(MissionDurations.begin(), MissionDurations.end());
-                // }
                 // Update best coverage and min_max_distance
                 if ((coverage > max_coverage) ||
                     ((coverage == max_coverage) && (start_unclouded > max_start_unclouded)) || 
@@ -1367,7 +1285,6 @@ namespace Guidance {
             }
 
             processingTime = SecondsElapsed(T0, std::chrono::steady_clock::now());
-			// std::cerr << "GetCoverage: " << processingTime*1000.0 << " ms" << std::endl;
             T0 = std::chrono::steady_clock::now();
 
             // Remove missions that were assigned
