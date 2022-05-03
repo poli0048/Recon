@@ -148,7 +148,7 @@ namespace Guidance {
             }
         }*/
 
-        std::vector<int> currentMissionIndices;
+        std::vector<int> currentMissionIndices, newMissionIndices;
 
         // Get the mission indices that are currently being flown by drones and print them out
         if (!m_currentDroneMissions.empty() && !m_subregionSequences.empty()) {
@@ -183,7 +183,7 @@ namespace Guidance {
 
             m_droneStartPositions.push_back(Waypoint);
         }
-        int currentSequenceCoverageExpected = 0, newSequenceCoverageExpected;
+        int currentSequenceCoverageExpected = 0, newSequenceCoverageExpected, currentStartUnclouded, newStartUnclouded;
         std::vector<std::vector<int>> currentSequences = m_subregionSequences;
         std::vector<int> PredictedCoverage, MissionDurations;
 
@@ -196,13 +196,13 @@ namespace Guidance {
         // Below, we compare coverage of new best sequence to recalculate coverage (based on updated m_TA) of the previous best found sequence
         // We only care about comparison of new coverage to old coverage if old coverage > 0 (because why would we care if it was 0 before? anything would be better than that)
         if (m_coverageExpected > 0) {
-            std::cout << currentSequences.size() << std::endl;
-            std::cout << m_dronesUnderCommand.size() << std::endl;
             currentSequenceCoverageExpected = GetCoverage(PredictedCoverage, MissionDurations, m_TA, m_droneMissions, currentSequences, m_droneStartPositions, m_ImagingReqs, m_dronesUnderCommand.size());
+            currentStartUnclouded = std::accumulate(PredictedCoverage.begin(), PredictedCoverage.end(), 0);
             PredictedCoverage.clear();
             MissionDurations.clear();
         }
         newSequenceCoverageExpected = GetCoverage(PredictedCoverage, MissionDurations, m_TA, m_droneMissions, m_subregionSequences, m_droneStartPositions, m_ImagingReqs, m_dronesUnderCommand.size());
+        newStartUnclouded = std::accumulate(PredictedCoverage.begin(), PredictedCoverage.end(), 0);
         std::cout << "current coverage: " << currentSequenceCoverageExpected << ", new coverage: " << newSequenceCoverageExpected << std::endl;
         
 
@@ -218,8 +218,22 @@ namespace Guidance {
         }
         std::cout << ">" << std::endl;
 
+        for (size_t i = 0; i < m_dronesUnderCommand.size(); i++) {
+            // if there's at least one sequence assigned to the drone
+            if ((int) m_subregionSequences[i].size() >= 1) {
+                newMissionIndices.push_back(m_subregionSequences[i][0]);
+            } else {
+                newMissionIndices.push_back(-1);
+            }
+        }
+
+        bool isPermutation = std::is_permutation(currentMissionIndices.begin(), currentMissionIndices.end(), newMissionIndices.begin());
+
+
         // If the number of missions left to assign has changed (i.e., mission was completed), or if using new m_TA, new sequence coverage > old sequence coverage
-        if (m_missionIndicesToAssign.size() != prevNumMissions || newSequenceCoverageExpected > currentSequenceCoverageExpected) {
+        if (((m_missionIndicesToAssign.size() != prevNumMissions) && !isPermutation) || 
+            newSequenceCoverageExpected > currentSequenceCoverageExpected || 
+            (newSequenceCoverageExpected == currentSequenceCoverageExpected && newStartUnclouded > currentStartUnclouded)) {
             m_currentDroneMissions.clear();
             m_coverageExpected = newSequenceCoverageExpected;
             std::vector<bool> startMissionFromBeginning;
@@ -331,7 +345,7 @@ namespace Guidance {
 
             std::chrono::time_point<std::chrono::steady_clock> NowTimestamp = std::chrono::steady_clock::now();
             if (SecondsElapsed(MostRecentSequenceTimestamp, NowTimestamp) > refresh_period) {
-                    std::cout << "REFRESHING SEQUENCE" << std::endl;
+                    std::cout << "\nREFRESHING SEQUENCE" << std::endl;
                     RefreshSequence();
                     MostRecentSequenceTimestamp = std::chrono::steady_clock::now();
                     // refresh_period = 10.0;
@@ -358,8 +372,17 @@ namespace Guidance {
                 m_flyingMissionStatus[i] = Result;
             }
 
+            std::vector<std::vector<int>> m_subregionSequencesIncomplete;
+            for (size_t i = 0; i < m_dronesUnderCommand.size(); i++) {
+                auto drone = m_dronesUnderCommand[i];
+                int missionNum = std::get<0>(m_currentDroneMissions[drone->GetDroneSerial()]);
+                std::vector<int> incompleteMissions(m_subregionSequences[i].begin() + missionNum, m_subregionSequences[i].end());
+                m_subregionSequencesIncomplete.push_back(incompleteMissions);
+            }
+
+
             MapWidget::Instance().m_guidanceOverlay.SetMissions(m_droneMissions);
-            MapWidget::Instance().m_guidanceOverlay.SetDroneMissionSequences(m_subregionSequences);
+            MapWidget::Instance().m_guidanceOverlay.SetDroneMissionSequences(m_subregionSequencesIncomplete);
 
 
             //If we get here we are executing a mission
@@ -1167,7 +1190,9 @@ namespace Guidance {
                 // std::chrono::time_point<std::chrono::steady_clock> T0 = std::chrono::steady_clock::now();
                 if (IsPredictedToFinishWithoutShadows(TA, currentMission, 0, DroneStartTime, Margin)) {
                     coverage++;
-                    PredictedCoverage[drone_idx]++;
+                    if (destWaypointIndex == 0) {
+                        PredictedCoverage[drone_idx]++;
+                    }
                     // std::cout << "Predicted to finish" << std::endl;
                     // std::cout << "Mission " << destWaypointIndex << " expected to finish: TRUE, ";
                 } else {
@@ -1228,7 +1253,7 @@ namespace Guidance {
         double processingTime;
 
         // Depth N Best
-        int n = 1, num_to_assign, max_coverage = 0;
+        int n = 1, num_to_assign, max_coverage = 0, max_start_unclouded = 0;
 
         std::vector<std::vector<std::vector<int>>> AllAssignments, AllSequences;
         std::vector<std::vector<int>> CurrentAssignments, CurrentSequences;
@@ -1240,6 +1265,13 @@ namespace Guidance {
         // }
 
         std::vector<int> BestPredictedCoverage;
+
+
+        // TODO:
+        // Prioritize sequences that cover unclouded regions first
+        // Figuring out when we're too far into a mission to retask (subregions are small enough such that retask cost is small)
+        // Hover when nothing useful can be done
+        // Fix bug when mission is finished and all drones are retasked for some reason
 
         // Keep looping until all missions have been assigned
         while(!MissionIndicesToAssign.empty()) {
@@ -1303,7 +1335,9 @@ namespace Guidance {
                 // Find coverage and maximum mission duration of potential sequence
                 std::vector<int> PredictedCoverage, MissionDurations;
                 int coverage = GetCoverage(PredictedCoverage, MissionDurations, TA, SubregionMissions, newSequence, DroneStartPositions, ImagingReqs, numDrones);
+                int start_unclouded = std::accumulate(PredictedCoverage.begin(), PredictedCoverage.end(), 0);
                 mission_time = *max_element(MissionDurations.begin(), MissionDurations.end());
+
 
                 // If coverage better than ever seen, also calculate min max distance. 
                 // In future, this could save on recalculating previous mission times, and instead calculate just the appended potential sequence time
@@ -1319,10 +1353,13 @@ namespace Guidance {
                 //     distance = *max_element(MissionDurations.begin(), MissionDurations.end());
                 // }
                 // Update best coverage and min_max_distance
-                if ((coverage > max_coverage) || ((coverage == max_coverage) && (reset_mission_time || mission_time < min_max_mission_time))) {
+                if ((coverage > max_coverage) ||
+                    ((coverage == max_coverage) && (start_unclouded > max_start_unclouded)) || 
+                    (((coverage == max_coverage) && (start_unclouded == max_start_unclouded)) && (reset_mission_time || mission_time < min_max_mission_time))) {
                     // std::cout << max_coverage << std::endl;
                     BestPredictedCoverage = PredictedCoverage;
                     max_coverage = coverage;
+                    max_start_unclouded = start_unclouded;
                     bestSequence = sequence;
                     min_max_mission_time = mission_time;
                     reset_mission_time = false;
