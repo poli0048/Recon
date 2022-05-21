@@ -20,8 +20,8 @@ endif
 # ****************************************************   Include Paths   ****************************************************
 RECON_INCLUDE_FLAGS1 = -I.. -I../eigen -I../Flexible-Raster-Format -I../imgui -I../restclient-cpp/include -I../cereal/include
 RECON_INCLUDE_FLAGS2 = `pkg-config --cflags freetype2 libcurl gtk+-3.0` -I../glfw/include -I../imgui/examples/libs/gl3w -I../nativefiledialog/src/include
-RECON_INCLUDE_FLAGS3 = -I../libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/include/
-RECON_INCLUDE_FLAGS4 = -I../libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/include/torch/csrc/api/include/ -I../serial/include -I../tacopie/includes
+RECON_INCLUDE_FLAGS3 = -I../libtorch-cxx11-abi-shared-with-deps-1.10.1+cpu/libtorch/include/
+RECON_INCLUDE_FLAGS4 = -I../libtorch-cxx11-abi-shared-with-deps-1.10.1+cpu/libtorch/include/torch/csrc/api/include/ -I../serial/include -I../tacopie/includes
 RECON_INCLUDE_FLAGS5 = -I../soloud/include
 RECON_INCLUDE_FLAGS  = $(RECON_INCLUDE_FLAGS1) $(RECON_INCLUDE_FLAGS2) $(RECON_INCLUDE_FLAGS3) $(RECON_INCLUDE_FLAGS4) $(RECON_INCLUDE_FLAGS5)
 
@@ -44,8 +44,8 @@ LINK_FLAGS            = -fdiagnostics-color=auto -static-libstdc++ -static-libgc
                         -Wl,-Bdynamic -lpthread -lm -ldl -luuid -fopenmp \
                         `pkg-config --static --libs freetype2 libcurl gtk+-3.0` ../glfw/Release/src/libglfw3.a `pkg-config --libs opencv4` \
                         -lGL -lGLEW -lGLU \
-                        ../tacopie/build/lib/libtacopie.a -L ../libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/lib/ -lc10_cuda -ltorch -ltorch_cuda -ltorch_cpu -lc10 \
-                        '-Wl,-rpath,$$ORIGIN/../../libtorch-cxx11-abi-shared-with-deps-1.8.1+cpu/libtorch/lib' -lasound
+                        ../tacopie/build/lib/libtacopie.a -L ../libtorch-cxx11-abi-shared-with-deps-1.10.1+cpu/libtorch/lib/ -ltorch -ltorch_cpu -lc10 \
+                        '-Wl,-rpath,$$ORIGIN/../../libtorch-cxx11-abi-shared-with-deps-1.10.1+cpu/libtorch/lib' -lasound
 
 # **********************************************   Populate Source File Lists   *********************************************
 #Populate source files that are part of Recon project

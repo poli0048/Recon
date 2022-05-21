@@ -15,6 +15,7 @@
 #include <opencv2/opencv.hpp>
 #include "torch/script.h"
 #include "torch/torch.h"
+#include "torch/csrc/jit/passes/tensorexpr_fuser.h"
 
 //Project Includes
 #include "../../EigenAliases.h"
@@ -82,7 +83,7 @@ namespace ShadowPropagation {
 										// By default, select CUDA if the hardware supports it 
 										m_device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU) {
 				m_engineThread = std::thread(&ShadowPropagationEngine::ModuleMain, this);
-
+				torch::jit::setTensorExprFuserEnabled(false);
 				// If CUDA is being used, load the CUDA version of the LSTM, otherwise load the CPU version
 				if (m_device.is_cuda()) {
                 	m_module = torch::jit
