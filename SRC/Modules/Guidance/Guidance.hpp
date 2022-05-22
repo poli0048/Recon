@@ -104,6 +104,7 @@ namespace Guidance {
 			bool AddLowFlier(std::string const & Serial); //Add a drone to the collection of low fliers and start commanding it
 			bool RemoveLowFlier(std::string const & Serial); //Stop commanding the drone with the given serial
 			bool IsRunning(void); //Returns true if currently commanding a mission, false otherwise
+			void RefreshDronePositions(void);
 			void RefreshSequence(void);
 
 			inline std::vector<std::string> GetSerialsOfDronesUnderCommand(void);
