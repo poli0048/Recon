@@ -266,6 +266,7 @@ namespace Guidance {
         // float refresh_period = 35.0;
         float refresh_period = 10.0;
         std::chrono::time_point<std::chrono::steady_clock> MostRecentSequenceTimestamp = std::chrono::steady_clock::now();
+
         while (! m_abort) {
             m_mutex.lock();
             if (! m_running) {
@@ -290,7 +291,11 @@ namespace Guidance {
                 }
 
                 for (size_t i = 0; i < m_droneMissions.size(); i++) {
-                    m_missionIndicesToAssign.insert(i);    
+                    m_missionIndicesToAssign.insert(i);  
+                }
+
+                for (size_t i = 0; i < m_dronesUnderCommand.size(); i++) {
+                    m_wasPredictedToFinishWithoutShadows.push_back(true);
                 }
 
                 m_coverageExpected = 0;
@@ -335,7 +340,8 @@ namespace Guidance {
                 drone->IsCurrentlyExecutingWaypointMission(Result, Timestamp);
     
                 // if flying --> not flying transition detected
-                if ((Result != m_flyingMissionStatus[i]) && (Result == false)) {
+                // also, only retask/increment mission if not currently flying "OneWaypointMission" (see below)
+                if ((Result != m_flyingMissionStatus[i]) && (Result == false) && m_wasPredictedToFinishWithoutShadows[i]) {
                     int currentMissionIndex = m_subregionSequences[i][std::get<0>(m_currentDroneMissions[drone->GetDroneSerial()])++];
                     m_missionIndicesToAssign.erase(currentMissionIndex);
                     if ((int) m_subregionSequences[i].size() > std::get<0>(m_currentDroneMissions[drone->GetDroneSerial()])) {
@@ -354,16 +360,22 @@ namespace Guidance {
             for (size_t i = 0; i < m_dronesUnderCommand.size(); i++) {
                 auto drone = m_dronesUnderCommand[i];
                 double Margin;
-                
+                              
                 int missionIndex = std::get<0>(m_currentDroneMissions[m_dronesUnderCommand[i]->GetDroneSerial()]);
                 if (missionIndex < m_subregionSequences[i].size()) {
                     DroneInterface::WaypointMission Mission = std::get<1>(m_currentDroneMissions[drone->GetDroneSerial()]);
                     bool willFinish = IsPredictedToFinishWithoutShadows(m_TA, Mission, 0, DroneStartTime, Margin);
-                    std::cout << i << ": " << willFinish << std::endl;
-                    if (!willFinish) { // go to first waypoint of mission until clouds clear
-                        std::cout << "Not starting mission for drone " << i << " due to predicted cloud coverage." << std::endl;
+                    if (m_wasPredictedToFinishWithoutShadows[i] && !willFinish) { // falling edge
+                        std::cout << "At drone idx " << i << ", a falling edge was detected; hovering at first waypoint";
+                        DroneInterface::WaypointMission OneWaypointMission;
+                        OneWaypointMission.Waypoints.push_back(Mission.Waypoints[0]);
+                        OneWaypointMission.LandAtLastWaypoint = false;
+                        drone->ExecuteWaypointMission(OneWaypointMission);
+                    } else if (!m_wasPredictedToFinishWithoutShadows[i] && willFinish) { // rising edge
+                        std::cout << "At drone idx " << i << ", a rising edge was detected; starting waypoint mission from beginning";
                         drone->ExecuteWaypointMission(Mission);
                     }
+                    m_wasPredictedToFinishWithoutShadows[i] = willFinish;
                 }
 
             }

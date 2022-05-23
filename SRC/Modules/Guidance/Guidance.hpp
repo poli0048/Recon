@@ -76,6 +76,7 @@ namespace Guidance {
 			std::vector<DroneInterface::WaypointMission> m_droneMissions; //Item n covers component n of the partition
 			std::vector<DroneInterface::Waypoint> m_droneStartPositions;
 			std::vector<bool> m_flyingMissionStatus;
+			std::vector<bool> m_wasPredictedToFinishWithoutShadows;
 			//other items... e.g. the partition of the survey region, pre-planned waypoint missions for each, a vector of completed sub-regions, etc.
 			
 			void ModuleMain(void);
