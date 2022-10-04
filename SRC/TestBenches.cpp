@@ -560,9 +560,141 @@ static bool TestBench6(std::string const & Arg) {
 	return true; //Ideally check result somehow and return true on success and false on failure (otherwise manually verify result somehow)
 }
 
-static bool TestBench7(std::string const & Arg)  { return false; }
-static bool TestBench8(std::string const & Arg)  { return false; }
-static bool TestBench9(std::string const & Arg)  { return false; }
+static void print_vec(std::string const & name, std::vector<int> & v) {
+	std::cout << name << "< ";
+	for (auto x : v) {
+		std::cout << x << " ";
+	}
+	std::cout << ">";
+}
+
+static bool TestBench7(std::string const & Arg)  {
+	// Ctrl + Click to copy coordinates to clipboard
+	// ./BIN/Recon -t 7 to run the test
+
+	// Start Becker, Elgin, or Grand Meadow
+	// Modules > ShadowDetection > Start
+	// Need to add video to Simulation-Data-Sets
+
+	// Test extend()
+	std::cout << "\n-----TEST: extend-----\n" << std::endl;
+	
+	std::vector<int> d{ 1, 2, 4, 7, 6, -1 };
+	std::vector<int> s{ 0, 3, 5, 6, 1 };
+
+	print_vec("d: ", d);
+	print_vec("\ns: ", s);
+
+	Guidance::extend(d, s);
+
+	print_vec("After extend(d, s): ", d);	
+
+	// Test GenerateCombos()
+	std::cout << "\n-----TEST: GenerateCombos-----\n" << std::endl;
+	std::cout << "Generating 5C4 combos based on vector s:" << std::endl;
+	std::vector<std::vector<int>> combos = Guidance::GenerateCombos(s, 4);
+	for (auto v : combos) {
+		print_vec("\ncombo: ", v);
+	}
+	std::cout << std::endl << combos.size() << " combos found." << std::endl;
+
+	// Test GeneratePerms()
+	std::cout << "\n-----TEST: GeneratePerms-----\n" << std::endl;
+	std::cout << "Generating 5! perms based on vector s:" << std::endl;
+	std::vector<std::vector<int>> perms = Guidance::GeneratePerms(s);
+	for (auto v : perms) {
+		print_vec("\nperm: ", v);
+	}
+	std::cout << std::endl << perms.size() << " perms found." << std::endl;
+
+	// Test RecurseAssignments()
+	std::cout << "\n-----TEST: RecurseAssignments-----\n" << std::endl;
+	std::vector<std::vector<std::vector<int>>> AllAssignments;
+	std::vector<std::vector<int>> CurrentAssignments;
+	std::vector<int> combo = combos[0];
+	int numDrones = 2;
+
+	print_vec("combo: ", combo);
+	std::cout << std::endl;
+
+	CurrentAssignments.resize(numDrones, std::vector<int>());
+
+	// for (std::vector<int> combo : combos) {
+	for (int drone_idx = 0; drone_idx < numDrones; drone_idx++) {
+		CurrentAssignments[drone_idx].push_back(combo[0]);
+		Guidance::RecurseAssignments(AllAssignments, CurrentAssignments, combo, 1, numDrones);
+		CurrentAssignments[drone_idx].pop_back();
+	}
+	for (auto assignments : AllAssignments) {
+		std::cout << "assignment: <";
+		for (auto assignment : assignments) {
+			print_vec("", assignment);
+		}
+		std::cout << ">" << std::endl;
+	}
+	std::cout << std::endl << AllAssignments.size() << " assignments found." << std::endl;
+
+	// Test RecurseSequences()
+	std::cout << "\n-----TEST: RecurseSequences-----\n" << std::endl;
+	std::vector<std::vector<std::vector<int>>> AllSequences;
+
+	Guidance::RecurseSequences(AllSequences, AllAssignments[3], 0, numDrones);
+
+	for (auto sequences : AllSequences) {
+		std::cout << "sequence: <";
+		for (auto sequence : sequences) {
+			print_vec("", sequence);
+		}
+		std::cout << ">" << std::endl;
+	}
+	std::cout << std::endl << AllSequences.size() << " sequences found." << std::endl;
+
+	return true;
+}
+static bool TestBench8(std::string const & Arg)  {
+	// Test GetCoverage()
+	return true;
+}
+static bool TestBench9(std::string const & Arg)  { 
+	// Test SelectSubregionSequences()
+	ShadowPropagation::TimeAvailableFunction TA;
+	std::vector<DroneInterface::WaypointMission> SubregionMissions;
+	std::vector<std::vector<int>> Sequences;
+	std::vector<DroneInterface::Waypoint> DroneStartPositions;
+	DroneInterface::WaypointMission wm;
+	DroneInterface::Waypoint w;
+	w.Latitude = 34;
+	w.Longitude = 40;
+	w.RelAltitude = 10;
+	wm.Waypoints.push_back(w);
+
+	for (int d = 1; d < 6; d++) {
+		for (int m = 3; m < 11; m++) {
+			SubregionMissions.clear();
+			DroneStartPositions.clear();
+			for (int i = 0; i < m; i++) {
+				SubregionMissions.push_back(wm);
+			}
+			for (int i = 0; i < d; i++) {
+				DroneStartPositions.push_back(w);
+			}
+			std::set<int> MissionIndicesToAssign;
+			for (int i = 0; i < m; i++) {
+				MissionIndicesToAssign.insert(i);    
+			}
+
+			Guidance::ImagingRequirements ImagingReqs;
+			ImagingReqs.TargetSpeed = 10;
+			std::chrono::time_point<std::chrono::steady_clock> T0 = std::chrono::steady_clock::now();
+			SelectSubregionSequences(TA, SubregionMissions, DroneStartPositions, MissionIndicesToAssign, Sequences, ImagingReqs);
+			std::chrono::time_point<std::chrono::steady_clock> T1 = std::chrono::steady_clock::now();
+			double processingTime_A = SecondsElapsed(T0, T1);
+			std::cerr << "Sequencing: " << m << ", " << d << ", " << processingTime_A*1000.0 << " ms\r\n";
+		}
+	}
+
+	return true;
+}
 static bool TestBench10(std::string const & Arg) { return false; }
 
 static std::filesystem::path SimDatasetStringArgToDatasetPath(std::string const & Arg) {

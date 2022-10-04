@@ -1460,7 +1460,11 @@ inline void VehicleControlWidget::AllDronesReturnHomeAndLand(void) {
 		else
 			std::cerr << "Warning: MSA lookup failed for drone " << n + 1U << ". Excluding from alt detirmination.\r\n";
 	}
-	std::cerr << "Lowest drone must be above " << maxMSA << " m (WGS84 altitude).\r\n";
+	if (std::isnan(maxMSA)) {
+		std::cerr << "Warning: Entire RTL sequence takes place in no-fly zone.\r\n";
+	}
+	else
+		std::cerr << "Lowest drone must be above " << maxMSA << " m (WGS84 altitude).\r\n";
 
 	//Step 3 - Assign staggered RTL HAGs that keeps all drones above max MSA
 	//We will land the drones in order of their HAGs, so we want the drones sorted by battery level to ensure that the drones
@@ -1470,7 +1474,9 @@ inline void VehicleControlWidget::AllDronesReturnHomeAndLand(void) {
 	std::stable_sort(idx.begin(), idx.end(), [&droneBattLevels](size_t i1, size_t i2) {return droneBattLevels[i1] < droneBattLevels[i2];});
 
 	//Set target HAGs - Lowest drone will be just above maxMSA or 100 feet, whichever is greater. Then start RTL sequences.
-	double RTL_Alt = std::max(maxMSA + 2.0, droneHomeAlts[idx[0]] + 100.0 * 0.3048);
+	double RTL_Alt = droneHomeAlts[idx[0]] + 100.0 * 0.3048;
+	if (! std::isnan(maxMSA))
+		RTL_Alt = std::max(maxMSA + 2.0, droneHomeAlts[idx[0]] + 100.0 * 0.3048);
 	for (size_t n : idx) {
 		droneStates[n]->m_targetYawDeg = 0.0f;
 		droneStates[n]->m_RTL_HAG = RTL_Alt - droneHomeAlts[n];

@@ -58,13 +58,25 @@ namespace Guidance {
 			bool m_missionPrepDone;
 			std::vector<DroneInterface::Drone *> m_dronesUnderCommand; //pointers to the drones we are allowed to command for current mission
 			std::unordered_map<std::string, std::tuple<int, DroneInterface::WaypointMission>> m_currentDroneMissions; //Serial -> (missionNum, Mission)
+			ShadowPropagation::TimeAvailableFunction m_TA;
+			bool m_TA_initialized = false;
+			int m_coverageExpected;
 			
 			//Add additional necessary state data to keep track of mission progress, etc.
 			PolygonCollection m_surveyRegion;
 			ImagingRequirements m_ImagingReqs;
+			std::Evector<PolygonCollection> m_surveyRegionPartition;
+			
+			std::vector<DroneInterface::WaypointMission> m_completedDroneMissions;
+			std::set<int> m_missionIndicesToAssign;
+			std::vector<std::vector<int>> m_subregionSequences;
+
+			std::vector<DroneInterface::WaypointMission> m_droneMissions; //Item n covers component n of the partition
+			std::vector<DroneInterface::Waypoint> m_droneStartPositions;
+			std::vector<bool> m_flyingMissionStatus;
 			//other items... e.g. the partition of the survey region, pre-planned waypoint missions for each, a vector of completed sub-regions, etc.
 			
-			inline void ModuleMain(void);
+			void ModuleMain(void);
 			
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW /*May not be needed - check for fixed-size Eigen data types in fields*/
@@ -90,7 +102,8 @@ namespace Guidance {
 			bool AddLowFlier(std::string const & Serial); //Add a drone to the collection of low fliers and start commanding it
 			bool RemoveLowFlier(std::string const & Serial); //Stop commanding the drone with the given serial
 			bool IsRunning(void); //Returns true if currently commanding a mission, false otherwise
-			
+			void RefreshSequence(void);
+
 			inline std::vector<std::string> GetSerialsOfDronesUnderCommand(void);
 			inline std::string GetMissionStatusStr(void); //Get status string for current mission
 			inline std::string GetMissionProgressStr(void); //Get progress string for current mission
@@ -165,11 +178,39 @@ namespace Guidance {
 	//SubregionMissions   - Input  - A vector of drone Missions - Element n is the mission for sub-region n.
 	//DroneStartPositions - Input  - Element k is the starting position of drone k
 	//Sequences           - Output - Element k is a vector of sub-region indices to task drone k to (in order)
-	void SelectSubregionSequnces(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
-	                             std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::vector<std::vector<int>> & Sequences,
+	void SelectSubregionSequences(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
+	                             std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::set<int> MissionIndicesToAssign, std::vector<std::vector<int>> & Sequences,
 	                             ImagingRequirements const & ImagingReqs);
 	
+
+	// Extends v_dest with v_src
+    void extend(std::vector<int> & v_dest, const std::vector<int> & v_src);
 	
+	// GenerateCombos helper function
+	void GenerateCombosHelper(std::vector<std::vector<int>> & combos, std::vector<int> & combo, const std::vector<int> & elements, int left, int k);
+	
+	// Recursively generates all combinations of elements of length k
+	std::vector<std::vector<int>> GenerateCombos(const std::vector<int> & elements, int k);
+	
+	// Recursively generates all permutations of elements of length elements.size()
+	std::vector<std::vector<int>> GeneratePerms(std::vector<int> & elements);
+	
+	// Input: Assignable missions and number of drones i.e., <1, 3, 7, 0>, 3
+    // Output: Every unordered way to assign missions to drones i.e., [3, 1] [7] [0]
+	void RecurseAssignments(std::vector<std::vector<std::vector<int>>> & AllAssignments, std::vector<std::vector<int>> & CurrentAssignments, 
+							const std::vector<int> & AssignableMissions, const int MissionIndex, const int NumDrones);
+	
+	// Input: Unordered way to assign missions to drones i.e., [3, 1] [7] [0]
+    // Output: All ordered ways to assign missions to drones i.e., [3, 1] [7] [0], [1, 3] [7] [0]
+	void RecurseSequences(std::vector<std::vector<std::vector<int>>> & AllSequences, std::vector<std::vector<int>> & CurrentSequences, 
+						  int DroneIndex, const int NumDrones);
+	
+	// Return the number of subregions that can be completely imaged given TA
+	int GetCoverage(std::vector<int> & PredictedCoverage, std::vector<int> & MissionDurations, ShadowPropagation::TimeAvailableFunction const & TA, 
+					std::vector<DroneInterface::WaypointMission> const & SubregionMissions, std::vector<std::vector<int>> const & Sequences, 
+					std::vector<DroneInterface::Waypoint> const & StartPositions, ImagingRequirements const & ImagingReqs, const int NumDrones);
+
+
 	// *********************************************************************************************************************************
 	// ****************************************   GuidanceEngine Inline Functions Definitions   ****************************************
 	// *********************************************************************************************************************************
@@ -237,7 +278,7 @@ namespace Guidance {
 		m_surveyRegion.Clear();
 	}
 	
-	inline void GuidanceEngine::ModuleMain(void) {
+	/*inline void GuidanceEngine::ModuleMain(void) {
 		while (! m_abort) {
 			m_mutex.lock();
 			if (! m_running) {
@@ -411,7 +452,7 @@ namespace Guidance {
 					MapWidget::Instance().m_guidanceOverlay.SetLineSegments(lineSegments);
 					MapWidget::Instance().m_guidanceOverlay.SetCircles(circles);
 				}
-				*/
+				
 				//std::Evector<PolygonCollection> vectorP;
 				//vectorP.push_back(tempPolyCollection);
 				//MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(vectorP);
@@ -461,7 +502,7 @@ namespace Guidance {
 			m_mutex.unlock();
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
-	}
+	}*/
 }
 
 
