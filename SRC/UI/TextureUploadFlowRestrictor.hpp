@@ -9,6 +9,11 @@
 #include <condition_variable>
 
 //Warning: Do not call WaitUntilUploadIsAllowed() from the main thread or you may deadlock.
+//Also, ensure that any thread that does call WaitUntilUploadIsAllowed() isn't holding any locks that
+//might hold up the main thread or you may also deadlock. Note: We might want to re-architect this to
+//have WaitUntilUploadIsAllowed() timeout after some small amount of time if it isn't reset. This would
+//be a failsafe against deadlocks from unexpected thread interactions like those just mentioned. For now
+//though, lets keep it the way it is so we can track down those bugs and fix them rather than hide them.
 class TextureUploadFlowRestrictor {
 	private:
 		static constexpr unsigned int MaxUploadsPerFrame = 25U;

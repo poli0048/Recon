@@ -306,6 +306,9 @@ public:
     //Populate a vector of triangles exactly covering the same area as the polygon collection. Assumes object is valid. Uses Earcut algorithm
     void Triangulate(std::Evector<Triangle> & Triangles) const;
 
+    //Return some vertex used in the boundary of some component of the poly collection (primarily used for fallback in some algorithms)
+    Eigen::Vector2d GetSomeBoundaryVertex(void) const;
+
     //Tell Cereal which members to serialize (must be public)
     template<class Archive> void serialize(Archive & archive) { archive(m_components); }
 };

@@ -1381,6 +1381,20 @@ void PolygonCollection::Triangulate(std::Evector<Triangle> & Triangles) const {
         comp.Triangulate(Triangles);
 }
 
+//Return some vertex used in the boundary of some component of the poly collection (primarily used for fallback in some algorithms)
+//If there are no vertices in any component, returns (0,0).
+Eigen::Vector2d PolygonCollection::GetSomeBoundaryVertex(void) const {
+    //First look for a boundary point of some component
+    for (auto const & comp : m_components) {
+        if (! comp.m_boundary.Empty())
+            return comp.m_boundary.GetVertices().front();
+    }
+
+    //If we get here, all components have empty boundaries. We could look through holes, but if a polygon has
+    //an empty boundary but non-empty holes it cannot be a valid polygon, so just return (0,0)
+    return Eigen::Vector2d(0.0, 0.0);
+}
+
 
 // ************************************************************************************************************************************************
 // *********************************************************   Public Function Definitions   ******************************************************

@@ -126,7 +126,7 @@ inline bool StringNumberAwareCompare_LessThan(std::string const & a, std::string
 }
 
 //remove leading and trailing characters in s matching characters in the given set
-inline void StringStrip (std::string & s, std::string CharacterSet) {
+inline void StringStrip(std::string & s, std::string CharacterSet) {
 	size_t startpos = s.find_first_not_of(CharacterSet);
 	if (startpos == std::string::npos) s = std::string();
 	else s = s.substr(startpos);

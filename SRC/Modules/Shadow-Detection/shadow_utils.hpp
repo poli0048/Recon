@@ -218,7 +218,8 @@ inline void GetKeypointsAndDescriptors(cv::Mat const & Frame_BGR, std::vector<cv
 //locations in the reference frame. If the output is a 2x3 matrix it should be interpreted as an affine transformation,
 //and should be applied using warpAffine(). If it is 3x3 it should be interpreted as a homography and should be applied
 //using warpPerspective().
-//RefFrame is only provided for visualization purposes (if enabled). It doesn't impact the transformation
+//RefFrame is only provided for visualization purposes (if enabled). It doesn't impact the transformation.
+//Update: This function uses custom estimators and only supports an affine 2x3 matrix alignment model.
 inline void GetStabilizationMatrix(cv::Mat const & Descriptors_Ref, std::vector<cv::KeyPoint> const & Keypoints_Ref,
 	                               cv::Mat const & Frame_BGR, cv::Mat const & ApertureMask, cv::Mat & H, cv::Mat const & RefFrame) {
 	std::vector<cv::KeyPoint> Keypoints_Frame;

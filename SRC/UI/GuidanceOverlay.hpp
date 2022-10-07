@@ -29,12 +29,21 @@ class GuidanceOverlay {
 		
 		static ImU32 IndexToColor(size_t Index, size_t N, float Opacity);
 		void Draw_Partition(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds,
-		                    std::vector<ImU32> const & Colors, std::vector<std::string> const & Labels);
+		                    std::vector<ImU32> const & Colors, std::vector<std::string> const & Labels, bool CenteredLabels) const;
 		
 		//Get a point inside the given component that is roughly near the center of the first polygon in the component poly collection
 		//The returned point is in Normalized Mercator. CompIndex must be a valid index - this is not checked.
-		Eigen::Vector2d GetCentralPointForComponentOfPartition(size_t CompIndex);
+		Eigen::Vector2d GetCentralPointForComponentOfPartition(size_t CompIndex) const;
+
+		//Find the first point on the orthogonal projection of the first polygon component onto the line from A to B.
+		//The returned point is in Normalized Mercator. CompIndex must be a valid index - this is not checked.
+		Eigen::Vector2d FindFirstIntersectionOfLineAndComp(size_t CompIndex, Eigen::Vector2d const & A_NM, Eigen::Vector2d const & B_NM) const;
 		
+		void GetPartColorsByComponent(std::vector<ImU32> & Colors, float Opacity) const;
+		void GetPartColorsByTaskedDrone(std::vector<ImU32> & Colors, float Opacity, std::vector<int> const & TaskedDrones) const;
+		
+		void Draw_MissionSequenceArrows(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds, float Opacity) const;
+
 		//void DrawLines(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
 		//void DrawCircles(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
 		

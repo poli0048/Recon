@@ -125,11 +125,16 @@ namespace ShadowDetection {
 		//doesn't drop all intensities equally... it drops the illumination, which still gets multiplied by surface
 		//reflectance to get intensity. The current scheme is more sensitive in areas of high albedo.
 
+		//Note: Most of the above comments are out of date and already addressed - will clean up soon but want to keep them here
+		//for now.
+
 		bool newMethod = true;
 		cv::Mat shadowMap_EN;
 		if (newMethod) {
 			cv::Mat H;
+			m_shadowMapMutex.lock();
 			GetStabilizationMatrix(ref_descriptors, keypoints_ref, Frame, m_apertureMask, H, m_ReferenceFrame);
+			m_shadowMapMutex.unlock();
 
 			//Using the pose of the reference camera and the stabilization matrix, map to the EN plane
 			cv::Mat frame_EN, frameApertureMask_EN;
@@ -151,8 +156,6 @@ namespace ShadowDetection {
 			cv::Mat mask_EN;
 			cv::min(frameApertureMask_EN, m_refFrameApertureMask_EN, mask_EN);
 			//cv::threshold(mask_EN, mask_EN, 220.0, 255.0, cv::THRESH_BINARY);
-
-
 
 			//Update the brightness history for all unmasked pixels
 			auto T0 = std::chrono::steady_clock::now();
@@ -251,22 +254,10 @@ namespace ShadowDetection {
 				cv::waitKey(1);
 			}
 
-			//Update reference brightness image
-			/*for (int row = 0; row < m_refBrightness_EN.rows; row++) {
-				for (int col = 0; col < m_refBrightness_EN.cols; col++) {
-					if (mask_EN.at<uint8_t>(row,col) > 0) {
-						uint8_t refBrightness = m_refBrightness_EN.at<uint8_t>(row,col);
-						uint8_t currentBrightness = currentBrightness_EN.at<uint8_t>(row,col);
-						m_refBrightness_EN.at<uint8_t>(row,col) = std::max(refBrightness, currentBrightness);
-					}
-				}
-			}*/
-
 			//Find the pixelwise brightness over the reference brightness, saturating at 1
 			cv::Mat relBrightness_EN;
 			cv::divide(currentBrightness_EN, refBrightness_EN, relBrightness_EN, 255);
 			//cv::addWeighted(refBrightness_EN, -1.0, currentBrightness_EN, 1.0, 255.0, relBrightness_EN);
-			
 
 			//Fade in from the periphery of the visible area
 			cv::Mat erodedMask1_EN, erodedMask2_EN, erodedMask3_EN;
@@ -292,10 +283,6 @@ namespace ShadowDetection {
 			ringVis.setTo(cv::Scalar(0,0,255), ring3 > 128);
 			cv::imshow("Rings", multiplierMat);
 			cv::waitKey(1);*/
-
-
-
-
 
 			//Look for dark areas in the rel brightness image using multiple thresholds.
 			//We allow an small area to be detected if the brightness reduction is substantial,
@@ -360,8 +347,7 @@ namespace ShadowDetection {
 							childIndex = hierarchy[childIndex][0];
 						}
 					}
-				}				
-
+				}
 				
 				//imshow("Temp", threshImage);
 				//cv::waitKey(1);
@@ -372,7 +358,6 @@ namespace ShadowDetection {
 				vis.setTo(cv::Scalar(0,0,255), shadowImage1 > 0);
 				imshow("Shadows", vis);
 				cv::waitKey(1);*/
-				
 
 				cv::Mat temp(relBrightness_EN.rows, relBrightness_EN.cols, CV_8UC1);
 				cv::max(shadowImage1, shadowImage2, temp);
@@ -380,32 +365,29 @@ namespace ShadowDetection {
 				shadowMap_EN.setTo(255, mask_EN < 128);
 			}
 
-
 			//Threshold the relative brightness image
 			//cv::threshold(relBrightness_EN, shadowMap_EN, 200.0, 254.0, cv::THRESH_BINARY_INV);
 			//shadowMap_EN.setTo(255, mask_EN < 128);
-
 			
 			//imshow("Rel Brightness", relBrightness_EN);
 			//cv::waitKey(1);
-
-
-
-
 		}
 		else {
 			//Compute new shadow map based on the newly received frame
 			cv::Mat H;
 			//H = cv::Mat::eye(2, 3, CV_64F);
+			m_shadowMapMutex.lock();
 			GetStabilizationMatrix(ref_descriptors, keypoints_ref, Frame, m_apertureMask, H, m_ReferenceFrame);
+			auto refFrameSize = m_ReferenceFrame.size();
+			m_shadowMapMutex.unlock();
 
 			cv::Mat FrameStabilized, ApertureMaskStabilized;
 			if (H.rows == 2) {
-				cv::warpAffine(Frame, FrameStabilized, H, m_ReferenceFrame.size());
+				cv::warpAffine(Frame, FrameStabilized, H, refFrameSize);
 				cv::warpAffine(m_apertureMask, ApertureMaskStabilized, H, m_apertureMask.size());
 			}
 			else if (H.rows == 3) {
-				cv::warpPerspective(Frame, FrameStabilized, H, m_ReferenceFrame.size());
+				cv::warpPerspective(Frame, FrameStabilized, H, refFrameSize);
 				cv::warpPerspective(m_apertureMask, ApertureMaskStabilized, H, m_apertureMask.size());
 			}
 			else
@@ -488,8 +470,9 @@ namespace ShadowDetection {
 			}
 		}
 
-		//Update m_ShadowMap
-		std::scoped_lock lock(m_mutex); //Lock now after processing but before saving and executing callbacks
+		//Update m_ShadowMap and m_History - copy current shadow map to pass to callbacks
+		m_shadowMapMutex.lock();
+
 		m_ShadowMap.Map = shadowMap_EN; //Shadow map based on most recently processed frame
 		m_ShadowMap.Timestamp = Timestamp;
 
@@ -497,9 +480,20 @@ namespace ShadowDetection {
 		m_History.back().Maps.push_back(shadowMap_EN); //Record of all computed shadow maps - add new element when ref frame changes (since registration changes)
 		m_History.back().Timestamps.push_back(Timestamp);
 
-		//Call any registered callbacks
+		InstantaneousShadowMap shadowMapCopy(m_ShadowMap); //Copy shadow map for use in callbacks (so we can release lock now)
+		m_shadowMapMutex.unlock();
+
+		//Check the callbacks staging zone for changes to our callbacks
+		m_callbacks_stagingMutex.lock();
+		if (m_callback_stagingModified) {
+			m_callbacks = m_callbacks_staging;
+			m_callback_stagingModified = false;
+		}
+		m_callbacks_stagingMutex.unlock();
+
+		//Call any registered callbacks - we don't need to lock the callback staging mutex for this.
 		for (auto const & kv : m_callbacks)
-			kv.second(m_ShadowMap);
+			kv.second(shadowMapCopy);
 	}
 	
 	//Set the reference frame to be used for registration and stabilization (all other frames are aligned to the reference frame)
@@ -510,12 +504,13 @@ namespace ShadowDetection {
 			return;
 		}
 		
-		std::scoped_lock lock(m_mutex);
 		if (m_running) {
 			std::cerr << "Error in ShadowDetectionEngine::SetReferenceFrame(): Module is currently running.\r\n";
 			return;
 		}
 		
+		std::scoped_lock lock(m_shadowMapMutex);
+
 		//Save the reference frame and compute the aperture mask
 		RefFrame.copyTo(m_ReferenceFrame);
 		getApertureMask(RefFrame, m_apertureMask);
@@ -532,8 +527,6 @@ namespace ShadowDetection {
 		double sigma = 0.3*((double(kernelWidth) - 1.0)*0.5 - 1) + 0.8;
 		sigma *= 4.0;
 		cv::GaussianBlur(hsv_channels[2], brightest, cv::Size(kernelWidth,kernelWidth), sigma, sigma, cv::BORDER_REPLICATE);
-
-		//getRefDescriptors(m_ReferenceFrame, ref_descriptors, keypoints_ref);
 		
 		TryInitShadowMapAndHistory();
 	}
@@ -547,11 +540,12 @@ namespace ShadowDetection {
 			return;
 		}
 		
-		std::scoped_lock lock(m_mutex);
 		if (m_running) {
 			std::cerr << "Error in ShadowDetectionEngine::SetFiducials(): Module is currently running.\r\n";
 			return;
 		}
+
+		std::scoped_lock lock(m_shadowMapMutex);
 		
 		m_Fiducials = Fiducials;
 		int rows = m_Fiducials.size();
@@ -590,30 +584,25 @@ namespace ShadowDetection {
 	
 	//Sets the corner coords in both m_ShadowMap and m_History if GCPs and a ref frame are set
 	//Also performs additional initialization that can only happen once fiducials and the reference frame have been set
+	//A lock should already be held on m_shadowMapMutex
 	void ShadowDetectionEngine::TryInitShadowMapAndHistory(void) {
 		if ((! m_ReferenceFrame.empty()) && (! m_Fiducials.empty())) {
 			cv::Mat refFrame_EN, refFrameGray_EN;
 			RawImageToENImage(m_ReferenceFrame, o, R_Cam_ENU, CamCenter_ENU, center, max_extent, OUTPUT_RESOLUTION_PX, false, refFrame_EN);
 			RawImageToENImage(m_apertureMask, o, R_Cam_ENU, CamCenter_ENU, center, max_extent, OUTPUT_RESOLUTION_PX, false, m_refFrameApertureMask_EN);
 			cv::threshold(m_refFrameApertureMask_EN, m_refFrameApertureMask_EN, 220.0, 255.0, cv::THRESH_BINARY);
-			
 			cv::cvtColor(refFrame_EN, refFrameGray_EN, cv::COLOR_BGR2GRAY);
-			//int kernelWidth = 15;
-			//double sigma = 0.3*((double(kernelWidth) - 1.0)*0.5 - 1) + 0.8;
-			//sigma *= 4.0;
-			//cv::GaussianBlur(refFrameGray_EN, m_refBrightness_EN, cv::Size(kernelWidth,kernelWidth), sigma, sigma, cv::BORDER_REPLICATE);
-			
-			//cv::imshow("Unmasked Ref Brightness", m_refBrightness_EN);
-			//cv::waitKey(1);
 
-			MAFilter(refFrameGray_EN, m_refFrameApertureMask_EN, m_refBrightness_EN, 15);
-			m_refBrightness_EN.setTo(0, m_refFrameApertureMask_EN < 128);
+			cv::Mat refBrightness_EN;
+			MAFilter(refFrameGray_EN, m_refFrameApertureMask_EN, refBrightness_EN, 15);
+			refBrightness_EN.setTo(0, m_refFrameApertureMask_EN < 128);
 
-			m_brightnessHist_EN.resize(m_refBrightness_EN.rows, std::vector<std::deque<uint8_t>>(m_refBrightness_EN.cols));
-			for (int row = 0; row < m_refBrightness_EN.rows; row++) {
-				for (int col = 0; col < m_refBrightness_EN.cols; col++) {
+			m_brightnessHist_EN.clear();
+			m_brightnessHist_EN.resize(refBrightness_EN.rows, std::vector<std::deque<uint8_t>>(refBrightness_EN.cols));
+			for (int row = 0; row < refBrightness_EN.rows; row++) {
+				for (int col = 0; col < refBrightness_EN.cols; col++) {
 					if (m_refFrameApertureMask_EN.at<uint8_t>(row, col) > (uint8_t) 0)
-						m_brightnessHist_EN[row][col].push_back(m_refBrightness_EN.at<uint8_t>(row, col));
+						m_brightnessHist_EN[row][col].push_back(refBrightness_EN.at<uint8_t>(row, col));
 				}
 			}
 
@@ -645,7 +634,6 @@ namespace ShadowDetection {
 		}
 	}
 }
-
 
 
 

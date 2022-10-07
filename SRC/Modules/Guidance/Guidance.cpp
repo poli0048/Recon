@@ -320,9 +320,10 @@ namespace Guidance {
             for (size_t compIndex = 0U; compIndex < m_surveyRegionPartition.size(); compIndex++) {
                 double margin = 0.0;
                 bool willFinish = IsPredictedToFinishWithoutShadows(m_TA, m_droneMissions[compIndex], 0.0, std::chrono::steady_clock::now(), margin);
-                std::string label = willFinish ? "Will Finish"s : "Will Not Finish"s;
-                label += "\nMargin: "s + std::to_string(margin);
-                partitionLabels.push_back(label);
+                std::ostringstream out;
+                out << (willFinish ? "Will Finish" : "Will Not Finish")
+                    << "\nMargin: " << std::fixed << std::setprecision(1) << margin;
+                partitionLabels.push_back(out.str());
             }
             MapWidget::Instance().m_guidanceOverlay.SetPartitionLabels(partitionLabels);
 
@@ -748,7 +749,7 @@ namespace Guidance {
         //TODO
         Mission.Waypoints.clear();
         Mission.LandAtLastWaypoint = false;
-        Mission.CurvedTrajectory = false;
+        Mission.CurvedTrajectory = true;
         std::Evector<Eigen::Vector2d> vertices_NM;
         std::Evector<PolygonCollection> Partition;
 

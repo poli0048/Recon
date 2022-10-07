@@ -39,6 +39,16 @@ namespace ShadowDetection {
 			Eigen::Vector2d LL_LL; //(Latitude, Longitude) of center of lower-left pixel, in radians
 			Eigen::Vector2d LR_LL; //(Latitude, Longitude) of center of lower-right pixel, in radians
 			TimePoint Timestamp;
+
+			InstantaneousShadowMap() = default;
+			InstantaneousShadowMap(InstantaneousShadowMap const & Other) {
+				Other.Map.copyTo(this->Map); //Deep copy the map
+				this->UL_LL     = Other.UL_LL;
+				this->UR_LL     = Other.UR_LL;
+				this->LL_LL     = Other.LL_LL;
+				this->LR_LL     = Other.LR_LL;
+				this->Timestamp = Other.Timestamp;
+			}
 	};
 	
 	//This class holds a sequence of instantaneous shadow maps corresponding to different instants in time, but with the same
@@ -61,40 +71,47 @@ namespace ShadowDetection {
 	class ShadowDetectionEngine {
 		private:
 			std::thread       m_engineThread;
-			bool              m_running;
+			std::atomic<bool> m_running;
 			std::atomic<bool> m_abort;
-			std::mutex        m_mutex;
-			std::unordered_map<int, std::function<void(InstantaneousShadowMap const & ShadowMap)>> m_callbacks;
+			
+			//We use a staging area to register and unregister callbacks. In ProcessFrame(), we check to see if the staging area has
+			//been modified and update our "official" callbacks structure if necessary. This allows us to invoke our callbacks
+			//without holding a lock on our callback mutex, but it also only triggers a copy when a callback is registered or unregistered.
+			//m_callbacks and m_callbacks_staging are kept synchronized.
+			std::mutex m_callbacks_stagingMutex;
+			bool m_callback_stagingModified = false;
+			std::unordered_map<int, std::function<void(InstantaneousShadowMap const & ShadowMap)>> m_callbacks_staging;
+			
+			std::unordered_map<int, std::function<void(InstantaneousShadowMap const & ShadowMap)>> m_callbacks; //Only used in ProcessFrame()
 			
 			//These are not directly accessed in ProcessFrame()
+			std::mutex m_ImageProviderMutex;
 			std::string m_ImageProviderDroneSerial; //Empty if none
 			DroneInterface::Drone * m_ImageProviderDrone = nullptr; //Pointer to image provider drone
 			int m_DroneImageCallbackHandle = -1;    //Handle for image callback (if registered). -1 if none registered.
 			std::vector<std::tuple<cv::Mat, TimePoint>> m_unprocessedFrames;
 			
 			//These variables are modified in ProcessFrame()
-			//std::mutex m_processingMutex; //Protects the fields in this block
+			std::mutex m_shadowMapMutex; //Protects the fields in this block
 			InstantaneousShadowMap m_ShadowMap; //Shadow map based on most recently processed frame
 			std::Evector<ShadowMapHistory> m_History; //Record of all computed shadow maps - add new element when ref frame changes (since registration changes)
+			cv::Mat m_ReferenceFrame; //Computed in SetReferenceFrame()
+			std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> m_Fiducials; //Set in SetFiducials() - see method for structure
 			
 			//These variables can safely be accessed in ProcessFrame without locking since the other methods that modify them fail if module is running
-			cv::Mat m_ReferenceFrame;   //Computed in SetReferenceFrame()
-			std::Evector<std::tuple<Eigen::Vector2d, Eigen::Vector3d>> m_Fiducials; //Set in SetFiducials() - see method for structure
+			//Some of these are only used in one or the two implementations in ProcessFrame().
 			Eigen::Vector3d LEAOrigin_ECEF; //Computed in SetFiducials()
 			Eigen::Vector3d ENUOrigin_ECEF; //Computed in SetFiducials()
-			Eigen::Vector2d center;     //Computed in SetFiducials()
-    			double max_extent;          //Computed in SetFiducials()
-			Eigen::Matrix3d R_Cam_ENU;  //Computed in SetFiducials()
-    			Eigen::Vector3d CamCenter_ENU; //Computed in SetFiducials()
-			struct ocam_model o;        //Set in SetFiducials()
-			cv::Mat ref_descriptors;    //Computed in SetReferenceFrame()
+			Eigen::Vector2d center;         //Computed in SetFiducials()
+    			double max_extent;              //Computed in SetFiducials()
+			Eigen::Matrix3d R_Cam_ENU;      //Computed in SetFiducials()
+    			Eigen::Vector3d CamCenter_ENU;  //Computed in SetFiducials()
+			struct ocam_model o;            //Set in SetFiducials()
+			cv::Mat ref_descriptors;        //Computed in SetReferenceFrame()
 			std::vector<cv::KeyPoint> keypoints_ref; //Computed in SetReferenceFrame()
-			cv::Mat brightest;          //Computed in SetReferenceFrame(), updated in ProcessFrame()
-			cv::Mat m_apertureMask;     //Mask of which pixels are valid (in raw image space - no distortion correction, etc.)
-
-			//Additional variables that are safe to access in ProcessFrame without locking - used for new method only
+			cv::Mat brightest;              //Initialized in SetReferenceFrame(), updated in ProcessFrame()
+			cv::Mat m_apertureMask;         //Mask of which pixels are valid (in raw image space - no distortion correction, etc.)
 			cv::Mat m_refFrameApertureMask_EN;
-			cv::Mat m_refBrightness_EN;
 			std::vector<std::vector<std::deque<uint8_t>>> m_brightnessHist_EN; //[row][col] -> deque of recent values for the given pixel
 			
 			inline void ModuleMain(void);
@@ -149,7 +166,7 @@ namespace ShadowDetection {
 	}
 
 	inline void ShadowDetectionEngine::Start(std::string const & DroneSerial) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_ImageProviderMutex);
 		//If we already have a drone object pointer with a registered callback - unregister it and clear our pointer
 		if (m_ImageProviderDrone != nullptr) {
 			if (m_DroneImageCallbackHandle >= 0) {
@@ -164,7 +181,7 @@ namespace ShadowDetection {
 	}
 
 	inline void ShadowDetectionEngine::Stop(void) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_ImageProviderMutex);
 		m_ImageProviderDroneSerial.clear();
 		if (m_ImageProviderDrone != nullptr) {
 			if (m_DroneImageCallbackHandle >= 0) {
@@ -177,29 +194,30 @@ namespace ShadowDetection {
 	}
 
 	inline bool ShadowDetectionEngine::IsRunning(void) {
-		std::scoped_lock lock(m_mutex);
 		return m_running;
 	}
 	
 	inline std::string ShadowDetectionEngine::GetProviderDroneSerial(void) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_ImageProviderMutex);
 		return m_ImageProviderDroneSerial;
 	}
 	
 	//Regester callback for new shadow maps (returns handle)
 	inline int ShadowDetectionEngine::RegisterCallback(std::function<void(InstantaneousShadowMap const & ShadowMap)> Callback) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_callbacks_stagingMutex);
 		int token = 0;
-		while (m_callbacks.count(token) > 0U)
+		while (m_callbacks_staging.count(token) > 0U)
 			token++;
-		m_callbacks[token] = Callback;
+		m_callbacks_staging[token] = Callback;
+		m_callback_stagingModified = true;
 		return token;
 	}
 	
-	//Unregister callback for new shadow maps (input is token returned by RegisterCallback()
+	//Unregister callback for new shadow maps (input is token returned by RegisterCallback())
 	inline void ShadowDetectionEngine::UnRegisterCallback(int Handle) {
-		std::scoped_lock lock(m_mutex);
-		m_callbacks.erase(Handle);
+		std::scoped_lock lock(m_callbacks_stagingMutex);
+		m_callbacks_staging.erase(Handle);
+		m_callback_stagingModified = true;
 	}
 	
 	//When we stop or restart processing we immediately unregister any image callback and trash our pointer to the drone. However, we don't
@@ -210,15 +228,15 @@ namespace ShadowDetection {
 	//objects internal thread, which is not good practice.
 	inline void ShadowDetectionEngine::ModuleMain(void) {
 		while (! m_abort) {
-			m_mutex.lock();
 			if (m_running) {
+				m_ImageProviderMutex.lock();
 				if ((! m_ImageProviderDroneSerial.empty()) && (m_ImageProviderDrone == nullptr)) {
 					//We haven't been able to get a pointer to the desired drone yet and register a callback. Try now
 					m_ImageProviderDrone = DroneInterface::DroneManager::Instance().GetDrone(m_ImageProviderDroneSerial);
 					if (m_ImageProviderDrone != nullptr) {
 						//We connected to the drone - register an imagery callback
 						m_DroneImageCallbackHandle = m_ImageProviderDrone->RegisterCallback([this](cv::Mat const & Frame, TimePoint const & Timestamp) {
-							std::scoped_lock lock(m_mutex);
+							std::scoped_lock lock(m_ImageProviderMutex, m_shadowMapMutex);
 							//Only queue frames when we have what we need to process them or the buffer could grow without end
 							if ((! m_ReferenceFrame.empty()) && (m_Fiducials.size() >= 3U)) {
 								cv::Mat frameCopy;
@@ -229,7 +247,11 @@ namespace ShadowDetection {
 					}
 				}
 				
-				if ((! m_unprocessedFrames.empty()) && (! m_ReferenceFrame.empty()) && (m_Fiducials.size() >= 3U)) {
+				m_shadowMapMutex.lock();
+				bool refFrameAndFiducialsSet = (! m_ReferenceFrame.empty()) && (m_Fiducials.size() >= 3U);
+				m_shadowMapMutex.unlock();
+
+				if ((! m_unprocessedFrames.empty()) && refFrameAndFiducialsSet) {
 					//Get the first unprocessed frame and timestamp - remove from queue.
 					cv::Mat frame = std::get<0>(m_unprocessedFrames[0]);
 					TimePoint timestamp = std::get<1>(m_unprocessedFrames[0]);
@@ -243,39 +265,36 @@ namespace ShadowDetection {
 						std::cerr << (unsigned int) m_unprocessedFrames.size() << " frames buffered.\r\n"; 
 					}
 					
-					//This is somewhat unorthodox, but we unlock the mutex here and require ProcessFrame to lock when modifying m_ShadowMap and m_History
-					m_mutex.unlock();
+					m_ImageProviderMutex.unlock(); //Done modifying m_unprocessedFrames - release lock
 					
-					//Process the first unprocessed frame and pop it from m_unprocessedFrames.
+					//Process the first unprocessed frame.
 					ProcessFrame(frame, timestamp);
 					
 					if (! realtime)
 						std::cerr << "Frame processed.\r\n";
 				}
 				else {
-					m_mutex.unlock();
+					m_ImageProviderMutex.unlock();
 					std::this_thread::sleep_for(std::chrono::milliseconds(100));
 				}
 			}
-			else {
-				m_mutex.unlock();
+			else
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
-			}
 		}
 	}
 	
 	inline bool ShadowDetectionEngine::IsReferenceFrameSet(void) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_shadowMapMutex);
 		return (! m_ReferenceFrame.empty());
 	}
 	
 	inline size_t ShadowDetectionEngine::GetNumberOfFiducials(void) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_shadowMapMutex);
 		return m_Fiducials.size();
 	}
 	
 	inline bool ShadowDetectionEngine::GetTimestampOfMostRecentShadowMap(TimePoint & Timestamp) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_shadowMapMutex);
 		if ((m_ShadowMap.Map.rows == 0) || (m_ShadowMap.Map.cols == 0))
 			return false;
 		Timestamp = m_ShadowMap.Timestamp;
@@ -283,7 +302,7 @@ namespace ShadowDetection {
 	}
 	
 	inline bool ShadowDetectionEngine::GetMostRecentShadowMap(InstantaneousShadowMap & ShadowMap) {
-		std::scoped_lock lock(m_mutex);
+		std::scoped_lock lock(m_shadowMapMutex);
 		if ((m_ShadowMap.Map.rows == 0) || (m_ShadowMap.Map.cols == 0))
 			return false;
 		ShadowMap = m_ShadowMap;
@@ -294,7 +313,7 @@ namespace ShadowDetection {
 		//Save each item of m_History to disk (each is a new FRF file)
 		//We will save all FRF files for the mission to a subdirectory of "Shadow Map Files" in the executable directory
 		//The subdirectories will be named "Mission N (Date)"
-		std::scoped_lock lock(m_mutex);
+		
 		//Get the first free mission number 
 		std::filesystem::path TargetDir = Handy::Paths::ThisExecutableDirectory() / "Shadow Map Files";
 		std::error_code ec;
@@ -337,6 +356,7 @@ namespace ShadowDetection {
 		
 		//Save each shadow map sequence
 		bool success = true;
+		std::scoped_lock lock(m_shadowMapMutex);
 		for (size_t n = 0U; n < m_History.size(); n++) {
 			std::filesystem::path Filepath = MissionFolderPath / ("Shadow Map Sequence "s + std::to_string(n + 1U) + ".frf"s);
 			std::cout<< "Saving to " << Filepath << std::endl;
