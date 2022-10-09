@@ -42,7 +42,8 @@ class CommandWidget {
 			m_IconTexture_Watchdog  = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_Watchdog_Light_84x84[0], 84, 84);
 			m_IconTexture_Emergency = ImGuiApp::Instance().CreateImageRGBA8888(&Icon_Warning_84x84[0],        84, 84);
 			
-			m_warningSoundWav.load((Handy::Paths::ThisExecutableDirectory() / "Sounds" / "TF046.WAV").string().c_str());
+			//m_warningSoundWav.load((Handy::Paths::ThisExecutableDirectory() / "Sounds" / "TF046.WAV").string().c_str());
+			m_warningSoundWav.load((Handy::Paths::ThisExecutableDirectory() / "Sounds" / "CustomAlarm8.wav").string().c_str());
 		}
 		~CommandWidget() {
 			ImGuiApp::Instance().DeleteImage(m_IconTexture_Mission);

@@ -187,44 +187,45 @@ Eigen::Vector2d GuidanceOverlay::GetCentralPointForComponentOfPartition(size_t C
 	return boundary.ProjectPoint(centroid);
 }
 
-//Project all vertices of the first polygon in a given component onto a line from point A to B, then
-//find the projection that is closest to point A. The intent is that if A is outside a component and B
-//is inside the component, then this will give a good stopping point for an arrow pointing to the component.
-//The returned point is in Normalized Mercator. CompIndex must be a valid index - this is not checked.
-Eigen::Vector2d GuidanceOverlay::FindFirstIntersectionOfLineAndComp(size_t CompIndex, Eigen::Vector2d const & A_NM, Eigen::Vector2d const & B_NM) const {
+//Find the intersection of the line from A to B with the boundary of the first element of the given component.
+//If there are multiple intersections, find the closest one to point A.
+Eigen::Vector2d GuidanceOverlay::FindLinesIntersectionWithBoundary(size_t CompIndex, Eigen::Vector2d const & A_NM, Eigen::Vector2d const & B_NM) const {
 	PolygonCollection const & polyCollection(m_SurveyRegionPartition[CompIndex]);
 	Polygon const & poly(polyCollection.m_components[0]);
 	SimplePolygon const & boundary(poly.m_boundary);
-	std::Evector<Eigen::Vector2d> const & vertices(boundary.GetVertices());
+	std::Evector<LineSegment> boundarySegments = boundary.GetLineSegments();
 
 	Eigen::Vector2d V_NM = B_NM - A_NM;
 	V_NM.normalize();
-	if (V_NM.norm() < 0.5)
-		return polyCollection.GetSomeBoundaryVertex(); //A and B are equal to machine precision - return something reasonable as a fall-back
-
-	Eigen::Matrix2d R;
-	R << 0, -1,
-		1,  0;
-	Eigen::Vector2d W_NM = R * V_NM;
-
-	Eigen::Vector2d firstProj(0.0, 0.0);
+	if (V_NM.norm() < 0.5) {
+		//A and B are equal to machine precision - we can't really do what we want, so as a fallback project A to the boundary
+		return boundary.ProjectPointToBoundary(A_NM);
+	}
+	
+	LineSegment line(A_NM, B_NM);
+	Eigen::Vector2d firstIntersection(0.0, 0.0);
 	double bestDist = std::nanf("");
-	for (Eigen::Vector2d const & v : vertices) {
-		Eigen::Vector2d orthComp = (v - B_NM).dot(W_NM)*W_NM;
-		Eigen::Vector2d proj = v - orthComp;
-		double projForwardDistFromA = (proj - A_NM).dot(V_NM);
-		if (projForwardDistFromA > 0.0) {
-			//The point projects on the B side of A and not the opposite side.
-			if ((std::isnan(bestDist)) || (projForwardDistFromA < bestDist)) {
-				firstProj = proj;
-				bestDist = projForwardDistFromA;
+	for (auto const & seg : boundarySegments) {
+		Eigen::Vector2d intersection;
+		if (line.ComputeIntersection(seg, intersection)) {
+			double forwardDistFromA = (intersection - A_NM).dot(V_NM);
+			if (forwardDistFromA > 0.0) {
+				//The point projects on the B side of A and not the opposite side.
+				if ((std::isnan(bestDist)) || (forwardDistFromA < bestDist)) {
+					firstIntersection = intersection;
+					bestDist = forwardDistFromA;
+				}
 			}
 		}
 	}
-	if (std::isnan(bestDist))
-		return polyCollection.GetSomeBoundaryVertex(); //The entire boundary is behind A - return something reasonable as a fall-back
+	if (std::isnan(bestDist)) {
+		//There is no intersection between the line A --- B and the component boundary. This might be a round-off error
+		//issue though, possibly because A is very nearly inside the polygon already. Regardless, the best fallback we can
+		//do here is to project A to the boundary and use that instead.
+		return boundary.ProjectPointToBoundary(A_NM);
+	}
 	else
-		return firstProj;
+		return firstIntersection;
 }
 
 //Get colors for each component of the partition based on the component index (so each comp gets a different color)
@@ -257,14 +258,26 @@ void GuidanceOverlay::Draw_MissionSequenceArrows(Eigen::Vector2d const & CursorP
 				Eigen::Vector2d comp1Center_NM = GetCentralPointForComponentOfPartition(size_t(comp1Index));
 				Eigen::Vector2d comp2Center_NM = GetCentralPointForComponentOfPartition(size_t(comp2Index));
 
-				Eigen::Vector2d arrowStart_NM  = FindFirstIntersectionOfLineAndComp(comp1Index, comp2Center_NM, comp1Center_NM);
-				Eigen::Vector2d arrowEnd_NM    = FindFirstIntersectionOfLineAndComp(comp2Index, comp1Center_NM, comp2Center_NM);
+				Eigen::Vector2d arrowStart_NM  = FindLinesIntersectionWithBoundary(comp1Index, comp2Center_NM, comp1Center_NM);
+				Eigen::Vector2d arrowEnd_NM    = FindLinesIntersectionWithBoundary(comp2Index, comp1Center_NM, comp2Center_NM);
 
+				Eigen::Vector2d comp1Center_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(comp1Center_NM);
+				Eigen::Vector2d comp2Center_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(comp2Center_NM);
 				Eigen::Vector2d arrowStart_SS  = MapWidget::Instance().NormalizedMercatorToScreenCoords(arrowStart_NM);
 				Eigen::Vector2d arrowEnd_SS    = MapWidget::Instance().NormalizedMercatorToScreenCoords(arrowEnd_NM);
 
-				ImVec4 colorVec4(1.0f, 1.0f, 1.0f, Opacity/100.0f);
-				MyGui::AddArrow(DrawList, arrowStart_SS, arrowEnd_SS, ImGui::GetColorU32(colorVec4), 3.0f, 0.8f*ImGui::GetFontSize());
+				//Push the arrow endpoints past the boundaries a little - this also ensures a min arrow length
+				Eigen::Vector2d v_SS = comp2Center_SS - comp1Center_SS;
+				v_SS.normalize();
+				if (v_SS.norm() > 0.5) {
+					arrowStart_SS = arrowStart_SS - 1.5 * ImGui::GetFontSize() * v_SS;
+					arrowEnd_SS   = arrowEnd_SS   + 1.5 * ImGui::GetFontSize() * v_SS;
+				}
+				if ((arrowEnd_SS - arrowStart_SS).norm() < 1.5*(comp2Center_SS - comp1Center_SS).norm()) {
+					//Only draw if at an appropriate zoom level
+					ImVec4 colorVec4(1.0f, 1.0f, 1.0f, Opacity/100.0f);
+					MyGui::AddArrow(DrawList, arrowStart_SS, arrowEnd_SS, ImGui::GetColorU32(colorVec4), 3.0f, 0.8f*ImGui::GetFontSize());
+				}
 			}
 		}
 	}

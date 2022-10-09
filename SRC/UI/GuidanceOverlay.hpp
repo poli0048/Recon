@@ -35,17 +35,13 @@ class GuidanceOverlay {
 		//The returned point is in Normalized Mercator. CompIndex must be a valid index - this is not checked.
 		Eigen::Vector2d GetCentralPointForComponentOfPartition(size_t CompIndex) const;
 
-		//Find the first point on the orthogonal projection of the first polygon component onto the line from A to B.
-		//The returned point is in Normalized Mercator. CompIndex must be a valid index - this is not checked.
-		Eigen::Vector2d FindFirstIntersectionOfLineAndComp(size_t CompIndex, Eigen::Vector2d const & A_NM, Eigen::Vector2d const & B_NM) const;
+		//Find the first intersection of the line from A to B with the first polygon item in the given partition component
+		Eigen::Vector2d FindLinesIntersectionWithBoundary(size_t CompIndex, Eigen::Vector2d const & A_NM, Eigen::Vector2d const & B_NM) const;
 		
 		void GetPartColorsByComponent(std::vector<ImU32> & Colors, float Opacity) const;
 		void GetPartColorsByTaskedDrone(std::vector<ImU32> & Colors, float Opacity, std::vector<int> const & TaskedDrones) const;
 		
 		void Draw_MissionSequenceArrows(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds, float Opacity) const;
-
-		//void DrawLines(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
-		//void DrawCircles(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
 		
 	public:
 		 GuidanceOverlay() = default;
@@ -92,27 +88,6 @@ class GuidanceOverlay {
 
 		//Provide the currently planned mission sequences for a collection of drones
 		void SetDroneMissionSequences(std::vector<std::vector<int>> const & Sequences);
-
-
-
-
-
-		//Deprecated
-
-		//Line segments are provided as a vector of tuples. Each tuple is of the form: <Line, thickness, color>
-		//Line is a LineSegment object with coordinates in Normalized Mercator
-		//thickness is the line thickness, in pixels
-		//color is a 3-vector object: (R,G,B) where each component is in the range 0 to 1
-		//void SetLineSegments(std::Evector<std::tuple<LineSegment, float, Eigen::Vector3f>> const & Lines);
-		//void ClearLineSegments(void);
-		
-		//Circles are provided as a vector of tuples. Each tuple is of the form: <center, radius, color>
-		//center is in Normalized Mercator
-		//radius is in pixels
-		//color is a 3-vector object: (R,G,B) where each component is in the range 0 to 1
-		//Note that circles are drawn on top of lines (if specified)
-		//void SetCircles(std::Evector<std::tuple<Eigen::Vector2d, float, Eigen::Vector3f>> const & Circles);
-		//void ClearCircles();
 };
 
 

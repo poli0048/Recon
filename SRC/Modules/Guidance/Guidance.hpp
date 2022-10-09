@@ -183,6 +183,7 @@ namespace Guidance {
 	void SelectSubregionSequences(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
 	                             std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::set<int> MissionIndicesToAssign, std::vector<std::vector<int>> & Sequences,
 	                             ImagingRequirements const & ImagingReqs);
+	//Note: This function takes *way* too long on larger problems. Needs a re-write to bound complexity.
 	
 
 	// Extends v_dest with v_src
