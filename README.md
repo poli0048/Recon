@@ -92,7 +92,13 @@ Now open a terminal in the Recon directory and run "make". If the build succeeds
 TBD
 
 # Current State
-The main UI works. Satellite image retrieval and caching, along with the built-in GIS system are fully functional. Polygon support is working and the UI allows for the creation and editing of polygonal survey regions. The vehicle simulator is feature complete. UI-based control of real and simulated vehicles works. The shadow detection module is mostly complete (except for some UI integration). The NN-based shadow propagation module is partially complete but is not merged into the master branch yet. Guidance module work is ongoing. The iOS App bridge for controlling real drones is still in development but is mostly functional (https://github.com/poli0048/Recon-DJI-IOS-Interface).
+The main UI works. Satellite image retrieval and caching, along with the built-in GIS system are fully functional. Polygon support is working and the UI allows for the creation and editing of polygonal survey regions. The vehicle simulator is feature complete. UI-based control of real and simulated vehicles works. Module status:
+ * Shadow Detection module: Complete and generally mature - new implementation works mostly in East-North plane instead of doing heavy image processing in the higher-resolution image plane. Has additional improvements to allow for graceful recovery from corruption (e.g. due to bad imagery from drone).
+ * Shadow propagation module: There are currently two implementations of this module. The master branch uses the "contour flow" method, which is feature-complete, generally mature, and very fast. The LSTM-based implementation is also working on the Berkeley branch, but is much more computationally expensive and consequently cannot currently predict as far into the future as the contour flow method.
+ * Guidance module: Partially complete. Region partitioning, flight planning, traveling salesman logic, and drone tasking loop all have somewhat working implementations, but most pieces are not heavily tested and some issues remain. Currently the region partitioning gives sub-regions that are not well-optimized for drone flights (very pointy, resulting in flight paths with many turns), although an alternate implementation is in development. Flight planning works pretty well and is relatively well tested. The traveling salesman logic and drone tasking loops are partially working but not well tested and they have some problems. Some components can hang if given large regions with strange geometries, and the drone tasking loop sometimes re-tasks drones that are in the middle of productive flights. Additional concern also needs to be paid to safety.
+ * GNSS Receiver module: Complete, mature, and well-tested.
+
+The iOS App bridge for controlling real (DJI) drones is still in development but is mostly functional (https://github.com/poli0048/Recon-DJI-IOS-Interface).
 
 
 
