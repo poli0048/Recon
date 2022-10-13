@@ -813,19 +813,28 @@ namespace DroneInterface {
 				Eigen::Vector3d V_ENU = C_ECEF_ENU * V_ECEF;
 				Eigen::Vector3d P3_ECEF = P1_ECEF + waypoint.CornerRadius * V_ECEF;
 				Eigen::Vector3d Target_LLA = ECEF2LLA(P3_ECEF);
+
+				//std::cerr << "Turning through waypoint. Target Lat: " << std::fixed << std::setprecision(6) <<
+				//             Target_LLA(0)*180.0/PI << " deg. Target Lon: " << Target_LLA(1)*180.0/PI << " deg.\r\n";
 				
 				Eigen::Vector2d V_Target_EN;
 				ComputeTarget2DVelocityBasedOnTargetPosAndSpeed(Target_LLA(0), Target_LLA(1), m_turningSpeedThroughWaypoint, V_Target_EN, C_ECEF_ENU);
 				Update2DVelocityBasedOnTarget(deltaT, V_Target_EN, 2.0*max2DAcc, 2.0*max2DDec, max2DSpeed);
-				
+				//std::cerr << "Target speed: " << V_Target_EN.norm() << "m/s\r\n";
+
 				if (V_ENU.norm() > 0.1) {
 					double targetYaw = std::atan2(V_ENU(0), V_ENU(1));
 					UpdateDroneOrientationBasedOnYawTarget(deltaT, targetYaw, turnRate);
 				}
 				
+				//If our velocity component orthogonal to the vector between this and the next waypoint is small enough, or if we
+				//are close enough to the down-pass point we were aiming for (determined by a small target velocity vector),
+				//terminate the turn and advance on towards the next waypoint. Note - we need the check on target velocity (or
+				//something similar) to avoid occasional glitches where the drone can overshoot a turn and get close to the target
+				//point but fail to advance to the next waypoint until it slowly creeps close enough to the target point.
 				Eigen::Vector3d currentVel_ENU(m_V_East, m_V_North, -1.0*m_V_Down);
 				Eigen::Vector3d orthVel = currentVel_ENU - currentVel_ENU.dot(V_ENU)*V_ENU;
-				if (orthVel.norm() < 0.25 * m_turningSpeedThroughWaypoint) {
+				if ((orthVel.norm() < 0.25 * m_turningSpeedThroughWaypoint) || (V_Target_EN.norm() < 0.25)) {
 					currentVel_ENU = currentVel_ENU.dot(V_ENU)*V_ENU;
 					m_V_North = currentVel_ENU(1);
 					m_V_East  = currentVel_ENU(0);
@@ -834,7 +843,6 @@ namespace DroneInterface {
 					m_targetWaypoint++;
 				}
 			}
-			
 		}
 		else if (m_flightMode == 3) {
 			//Currently in Virtual Stick Mode A
