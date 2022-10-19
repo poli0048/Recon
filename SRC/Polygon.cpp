@@ -9,6 +9,7 @@
 //External Includes
 #include "HandyImGuiInclude.hpp"
 #include "../../eigen/Eigen/LU"
+#include "../../eigen/Eigen/QR"
 #include "../../eigen/Eigen/Geometry"
 //#include <opencv2/opencv.hpp>  //Only needed for debug and visualization
 //#include <opencv2/core.hpp>    //Only needed for debug and visualization
@@ -29,6 +30,37 @@ static void RemoveEdgeFromAdjacencyMap(std::vector<std::vector<int>> & AdjacentN
 static bool PointsAreColinear(Eigen::Vector2d const & p1, Eigen::Vector2d const & p2, Eigen::Vector2d const & p3);
 static int PointIsInsidePolygonHelper_wn_PnPoly(Eigen::Vector2d const & P, std::Evector<Eigen::Vector2d> const & V);
 static double PointIsInsidePolygonHelper_isLeft(Eigen::Vector2d const & P0, Eigen::Vector2d const & P1, Eigen::Vector2d const & P2);
+
+// ************************************************************************************************************************************************
+// *******************************************************   Generic Local Utility Functions   ****************************************************
+// ************************************************************************************************************************************************
+static size_t GetPreviousVertexIndex(size_t ThisIndex, std::Evector<Eigen::Vector2d> const & Vertices) {
+	if (ThisIndex > 0U)
+		return ThisIndex - 1U;
+	else
+		return Vertices.empty() ? 0U : (Vertices.size() - 1U);
+}
+
+static size_t GetNextVertexIndex(size_t ThisIndex, std::Evector<Eigen::Vector2d> const & Vertices) {
+	if (ThisIndex + 1U < Vertices.size())
+		return ThisIndex + 1U;
+	else
+		return 0U;
+}
+
+static Eigen::Vector2d GetPreviousVertex(size_t ThisIndex, std::Evector<Eigen::Vector2d> const & Vertices) {
+	if (Vertices.empty())
+		return Eigen::Vector2d(std::nanf(""), std::nanf(""));
+	else
+		return Vertices[GetPreviousVertexIndex(ThisIndex, Vertices)];
+}
+
+static Eigen::Vector2d GetNextVertex(size_t ThisIndex, std::Evector<Eigen::Vector2d> const & Vertices) {
+	if (Vertices.empty())
+		return Eigen::Vector2d(std::nanf(""), std::nanf(""));
+	else
+		return Vertices[GetNextVertexIndex(ThisIndex, Vertices)];
+}
 
 
 // ************************************************************************************************************************************************
@@ -535,6 +567,7 @@ bool insideColinear(LineSegment const lineA, Eigen::Vector2d pointB){
     return false;
 
 }
+
 // Handles the case where a vertex would otherwise cut the edge of another triangle
 // Trying to decide if we cut triangle A
 // Two points of triangle may intersect other
@@ -781,7 +814,7 @@ bool SimplePolygon::Contains(SimplePolygon const & OtherPoly) const {
 
 //Returns true if this polygon intersects with the given "other" polygon. Not stable if the intersection has 0 area.
 bool SimplePolygon::IntersectsWith(SimplePolygon const & OtherPoly) const {
-    //We have an intersection if any vertex of either polygon is in the interior of the other, or if the boundaries instersect.
+    //We have an intersection if any vertex of either polygon is in the interior of the other, or if the boundaries intersect.
     for (auto const & vertex : OtherPoly.m_vertices) {
         if (this->ContainsPoint(vertex))
             return true;
@@ -791,7 +824,7 @@ bool SimplePolygon::IntersectsWith(SimplePolygon const & OtherPoly) const {
             return true;
     }
 
-    //If we get here, niether polygon contains a vertex of the other. They can still intersect though if their boundaries cross
+    //If we get here, neither polygon contains a vertex of the other. They can still intersect though if their boundaries cross
     std::Evector<LineSegment> edgeSegmentsA = this->GetLineSegments();
     std::Evector<LineSegment> edgeSegmentsB = OtherPoly.GetLineSegments();
     for (auto const & edgeA : edgeSegmentsA) {
@@ -805,9 +838,399 @@ bool SimplePolygon::IntersectsWith(SimplePolygon const & OtherPoly) const {
     return false;
 }
 
-//TODO:
-//Optimizations in history structure and updates in shadow detection module
-//Final cleanup in shadow detection module + commit
+//Find the vector that maximizes the size of the orthogonal projection of the polygon onto the line defined by the vector
+Eigen::Vector2d SimplePolygon::FindLongestAxis(void) const {
+	if (m_vertices.size() < 2U)
+		return Eigen::Vector2d(1.0, 0.0); //All vectors will have 0 orthogonal projection, so just pick one
+
+	//Compute the length of orthogonal projections in 10 degree intervals - we only need to cover primary angles from 0
+	//to pi since the orthogonal projection onto the line defined by -v is the same as the one defined by v.
+	std::Evector<Eigen::Vector2d> unitVecsInitialSearch = {
+		Eigen::Vector2d( 1.000000000000000, 0.000000000000000), Eigen::Vector2d( 0.984807753012208, 0.173648177666930),
+		Eigen::Vector2d( 0.939692620785908, 0.342020143325669), Eigen::Vector2d( 0.866025403784439, 0.500000000000000),
+		Eigen::Vector2d( 0.766044443118978, 0.642787609686539), Eigen::Vector2d( 0.642787609686539, 0.766044443118978),
+		Eigen::Vector2d( 0.500000000000000, 0.866025403784439), Eigen::Vector2d( 0.342020143325669, 0.939692620785908),
+		Eigen::Vector2d( 0.173648177666930, 0.984807753012208), Eigen::Vector2d( 0.000000000000000, 1.000000000000000),
+		Eigen::Vector2d(-0.173648177666930, 0.984807753012208), Eigen::Vector2d(-0.342020143325669, 0.939692620785908),
+		Eigen::Vector2d(-0.500000000000000, 0.866025403784439), Eigen::Vector2d(-0.642787609686539, 0.766044443118978),
+		Eigen::Vector2d(-0.766044443118978, 0.642787609686539), Eigen::Vector2d(-0.866025403784439, 0.500000000000000),
+		Eigen::Vector2d(-0.939692620785908, 0.342020143325669), Eigen::Vector2d(-0.984807753012208, 0.173648177666930)};
+
+	double largestProj = std::nanf("");
+	Eigen::Vector2d bestV(0.0, 0.0);
+	for (Eigen::Vector2d const & V : unitVecsInitialSearch) {
+		double proj = GetLengthOfProjection(V);
+		if (std::isnan(largestProj) || (proj > largestProj)) {
+			largestProj = proj;
+			bestV = V;
+		}
+	}
+
+	//Now do a finer search over a radius of 10 degrees, in 1 degree increments
+	std::Evector<Eigen::Vector2d> unitVecsFineSearch;
+	Eigen::Matrix2d R_oneDeg;
+	R_oneDeg << 0.99984769515639100, -0.01745240643728351,
+	            0.01745240643728351,  0.99984769515639100;
+	Eigen::Matrix2d Rt_oneDeg = R_oneDeg.transpose();
+	Eigen::Vector2d currentV = bestV;
+	unitVecsFineSearch.push_back(currentV);
+	for (int n = 0; n < 9; n++) {
+		currentV = R_oneDeg * currentV;
+		unitVecsFineSearch.push_back(currentV);
+	}
+	currentV = bestV;
+	for (int n = 0; n < 9; n++) {
+		currentV = Rt_oneDeg * currentV;
+		unitVecsFineSearch.push_back(currentV);
+	}
+	largestProj = std::nanf("");
+	for (Eigen::Vector2d const & V : unitVecsFineSearch) {
+		double proj = GetLengthOfProjection(V);
+		if (std::isnan(largestProj) || (proj > largestProj)) {
+			largestProj = proj;
+			bestV = V;
+		}
+	}
+
+	//Now do an ultra-fine search over a radius of 1 degree, in 0.1 degree increments
+	std::Evector<Eigen::Vector2d> unitVecsUltraFineSearch;
+	Eigen::Matrix2d R_pointOneDeg;
+	R_pointOneDeg << 0.999998476913288000, -0.001745328365898309,
+	                 0.001745328365898309,  0.999998476913288000;
+	Eigen::Matrix2d Rt_pointOneDeg = R_pointOneDeg.transpose();
+	currentV = bestV;
+	unitVecsUltraFineSearch.push_back(currentV);
+	for (int n = 0; n < 9; n++) {
+		currentV = R_pointOneDeg * currentV;
+		unitVecsUltraFineSearch.push_back(currentV);
+	}
+	currentV = bestV;
+	for (int n = 0; n < 9; n++) {
+		currentV = Rt_pointOneDeg * currentV;
+		unitVecsUltraFineSearch.push_back(currentV);
+	}
+	largestProj = std::nanf("");
+	for (Eigen::Vector2d const & V : unitVecsUltraFineSearch) {
+		double proj = GetLengthOfProjection(V);
+		if (std::isnan(largestProj) || (proj > largestProj)) {
+			largestProj = proj;
+			bestV = V;
+		}
+	}
+
+	return bestV;
+}
+
+//Get the length of the projection of the polygon onto the line in the given direction (V must be a unit vector)
+double SimplePolygon::GetLengthOfProjection(Eigen::Vector2d const & V) const {
+    double minDot = std::nanf("");
+    double maxDot = std::nanf("");
+    for (Eigen::Vector2d const & vert : m_vertices) {
+        double dot = vert.dot(V);
+        if (std::isnan(minDot) || (dot < minDot))
+            minDot = dot;
+        if (std::isnan(maxDot) || (dot > maxDot))
+            maxDot = dot;
+    }
+    if (std::isnan(minDot) || std::isnan(maxDot))
+        return 0.0;
+    else
+        return (maxDot - minDot);
+}
+
+//Find index of the first vertex that lies in the half plane (-1 if all vertices lie outside half plane)
+int SimplePolygon::FindFirstVertexInHalfPlane(Eigen::Vector2d const & V, double P) const {
+	for (size_t n = 0U; n < m_vertices.size(); n++) {
+		if (m_vertices[n].dot(V) <= P)
+			return int(n);
+	}
+	return -1;
+}
+
+//Get a copy of the vertices, cycle-shifted (so they represent the same closed curve in the plane) so the given index comes first
+std::Evector<Eigen::Vector2d> SimplePolygon::CycleShiftVertices(size_t StartIndex) const {
+	std::Evector<Eigen::Vector2d> vertices;
+	vertices.reserve(m_vertices.size());
+	for (size_t n = StartIndex; n < m_vertices.size(); n++)
+		vertices.push_back(m_vertices[n]);
+	for (size_t n = 0U; n < StartIndex; n++)
+		vertices.push_back(m_vertices[n]);
+	return vertices;
+}
+
+//Find the intersection between the line containing A and B and the line with equation X dot V = P
+//This function does not check whether the lines are parallel. The intersection is not guaranteed to exist between A and B.
+static Eigen::Vector2d FindIntersectionWithLine(Eigen::Vector2d const & A, Eigen::Vector2d const & B, Eigen::Vector2d const & V, double P) {
+	Eigen::Vector2d edgeDir = B - A;
+	edgeDir.normalize();
+	Eigen::Vector2d nHat(edgeDir(1), -1.0*edgeDir(0));
+	double C = A.dot(nHat);
+
+	//Equation of line 1: x dot V    = P
+	//Equation of line 2: x dot nHat = C
+	//The solution to this system is the intersection
+	Eigen::Matrix2d AMat;
+	AMat <<    V(0),    V(1),
+	        nHat(0), nHat(1);
+	Eigen::Vector2d rhs(P, C);
+	return AMat.colPivHouseholderQr().solve(rhs);
+}
+
+//Find the first vertex to satisfy: v[i] is in plane, but v[i+1] is not in plane.
+//Returns -1 if no additional crossings are found
+static int FindFirstIndexOfInToOutCrossing(int startIndex, Eigen::Vector2d const & V, double P, std::Evector<Eigen::Vector2d> const & Vertices) {
+	int thisIndex = startIndex;
+	while (thisIndex < (int) Vertices.size()) {
+		int nextIndex = (thisIndex + 1 < (int) Vertices.size()) ? thisIndex + 1 : 0;
+		bool thisVertInPlane = (Vertices[thisIndex].dot(V) <= P);
+		bool nextVertInPlane = (Vertices[nextIndex].dot(V) <= P);
+		if (thisVertInPlane && (! nextVertInPlane))
+			return thisIndex;
+		else
+			thisIndex++;
+	}
+	return -1;
+}
+
+//Find the first vertex to satisfy: v[i] is not in plane, but v[i+1] is in plane.
+//Returns -1 if no additional crossings are found
+static int FindFirstIndexOfOutToInCrossing(int startIndex, Eigen::Vector2d const & V, double P, std::Evector<Eigen::Vector2d> const & Vertices) {
+	int thisIndex = startIndex;
+	while (thisIndex < (int) Vertices.size()) {
+		int nextIndex = (thisIndex + 1 < (int) Vertices.size()) ? thisIndex + 1 : 0;
+		bool thisVertInPlane = (Vertices[thisIndex].dot(V) <= P);
+		bool nextVertInPlane = (Vertices[nextIndex].dot(V) <= P);
+		if ((! thisVertInPlane) && nextVertInPlane)
+			return thisIndex;
+		else
+			thisIndex++;
+	}
+	return -1;
+}
+
+//Cut simple polygon with a half plane. Keep the portion satisfying X dot V <= P. This may result in 0 simple polygons
+//or arbitrarily many, depending on the geometry of the polygon and the chosen half plane.
+//Note: It would be nice to have a version of this function that keeps track of which vertices lie on the half-plane boundary
+//(as these are generally created by this function). This is rather tricky though since the SimplePolygon constructor sanitizes
+//it's vertices, which offers no guarantees that vertex indices remain valid (or even that all vertices will survive). Hence, we
+//don't offer that information.
+std::Evector<SimplePolygon> SimplePolygon::IntersectWithHalfPlane(Eigen::Vector2d const & VArg, double P) const {
+	//We came up with two strategies for this, which each have some advantages and disadvantages.
+	//
+	//Strategy 1: Circularly shift vertices until we have the first vertex in the half plane (if there are none - cull the entire object)
+	//Traverse vertices until we find an in-to-out crossing. Add a vertex at the crossing point.
+	//From there, find the next out-to-in crossing. Add a vertex at that crossing and remove all in-between vertices outside the half-plane.
+	//Mark down the new edge between the two crossing points as special, since it may need to be edited later.
+	//Repeat the process... now looking for the next in-to-out crossing, until we get back to the first vertex.
+	//This culls everything outside the half plane and inserts intersections with the half plane boundary in the right locations,
+	//but it leaves us to figure out which vertex sequences in the resulting object need to be extracted and made into separate
+	//simple polygon objects. This can be done with a careful pairing of in-to-out and out-to-in half-plane crossings.
+	//This approach should be fast, but may have unpleasant edge cases, especially if half-plane crossings are not identified
+	//very carefully and paired correctly.
+	//
+	//Strategy 2: Triangulate the simple polygon. Go through each triangle and admit, reject, or cut it, depending on whether it touches
+	//or intersects the half-plane boundary. Finally, group the triangles into clusters that connect through adjacency, and trace each
+	//component to go back to simple polygons. This has the advantage that it leverages our triangulation support, and cutting triangles
+	//that cross a half-plane is much easier to do and cover all possible cases than cutting general polygons. It should be relatively
+	//easy to get a collection of triangles that covers the correct area (i.e. the intersection of the original polygon with the half plane).
+	//Unfortunately, going from a pile of triangles to a collection of simple polygons is non-trivial. We need to have a very reliable way
+	//of testing triangle and edge adjacency, and we don't want to make assumptions on the triangulation algorithm to achieve this since
+	//we may use a different triangulation algorithm at some point and don't want this to break.
+	//
+	//We follow strategy 1 in this function. This is largely not based on any existing code or open algorithms since most of what I found
+	//in my web search was relatively poor quality and appeared to suffer from many unhandled edge cases.
+
+	std::Evector<SimplePolygon> pieces;
+
+	Eigen::Vector2d V = VArg;
+	V.normalize();
+	if (V.norm() < 0.5) {
+		std::cerr << "Error in SimplePolygon::IntersectWithHalfPlane() - V must be a unit vector. Given 0.\r\n";
+		return pieces;
+	}
+
+	//Start by finding a vertex in the given half plane
+	int startIndex = FindFirstVertexInHalfPlane(V, P);
+	if (startIndex < 0)
+		return pieces; //No vertices fall inside the half-plane. There is nothing to keep.
+
+	//Re-order vertices to start with the one we found in the half-plane
+	std::Evector<Eigen::Vector2d> vertices = CycleShiftVertices((size_t) startIndex);
+
+	//Now traverse the original polygon - add vertices each time we cross in-to-out or out-to-in the half-plane
+	//Also record the crossing points and indices of each crossing point
+	Eigen::Vector2d VOrth(V(1), -1.0*V(0));
+	std::vector<std::tuple<double, int, int>> crossings; //<projOnVOrth, index, +1 for inToOut, -1 for outToIn>
+	std::Evector<Eigen::Vector2d> newVertices;
+	int sourceIndex = 0;
+	while (sourceIndex < (int) vertices.size()) {
+		int nextInToOutIndex = FindFirstIndexOfInToOutCrossing(sourceIndex, V, P, vertices);
+		if (nextInToOutIndex < 0) {
+			//We don't leave the half-plane again - copy rest of our vertices from here
+			newVertices.insert(newVertices.end(), vertices.begin() + sourceIndex, vertices.end());
+			break;
+		}
+		else {
+			int nextOutToInIndex = FindFirstIndexOfOutToInCrossing(nextInToOutIndex, V, P, vertices);
+			//std::cerr << nextInToOutIndex << ", " << nextOutToInIndex << "\r\n";
+			if (nextOutToInIndex < 0) {
+				//We don't cross back into the half plane
+				//This shouldn't happen since our first vertex is in the half-plane... we should find another crossing
+				std::cerr << "Error: No half-plane out-to-in crossings after an in-to-out crossing.\r\n";
+			}
+			else {
+				//Copy vertices up to crossings and add in crossing points
+				newVertices.insert(newVertices.end(), vertices.begin() + sourceIndex, vertices.begin() + nextInToOutIndex + 1);
+
+				//Add crossing out
+				Eigen::Vector2d A = vertices[nextInToOutIndex];
+				Eigen::Vector2d B = GetNextVertex(nextInToOutIndex, vertices);
+				Eigen::Vector2d crossingOut = FindIntersectionWithLine(A, B, V, P);
+				crossings.push_back(std::make_tuple(crossingOut.dot(VOrth), (int) newVertices.size(), 1));
+				newVertices.push_back(crossingOut);
+
+				//Add crossing in
+				A = vertices[nextOutToInIndex];
+				B = GetNextVertex(nextOutToInIndex, vertices);
+				Eigen::Vector2d crossingIn = FindIntersectionWithLine(A, B, V, P);
+				crossings.push_back(std::make_tuple(crossingIn.dot(VOrth), (int) newVertices.size(), -1));
+				newVertices.push_back(crossingIn);
+
+				sourceIndex = nextOutToInIndex + 1; //Advance to first interior point after crossing out to in
+			}
+		}
+	}
+
+	//Now we need to pair up in and out crossings and use the pairings to cut the polygon into disjoint components
+	std::sort(crossings.begin(), crossings.end(), [](std::tuple<double, int, int> const & A,
+	                                                 std::tuple<double, int, int> const & B) -> bool {
+	                                                 return (std::get<0>(A) > std::get<0>(B)); });
+
+	//Each time we traverse an "into half plane" crossing before encountering an "out of half plane" crossing it indicates
+	//the start of a new component. Hence, we want to go through the crossing pairs and excise loops that are characterized
+	//by an in crossing before an out crossing. When an out crossing occurs before an in crossing we just have a wing to prune
+	//off of an existing component - no excision is needed. We have to be careful though in our execution. We need to pair up
+	//crossings geometrically (based on crossing location on the half-plane boundary), but if we execute excisions in the same
+	//order we may have nested loops to worry about - that is, we may need to excise loops from components made from previous
+	//loop excisions. Keeping track of index mapping here would be rather bug-prone. Instead, lets re-order the excisions so that
+	//we always do inner loop excisions before excising any larger loops that contain them.
+
+	std::vector<std::tuple<int, int>> loops; //<inIndex, outIndex>
+	for (size_t n = 0U; n < crossings.size(); n += 2) {
+		std::tuple<double, int, int> const & crossingA(crossings[n]);
+		std::tuple<double, int, int> const & crossingB(crossings[n + 1U]);
+		if (std::get<2>(crossingA) + std::get<2>(crossingB) != 0)
+			std::cerr << "Error: failure to pair in crossing with out crossing.\r\n";
+		int crossingInIndex  = std::get<1>(crossingA);
+		int crossingOutIndex = std::get<1>(crossingB);
+		if (std::get<2>(crossingA) > 0) {
+			crossingInIndex  = std::get<1>(crossingB);
+			crossingOutIndex = std::get<1>(crossingA);
+		}
+		if (crossingInIndex < crossingOutIndex)
+			loops.push_back(std::make_tuple(crossingInIndex, crossingOutIndex));
+	}
+
+	//Loops should be disjoint or nested - we shouldn't encounter loops (S1, E1) and (S2, E2) with S1 < S2 < E1 < E2
+	//Hence, it should be enough to sort the loops in reverse order of the start index, and we should get the result
+	//that we always excise inner loops before outer loops that contain them.
+	std::sort(loops.begin(), loops.end(), [](std::tuple<int, int> const & A,
+	                                         std::tuple<int, int> const & B) -> bool {
+	                                         return (std::get<0>(A) > std::get<0>(B)); });
+	std::vector<std::tuple<int,int>> vertexIndexMap(newVertices.size());
+	for (size_t n = 0U; n < newVertices.size(); n++)
+		vertexIndexMap[n] = std::make_tuple(-1, (int) n);
+	for (std::tuple<int, int> const & loop : loops) {
+		int startIndex = std::get<0>(loop);
+		int endIndex   = std::get<1>(loop);
+		std::Evector<Eigen::Vector2d> compVertices;
+		compVertices.reserve(endIndex - startIndex + 1);
+		for (int vIndex = startIndex; vIndex <= endIndex; vIndex++) {
+			if (! std::isnan((newVertices[vIndex])(0))) {
+				//Vertex hasn't been excised yet as part of previous loop
+				compVertices.push_back(newVertices[vIndex]);
+				newVertices[vIndex] << std::nanf(""), std::nanf(""); //Mark this vertex as excised (remove later)
+				vertexIndexMap[vIndex] = std::make_tuple((int) pieces.size(), 0);
+			}
+		}
+		pieces.emplace_back(compVertices);
+	}
+
+	//The starting vertex is in what we call the primary component. We should have now built new simple polygons for all other (secondary)
+	//components. We now need to strip out the vertices used in those secondary components and add the sanitized primary component to the
+	//collection of simple polygons.
+	std::Evector<Eigen::Vector2d> survivingVertices;
+	survivingVertices.reserve(newVertices.size());
+	for (Eigen::Vector2d const & V : newVertices) {
+		if (! std::isnan(V(0)))
+			survivingVertices.push_back(V);
+	}
+	pieces.emplace_back(survivingVertices);
+
+	return pieces;
+}
+
+//Cut a simple polygon along the line containing points A and B. Return all resulting pieces as simple polygons. This can
+//result in arbitrarily many pieces, depending on the object's geometry and the cut location
+std::Evector<SimplePolygon> SimplePolygon::CutAlongLine(Eigen::Vector2d const & A, Eigen::Vector2d const & B) const {
+	std::Evector<SimplePolygon> pieces;
+	Eigen::Vector2d V = B - A;
+	V.normalize();
+	if (V.norm() < 0.5) {
+		std::cerr << "Error in SimplePolygon::CutAlongLine()- A and B are equal to machine precision - they don't define a line.\r\n";
+		return pieces;
+	}
+
+	Eigen::Vector2d VOrth(V(1), -1.0*V(0));
+	double P = A.dot(VOrth);
+
+	std::Evector<SimplePolygon> sideAPieces = IntersectWithHalfPlane(VOrth, P);
+	std::Evector<SimplePolygon> sideBPieces = IntersectWithHalfPlane(-1.0*VOrth, -1.0*P);
+	pieces.insert(pieces.end(), sideAPieces.begin(), sideAPieces.end());
+	pieces.insert(pieces.end(), sideBPieces.begin(), sideBPieces.end());
+	return pieces;
+}
+
+//Populate a vector of triangles exactly covering the same area as the polygon collection. Uses Earcut algorithm.
+//This function does not clear "Triangles" - it appends to it. This is so we can ask multiple objects to add their triangles to the same vector
+void SimplePolygon::Triangulate(std::Evector<Triangle> & Triangles) const {
+	using Point = std::array<double, 2>;
+	std::vector<std::vector<Point>> polygon;
+	std::vector<Point> vertexVec;
+	vertexVec.reserve(m_vertices.size());
+
+	//The first item in the outer vector is the boundary polygon - this is the only item since a simply poly has no holes
+	polygon.emplace_back();
+	polygon.back().reserve(m_vertices.size());
+	for (auto const & vertex : m_vertices) {
+		polygon.back().push_back({vertex(0), vertex(1)});
+		vertexVec.push_back({vertex(0), vertex(1)});
+	}
+
+	//Run Earcut
+	std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
+
+	//Pack results into "Triangles"
+	//std::cerr << "Indices:\r\n";
+	//for (auto const & n : indices)
+	//	std::cerr << n << " - (" << (vertexVec[n])[0] << ", " << (vertexVec[n])[1] <<  ")\r\n";
+	Triangles.reserve(Triangles.size() + (indices.size() / 3U));
+	size_t n = 0U;
+	while (n < indices.size()) {
+		if (n + 2 >= indices.size()) {
+			std::cerr << "Internal Error: Parsing Earcut results gave partial triangle.\r\n";
+			break;
+		}
+
+		//We don't verify that indices contains only valid indices to save on time, but if Earcut gives us garbage we could segfault.
+		Triangles.emplace_back();
+		Triangles.back().m_pointA << (vertexVec[indices[n     ]])[0], (vertexVec[indices[n     ]])[1];
+		Triangles.back().m_pointB << (vertexVec[indices[n + 1U]])[0], (vertexVec[indices[n + 1U]])[1];
+		Triangles.back().m_pointC << (vertexVec[indices[n + 2U]])[0], (vertexVec[indices[n + 2U]])[1];
+
+		n += 3U;
+	}
+}
 
 //Trace the outline of the polygonal object represented by m_vertices. Compute new vertices from the outline that traces the object and keeps
 //it's interior to the left. If m_vertices already defined a valid simple polygon and kept the interior to the left this should (I hope) leave
@@ -963,16 +1386,14 @@ void SimplePolygon::Sanitize(void) {
 
 	//Choose the first edge to be the one closest to direction (1,0). All edges move up from this node because of how it was chosen
 	{
-		double maxInternalAngle = -1.0;
+		double maxProj = -2.0;
 		int bextNextNodeIndex = -1;
 		for (int nodeIndex : AdjacentNodes[extremalNodeIndex]) {
-			//std::cerr << "Checking node with index " << nodeIndex << "\r\n";
-			Eigen::Vector2d A = NodeLocations[extremalNodeIndex] - Eigen::Vector2d(1.0, 0.0);
-			Eigen::Vector2d B = NodeLocations[extremalNodeIndex];
-			Eigen::Vector2d C = NodeLocations[nodeIndex];
-			double internalAngle = getInternalAngle(A, B, C);
-			if ((bextNextNodeIndex < 0) || (internalAngle > maxInternalAngle)) {
-				maxInternalAngle = internalAngle;
+			Eigen::Vector2d V = NodeLocations[nodeIndex] - NodeLocations[extremalNodeIndex];
+			V.normalize();
+			double proj = V.dot(Eigen::Vector2d(1.0, 0.0));
+			if (proj > maxProj) {
+				maxProj = proj;
 				bextNextNodeIndex = nodeIndex;
 			}
 		}
@@ -1209,7 +1630,7 @@ bool Polygon::IntersectsWith(Polygon const & OtherPoly) const {
     //
     //Lemma: Some point in one poly (WLOG say A) must lie in the simple closure of the other (B).
     //Proof: Some point in the simple closure of A must lie in the simple closure of B. Call such a point P.
-    //If P is in A, then we are done (P is in A and in the simple closure of B). Thus, let's assume P is not in A, which meens
+    //If P is in A, then we are done (P is in A and in the simple closure of B). Thus, let's assume P is not in A, which means
     //it must be in a hole H, of A. Form a path from P to a point on the boundary of H, call that point PPrime. If this path stays
     //completely within the simple closure of B, then we are done since PPrime meets our criteria. If not, then the path intersects
     //the boundary of B at some other point before reaching the boundary of H. Call that point PCross. PCross is on the boundary of
@@ -1241,6 +1662,373 @@ bool Polygon::IntersectsWith(Polygon const & OtherPoly) const {
     }
 
     return true;
+}
+
+//Find the vector that maximizes the size of the orthogonal projection of the polygon onto the line defined by the vector
+Eigen::Vector2d Polygon::FindLongestAxis(void) const {
+	return m_boundary.FindLongestAxis();
+}
+
+//Helper function for Polygon::IntersectWithHalfPlane()
+//Get a vertex based on a key of form <objIndex, vertexIndex>. Returns NaN for invalid keys.
+static Eigen::Vector2d GetVertexByKey(std::tuple<int,int> const & Key, std::Evector<Eigen::Vector2d> const & BoundaryVertices,
+                                      std::Evector<std::Evector<Eigen::Vector2d>> const & HoleVertices) {
+	int objIndex  = std::get<0>(Key);
+	int vertIndex = std::get<1>(Key);
+	if (objIndex == -1) {
+		//Vertex comes from boundary
+		if ((vertIndex < 0) || (vertIndex >= (int) BoundaryVertices.size()))
+			return Eigen::Vector2d(std::nanf(""), std::nanf(""));
+		else
+			return BoundaryVertices[vertIndex];
+	}
+	else if ((objIndex < -1) || (objIndex >= (int) HoleVertices.size()))
+		return Eigen::Vector2d(std::nanf(""), std::nanf(""));
+	else {
+		//Vertex comes from hole
+		std::Evector<Eigen::Vector2d> const & myHoleVertices(HoleVertices[objIndex]);
+		if ((vertIndex < 0) || (vertIndex >= (int) myHoleVertices.size()))
+			return Eigen::Vector2d(std::nanf(""), std::nanf(""));
+		else
+			return myHoleVertices[vertIndex];
+	}
+}
+
+//Helper function for Polygon::IntersectWithHalfPlane()
+//Get the <objIndex, vIndex> for the next vertex along the current boundary, advancing in the direction that keeps the interior to the left
+static std::tuple<int,int> AdvanceAlongBoundary(std::tuple<int,int> const & Key, std::Evector<Eigen::Vector2d> const & BoundaryVertices,
+                                                std::Evector<std::Evector<Eigen::Vector2d>> const & HoleVertices) {
+	int objIndex  = std::get<0>(Key);
+	int vertIndex = std::get<1>(Key);
+	if (objIndex < 0) {
+		//We are traversing the boundary - the forward direction keeps the interior to the left
+		if (vertIndex + 1 < (int) BoundaryVertices.size())
+			return std::make_tuple(objIndex, vertIndex + 1);
+		else
+			return std::make_tuple(objIndex, 0);
+	}
+	else {
+		//We are traversing a hole - the reverse direction keeps the interior to the left
+		std::Evector<Eigen::Vector2d> const & myHoleVertices(HoleVertices[objIndex]);
+		if (myHoleVertices.size() <= 1U)
+			return std::make_tuple(objIndex, vertIndex);
+
+		if (vertIndex == 0)
+			return std::make_tuple(objIndex, int(myHoleVertices.size() - 1U));
+		else
+			return std::make_tuple(objIndex, vertIndex - 1);
+	}
+}
+
+//Helper function for Polygon::IntersectWithHalfPlane() - insert a half-plane boundary crossing at the end of the given vertex buffer.
+//Register the crossing in each of Crossings, CrossingSet, and CrossingTypes according to their storage formats.
+static void AppendCrossing(int ObjIndex, Eigen::Vector2d const & Crossing, int CrossingType, std::Evector<Eigen::Vector2d> & VertexBuffer,
+                           std::vector<std::tuple<double, int, int>> & Crossings, std::unordered_set<std::tuple<int,int>> & CrossingSet,
+                           std::unordered_map<std::tuple<int,int>, int> & CrossingTypes, Eigen::Vector2d const & VOrth) {
+	std::tuple<int,int> vertexKey(ObjIndex, (int) VertexBuffer.size());
+	Crossings.push_back(std::make_tuple(Crossing.dot(VOrth), std::get<0>(vertexKey), std::get<1>(vertexKey)));
+	CrossingSet.insert(vertexKey);
+	CrossingTypes[vertexKey] = CrossingType;
+	VertexBuffer.push_back(Crossing);
+}
+
+//Cut polygon with a half plane. Keep the portion satisfying X dot V <= P. This may result in 0 polygons
+//or arbitrarily many, depending on the geometry of the polygon and the chosen half plane.
+std::Evector<Polygon> Polygon::IntersectWithHalfPlane(Eigen::Vector2d const & VArg, double P) const {
+	//This is a rather tricky problem. We have two strategies for dealing with this:
+	//
+	//Strategy 1: A direct approach that mimics the approach used for simple polygons. Traverse the boundary polygon
+	//and traverse all hole polygons. Take note of each time we cross the half-plane boundary. Go through and pair up
+	//crossings geometrically and come up with rules to do loop extraction that take account of holes. We will need to
+	//post-process any holes that don't cross the half-plane boundary - they will either be culled or inserted as fully
+	//interior holes in the components they end up in. This is complicated and may have unpleasant edge cases.
+	//
+	//Strategy 2: Use the SimplyPolygon implementation of this function to intersect both the boundary and the hole simple
+	//polygons with the half plane. Each hole component can then by associated with a single boundary component. This is
+	//nice in that it relies on the SimplyPolygon class to do much of the heavy lifting, but it will require us to do a
+	//great deal of post-processing to clean up the results and it may have issues with round-off error causing strange
+	//edge cases. In particular, when a hole that was completely interior becomes an exterior piece of a new component
+	//we will need to re-trace the boundary of that component and remove the hole. Also, it is possible for a single piece
+	//of the boundary component to be split by a hole into two parts. This would not be reflected in the original cutting
+	//of the boundary polygon since without the hole it would just be a single piece. Thus, our cleanup with this approach
+	//even needs to be able to break up pieces into smaller pieces when necessary, or we need to accept that we may get
+	//incorrect results in these cases.
+	//
+	//We follow the first strategy here since the second (in spite of some advantages) has some issues with no clear solutions.
+
+	std::Evector<Polygon> pieces;
+
+	Eigen::Vector2d V = VArg;
+	V.normalize();
+	if (V.norm() < 0.5) {
+		std::cerr << "Error in Polygon::IntersectWithHalfPlane() - V must be a unit vector. Given 0.\r\n";
+		return pieces;
+	}
+
+	//Start by finding a vertex of the boundary in the given half plane
+	int boundaryStartIndex = m_boundary.FindFirstVertexInHalfPlane(V, P);
+	if (boundaryStartIndex < 0)
+		return pieces; //No boundary vertices fall inside the half-plane. There is nothing to keep.
+
+	//Re-order the boundary vertices to start in the half plane
+	std::Evector<Eigen::Vector2d> boundaryVertices = m_boundary.CycleShiftVertices((size_t) boundaryStartIndex);
+
+	Eigen::Vector2d VOrth(-1.0*V(1), V(0)); //Counter-clockwise rotation of V. Advancing in this direction along boundary keeps half plane on left
+
+	//Build data structures to help us cut/paste and re-arrange vertex segments. We reference vertices using a pair of ints: <objIndex, vIndex>
+	//objIndex = -1 for boundary, or hole index
+	//vIndex is the index of the vertex within the object it comes from
+	//We also record the type of crossing for each time we cross the half-plane boundary:
+	//crossType: +1 if approaching from inside half plane keeps interior to left
+	//           -1 if approaching from inside half plane keeps interior to right
+	//Note the odd definition of crossType. For the boundary polygon, this means in-to-out crossings get 1
+	//and out-to-in crossings get -1. For holes it is just the opposite.
+	std::vector<std::tuple<double, int, int>> crossings; //<projOnVOrth, objIndex, vIndex>
+	std::unordered_set<std::tuple<int,int>> crossingSet; //<objIndex, VIndex>
+	std::unordered_map<std::tuple<int,int>, int> crossingTypes;
+	std::Evector<Eigen::Vector2d> newBoundaryVertices;
+	int sourceIndex = 0;
+	while (sourceIndex < (int) boundaryVertices.size()) {
+		int nextInToOutIndex = FindFirstIndexOfInToOutCrossing(sourceIndex, V, P, boundaryVertices);
+		if (nextInToOutIndex < 0) {
+			//We don't leave the half-plane again - copy rest of our vertices from here
+			newBoundaryVertices.insert(newBoundaryVertices.end(), boundaryVertices.begin() + sourceIndex, boundaryVertices.end());
+			break;
+		}
+		else {
+			int nextOutToInIndex = FindFirstIndexOfOutToInCrossing(nextInToOutIndex, V, P, boundaryVertices);
+			if (nextOutToInIndex < 0) {
+				//We don't cross back into the half plane
+				//This shouldn't happen since our first vertex is in the half-plane... we should find another crossing
+				std::cerr << "Error: No half-plane out-to-in crossings after an in-to-out crossing.\r\n";
+			}
+			else {
+				//Copy vertices up to crossings and add in crossing points
+				newBoundaryVertices.insert(newBoundaryVertices.end(), boundaryVertices.begin() + sourceIndex, boundaryVertices.begin() + nextInToOutIndex + 1);
+
+				//Add crossing out
+				Eigen::Vector2d A = boundaryVertices[nextInToOutIndex];
+				Eigen::Vector2d B = GetNextVertex(nextInToOutIndex, boundaryVertices);
+				Eigen::Vector2d crossingOut = FindIntersectionWithLine(A, B, V, P);
+				AppendCrossing(-1, crossingOut, 1, newBoundaryVertices, crossings, crossingSet, crossingTypes, VOrth);
+
+				//Add crossing in
+				A = boundaryVertices[nextOutToInIndex];
+				B = GetNextVertex(nextOutToInIndex, boundaryVertices);
+				Eigen::Vector2d crossingIn = FindIntersectionWithLine(A, B, V, P);
+				AppendCrossing(-1, crossingIn, -1, newBoundaryVertices, crossings, crossingSet, crossingTypes, VOrth);
+
+				sourceIndex = nextOutToInIndex + 1; //Advance to first interior point after crossing out to in
+			}
+		}
+	}
+
+	//New we traverse each hole and do the same processing - we record new vertex lists for each hole and we track crossings
+	std::Evector<std::Evector<Eigen::Vector2d>> newHoleVertexVectors(m_holes.size());
+	std::vector<int> indicesOfHolesThatStayCompletelyInHalfPlane;
+	for (int holeIndex = 0; holeIndex < (int) m_holes.size(); holeIndex++) {
+		SimplePolygon const & hole(m_holes[holeIndex]);
+		int startIndex = hole.FindFirstVertexInHalfPlane(V, P);
+		if (startIndex < 0)
+			continue; //Entire hole is culled - nothing more to do
+		std::Evector<Eigen::Vector2d> holeVertices = hole.CycleShiftVertices((size_t) startIndex);
+		std::Evector<Eigen::Vector2d> & newHoleVertices(newHoleVertexVectors[holeIndex]);
+		sourceIndex = 0;
+		while (sourceIndex < (int) holeVertices.size()) {
+			int nextInToOutIndex = FindFirstIndexOfInToOutCrossing(sourceIndex, V, P, holeVertices);
+			if (nextInToOutIndex < 0) {
+				//We don't leave the half-plane again - copy rest of our vertices from here
+				if (sourceIndex == 0)
+					indicesOfHolesThatStayCompletelyInHalfPlane.push_back(holeIndex);
+				newHoleVertices.insert(newHoleVertices.end(), holeVertices.begin() + sourceIndex, holeVertices.end());
+				break;
+			}
+			else {
+				int nextOutToInIndex = FindFirstIndexOfOutToInCrossing(nextInToOutIndex, V, P, holeVertices);
+				if (nextOutToInIndex < 0) {
+					//We don't cross back into the half plane
+					//This shouldn't happen since our first vertex is in the half-plane... we should find another crossing
+					std::cerr << "Error: No half-plane out-to-in crossings after an in-to-out crossing.\r\n";
+				}
+				else {
+					//Copy vertices up to crossings and add in crossing points
+					newHoleVertices.insert(newHoleVertices.end(), holeVertices.begin() + sourceIndex, holeVertices.begin() + nextInToOutIndex + 1);
+
+					//Add crossing out
+					Eigen::Vector2d A = holeVertices[nextInToOutIndex];
+					Eigen::Vector2d B = GetNextVertex(nextInToOutIndex, holeVertices);
+					Eigen::Vector2d crossingOut = FindIntersectionWithLine(A, B, V, P);
+					AppendCrossing(holeIndex, crossingOut, -1, newHoleVertices, crossings, crossingSet, crossingTypes, VOrth);
+
+					//Add crossing in
+					A = holeVertices[nextOutToInIndex];
+					B = GetNextVertex(nextOutToInIndex, holeVertices);
+					Eigen::Vector2d crossingIn = FindIntersectionWithLine(A, B, V, P);
+					AppendCrossing(holeIndex, crossingIn, 1, newHoleVertices, crossings, crossingSet, crossingTypes, VOrth);
+
+					sourceIndex = nextOutToInIndex + 1; //Advance to first interior point after crossing out to in
+				}
+			}
+		}
+	}
+
+	//Next we pair up crossings of the half-plane boundary by moving down the half-plane boundary and grabbing sequential crossings
+	//We always start outside the polygon if we go far enough in any direction, so the first crossing on this line goes from outside
+	//to inside the original polygon. Also, with our ordering, traversing from the first to the second crossing within a pair should
+	//keep the half plane and our region to the left.
+	std::sort(crossings.begin(), crossings.end(), [](std::tuple<double, int, int> const & A,
+	                                                 std::tuple<double, int, int> const & B) -> bool {
+	                                                 return (std::get<0>(A) < std::get<0>(B)); });
+	std::unordered_map<std::tuple<int,int>, std::tuple<int,int>> crossingMap; //<objInd,vInd> --> <objInd,vInd>
+	std::unordered_set<std::tuple<int,int>> startCrossings; //<objInd,vInd>
+	for (size_t n = 0U; n < crossings.size(); n += 2) {
+		std::tuple<double, int, int> const & crossingA(crossings[n]);
+		std::tuple<double, int, int> const & crossingB(crossings[n + 1U]); //This is safe since we have an even number of crossings
+
+		std::tuple<int,int> crossingKeyA(std::get<1>(crossingA), std::get<2>(crossingA));
+		std::tuple<int,int> crossingKeyB(std::get<1>(crossingB), std::get<2>(crossingB));
+		
+		if (crossingTypes.at(crossingKeyA) + crossingTypes.at(crossingKeyB) != 0) {
+			std::cerr << "Warning in Polygon::IntersectWithHalfPlane(): Polygon crossing pairing problem. Type mismatch.\r\n";
+			std::cerr << "likely caused by region or hole boundary traversal in wrong direction. Interior should always be on left.\r\n";
+			std::cerr << "Check SimplePolygon sanitization code.\r\n";
+			std::cerr << "Paired Crossings: (" << std::get<0>(crossingKeyA) << ", " << std::get<1>(crossingKeyA) << ") <---> ("
+			          << std::get<0>(crossingKeyB) << ", " << std::get<1>(crossingKeyB) << ")\r\n";
+			std::cerr << "Crossing A type: " << crossingTypes.at(crossingKeyA) << "\r\n";
+			std::cerr << "Crossing B type: " << crossingTypes.at(crossingKeyB) << "\r\n";
+
+			if (std::get<0>(crossingKeyA) >= 0)
+				std::cerr << "Hole:\r\n" << m_holes[std::get<0>(crossingKeyA)] << "\r\n";
+			if (std::get<0>(crossingKeyB) >= 0)
+				std::cerr << "Hole:\r\n" << m_holes[std::get<0>(crossingKeyB)] << "\r\n";
+		}
+		
+		crossingMap[crossingKeyA] = crossingKeyB;
+		crossingMap[crossingKeyB] = crossingKeyA;
+		startCrossings.insert(crossingKeyA);
+	}
+
+	//For each start crossing, build vertex vectors that trace boundary segments until hitting another start crossing
+	//crossingToVertexVecMap maps a start crossing to the sequence of vertices that you get by starting at that crossing,
+	//traversing along the half-plane boundary to it's paired crossing, and then following the resulting boundary into the
+	//half plane and traversing in until we hit another start crossing. The initial crossing is included in the vertex sequence
+	//but the final start crossing is not.
+	//crossingTraversalMap maps initial start crossings to the start crossings they end up at
+	std::unordered_map<std::tuple<int,int>, std::Evector<Eigen::Vector2d>> crossingToVertexVecMap;
+	std::unordered_map<std::tuple<int,int>, std::tuple<int,int>> crossingTraversalMap;
+	for (std::tuple<int,int> const & startCrossing : startCrossings) {
+		std::Evector<Eigen::Vector2d> & vertexVec(crossingToVertexVecMap[startCrossing]);
+
+		std::tuple<int,int> currentVertKey = startCrossing;
+		vertexVec.push_back(GetVertexByKey(currentVertKey, newBoundaryVertices, newHoleVertexVectors));
+
+		currentVertKey = crossingMap.at(currentVertKey);
+		std::tuple<int,int> firstVertAfterStartCrossing = currentVertKey;
+		vertexVec.push_back(GetVertexByKey(currentVertKey, newBoundaryVertices, newHoleVertexVectors));
+		currentVertKey = AdvanceAlongBoundary(currentVertKey, newBoundaryVertices, newHoleVertexVectors);
+
+		while ((startCrossings.count(currentVertKey) == 0U) && (currentVertKey != firstVertAfterStartCrossing)) {
+			vertexVec.push_back(GetVertexByKey(currentVertKey, newBoundaryVertices, newHoleVertexVectors));
+			currentVertKey = AdvanceAlongBoundary(currentVertKey, newBoundaryVertices, newHoleVertexVectors);
+		}
+		if (currentVertKey == firstVertAfterStartCrossing) {
+			std::cerr << "Error in Polygon::IntersectWithHalfPlane(): Edge traversal from half-plane crossing brought us ";
+			std::cerr << "back to initial vertex instead of a different half-plane crossing. Possible crossing pairing problem.\r\n";
+			crossingTraversalMap[startCrossing] = startCrossing; //At least populate the traversal map with something viable
+		}
+		else
+			crossingTraversalMap[startCrossing] = currentVertKey; //Map initial start crossing to the current start crossing
+	}
+
+	//Now, connect up segments by tracing from start crossing to start crossing until we close a loop.
+	//Each time we use a vertex sequence we remove the corresponding start crossing to take it out of
+	//consideration for future components.
+	std::unordered_set<std::tuple<int,int>> availableStartCrossings = startCrossings;
+	while (! availableStartCrossings.empty()) {
+		std::Evector<Eigen::Vector2d> boundaryVertexVec;
+
+		std::tuple<int,int> initStartCrossing = *(availableStartCrossings.begin());
+		availableStartCrossings.erase(initStartCrossing);
+		std::Evector<Eigen::Vector2d> const & initBdrySeg(crossingToVertexVecMap.at(initStartCrossing));
+		boundaryVertexVec.insert(boundaryVertexVec.end(), initBdrySeg.cbegin(), initBdrySeg.cend());
+
+		//As a fail-safe, keep track of each start crossing we hit in our daisy-chaining. We should find our way back to
+		//our initial start crossing, but if we return to any start crossing that we have hit before we will enter an infinite
+		//loop just looking for the first start crossing. While this *should* never happen, possible inconsistencies in data
+		//structures can't be ruled out and we would rather a bad result failure mode than an infinite loop failure mode.
+		std::unordered_set<std::tuple<int,int>> usedStartCrossings;
+		usedStartCrossings.insert(initStartCrossing);
+
+		std::tuple<int,int> nextStartCrossing = crossingTraversalMap.at(initStartCrossing);
+		while (usedStartCrossings.count(nextStartCrossing) == 0U) {
+			std::Evector<Eigen::Vector2d> const & nextBdrySeg(crossingToVertexVecMap.at(nextStartCrossing));
+			boundaryVertexVec.insert(boundaryVertexVec.end(), nextBdrySeg.cbegin(), nextBdrySeg.cend());
+			availableStartCrossings.erase(nextStartCrossing);
+			usedStartCrossings.insert(nextStartCrossing);
+			nextStartCrossing = crossingTraversalMap.at(nextStartCrossing);
+		}
+		if (nextStartCrossing != initStartCrossing) {
+			std::cerr << "Error in Polygon::IntersectWithHalfPlane(): Component boundary closure failure. Traversal revisited ";
+			std::cerr << "a half-plane crossing other than the initial crossing. Closing from here, but results may be incorrect.\r\n";
+		}
+
+		pieces.emplace_back(boundaryVertexVec);
+	}
+
+	//If there are no pieces at this point we don't need to worry about processing holes any farther.
+	if (pieces.empty())
+		return pieces;
+
+	//We now have pieces populated with boundaries made up of original boundary and hole curves and components of the half plane boundary
+	//The outer boundaries of these pieces should be correct, but if there were holes that never crossed the half-plane boundary and were
+	//not completely culled, each should end up in a single piece. We need to figure out where to put each of them
+	for (int interiorHoleIndex : indicesOfHolesThatStayCompletelyInHalfPlane) {
+		std::Evector<Eigen::Vector2d> const & holeVertices(newHoleVertexVectors[interiorHoleIndex]);
+		if (holeVertices.size() < 3U)
+			continue; //Cull hole with too few vertices to possibly contain any area
+
+		//Test the first 3 vertices for inclusion in each piece and assign the hole to the piece with the most
+		//inclusions. Ideally we could just test a single point but we do this to more gracefully handle edge cases like
+		//two pieces almost touching at a point, and the hole also almost touching at the same point.
+		std::vector<int> votes(pieces.size(), 0);
+		for (int vIndex = 0; vIndex < 3; vIndex++) {
+			for (size_t pieceIndex = 0U; pieceIndex < pieces.size(); pieceIndex++) {
+				Polygon const & piece(pieces[pieceIndex]);
+				if (piece.m_boundary.ContainsPoint(holeVertices[vIndex]))
+					votes[pieceIndex]++;
+			}
+		}
+
+		size_t winningPieceIndex = 0U;
+		for (size_t pieceIndex = 1U; pieceIndex < pieces.size(); pieceIndex++) {
+			if (votes[pieceIndex] > votes[winningPieceIndex])
+				winningPieceIndex = pieceIndex;
+		}
+
+		pieces[winningPieceIndex].m_holes.emplace_back(holeVertices);
+	}
+	return pieces;
+}
+
+//Cut polygon along the line containing points A and B. Return all resulting pieces as polygons. This can
+//result in arbitrarily many pieces, depending on the object's geometry and the cut location
+std::Evector<Polygon> Polygon::CutAlongLine(Eigen::Vector2d const & A, Eigen::Vector2d const & B) const {
+	std::Evector<Polygon> pieces;
+	Eigen::Vector2d V = B - A;
+	V.normalize();
+	if (V.norm() < 0.5) {
+		std::cerr << "Error in Polygon::CutAlongLine()- A and B are equal to machine precision - they don't define a line.\r\n";
+		return pieces;
+	}
+
+	Eigen::Vector2d VOrth(V(1), -1.0*V(0));
+	double P = A.dot(VOrth);
+
+	std::Evector<Polygon> sideAPieces = IntersectWithHalfPlane(VOrth, P);
+	std::Evector<Polygon> sideBPieces = IntersectWithHalfPlane(-1.0*VOrth, -1.0*P);
+	pieces.insert(pieces.end(), sideAPieces.begin(), sideAPieces.end());
+	pieces.insert(pieces.end(), sideBPieces.begin(), sideBPieces.end());
+	return pieces;
 }
 
 //Populate a vector of triangles exactly covering the same area as the polygon collection. Assumes object is valid. Uses Earcut algorithm.

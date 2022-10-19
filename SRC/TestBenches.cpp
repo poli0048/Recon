@@ -651,10 +651,12 @@ static bool TestBench7(std::string const & Arg)  {
 
 	return true;
 }
+
 static bool TestBench8(std::string const & Arg)  {
 	// Test GetCoverage()
 	return true;
 }
+
 static bool TestBench9(std::string const & Arg)  { 
 	// Test SelectSubregionSequences()
 	ShadowPropagation::TimeAvailableFunction TA;
@@ -695,7 +697,50 @@ static bool TestBench9(std::string const & Arg)  {
 
 	return true;
 }
-static bool TestBench10(std::string const & Arg) { return false; }
+
+static bool TestBench10(std::string const & Arg) {
+	std::Evector<Eigen::Vector2d> vertices;
+	vertices.emplace_back(-0.521434, 0.283270); vertices.emplace_back(-0.521431, 0.283275);
+	vertices.emplace_back(-0.521437, 0.283278); vertices.emplace_back(-0.521439, 0.283278);
+	vertices.emplace_back(-0.521439, 0.283276); vertices.emplace_back(-0.521440, 0.283275);
+	vertices.emplace_back(-0.521441, 0.283279); vertices.emplace_back(-0.521438, 0.283280);
+	vertices.emplace_back(-0.521432, 0.283280); vertices.emplace_back(-0.521430, 0.283274);
+	vertices.emplace_back(-0.521427, 0.283271); vertices.emplace_back(-0.521423, 0.283278);
+	vertices.emplace_back(-0.521426, 0.283278); vertices.emplace_back(-0.521428, 0.283276);
+	vertices.emplace_back(-0.521428, 0.283278); vertices.emplace_back(-0.521428, 0.283279);
+	vertices.emplace_back(-0.521425, 0.283280); vertices.emplace_back(-0.521431, 0.283283);
+	vertices.emplace_back(-0.521434, 0.283282); vertices.emplace_back(-0.521439, 0.283283);
+	vertices.emplace_back(-0.521442, 0.283283); vertices.emplace_back(-0.521447, 0.283283);
+	vertices.emplace_back(-0.521449, 0.283281); vertices.emplace_back(-0.521450, 0.283278);
+	vertices.emplace_back(-0.521451, 0.283275); vertices.emplace_back(-0.521449, 0.283273);
+	vertices.emplace_back(-0.521448, 0.283276); vertices.emplace_back(-0.521447, 0.283280);
+	vertices.emplace_back(-0.521446, 0.283281); vertices.emplace_back(-0.521443, 0.283280);
+	vertices.emplace_back(-0.521442, 0.283276); vertices.emplace_back(-0.521442, 0.283275);
+	vertices.emplace_back(-0.521444, 0.283279); vertices.emplace_back(-0.521444, 0.283275);
+	vertices.emplace_back(-0.521445, 0.283279); vertices.emplace_back(-0.521445, 0.283275);
+	vertices.emplace_back(-0.521447, 0.283271); vertices.emplace_back(-0.521442, 0.283270);
+	vertices.emplace_back(-0.521438, 0.283272);
+
+	SimplePolygon simplyPoly(vertices);
+	Eigen::Vector4d compAABB = simplyPoly.GetAABB();
+
+	std::cerr << "Original Polygon:\r\n" << simplyPoly << "\r\n\r\n";
+
+	double yCut = 0.5*compAABB(2) + 0.5*compAABB(3);
+	Eigen::Vector2d VCut(0.0, 1.0);
+
+	std::Evector<SimplePolygon> piecesLow = simplyPoly.IntersectWithHalfPlane(VCut, yCut);
+	std::cerr << "Num pieces below cut: " << piecesLow.size() << "\r\n";
+	for (auto const & piece : piecesLow)
+		std::cerr << piece << "\r\n\r\n";
+
+	std::Evector<SimplePolygon> piecesHigh = simplyPoly.IntersectWithHalfPlane(-1.0*VCut, -1.0*yCut);
+	std::cerr << "Num pieces above cut: " << piecesHigh.size() << "\r\n";
+	for (auto const & piece : piecesHigh)
+		std::cerr << piece << "\r\n\r\n";
+
+	return true;
+}
 
 static std::filesystem::path SimDatasetStringArgToDatasetPath(std::string const & Arg) {
 	int datasetNum = 0;
