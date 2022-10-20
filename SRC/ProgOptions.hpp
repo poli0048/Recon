@@ -59,6 +59,9 @@ class ProgOptions {
 		bool GNSSModuleVerbose;             //If true, the GNSS receiver module will print out info about receiver status (for debugging GNSS)
 		std::string GNSSReceiverDevicePath; //Path to serial device representing the GNSS receiver (or the port number on Windows)
 		int GNSSReceiverBaudRate;           //Baud rate for serial device
+
+		//Guidance Module options
+		int SurveyRegionPartitioningMethod; //0=triangle fusion, 1=iterated cuts	
 		
 		void LoadDefaults(void);    //Set all options to defaults (good fallback if file loading fails)
 		void SanitizeOptions(void); //Make sure all options are reasonable
@@ -76,29 +79,32 @@ class ProgOptions {
 			        CEREAL_NVP(GNSSModuleEnabled),
 			        CEREAL_NVP(GNSSModuleVerbose),
 			        CEREAL_NVP(GNSSReceiverDevicePath),
-			        CEREAL_NVP(GNSSReceiverBaudRate));
+			        CEREAL_NVP(GNSSReceiverBaudRate),
+			        CEREAL_NVP(SurveyRegionPartitioningMethod));
 		}
 };
 
 inline void ProgOptions::LoadDefaults(void) {
-	UIScaleFactor          = 1.0f;
-	MapDPIPercentage       = 100.0f;
-	DroneIconScale         = 0.5f;
-	zoomSpeed              = 1.0f;
-	UITheme                = Themes::Theme::Dark;
-	HighContrastCursor     = false;
-	GNSSModuleEnabled      = true;
-	GNSSModuleVerbose      = false;
-	GNSSReceiverDevicePath = "/dev/ttyACM0"s;
-	GNSSReceiverBaudRate   = 9600;
+	UIScaleFactor                  = 1.0f;
+	MapDPIPercentage               = 100.0f;
+	DroneIconScale                 = 0.5f;
+	zoomSpeed                      = 1.0f;
+	UITheme                        = Themes::Theme::Dark;
+	HighContrastCursor             = false;
+	GNSSModuleEnabled              = true;
+	GNSSModuleVerbose              = false;
+	GNSSReceiverDevicePath         = "/dev/ttyACM0"s;
+	GNSSReceiverBaudRate           = 9600;
+	SurveyRegionPartitioningMethod = 1;
 }
 
 inline void ProgOptions::SanitizeOptions(void) {
-	UIScaleFactor        = std::min(std::max(UIScaleFactor,    0.250f),   4.0f);
-	MapDPIPercentage     = std::min(std::max(MapDPIPercentage, 50.00f), 100.0f);
-	DroneIconScale       = std::min(std::max(DroneIconScale,   0.250f),   2.0f);
-	zoomSpeed            = std::min(std::max(zoomSpeed,        0.125f),   8.0f);
-	GNSSReceiverBaudRate = std::max(GNSSReceiverBaudRate, 1200);
+	UIScaleFactor                  = std::min(std::max(UIScaleFactor,             0.250f),   4.0f);
+	MapDPIPercentage               = std::min(std::max(MapDPIPercentage,          50.00f), 100.0f);
+	DroneIconScale                 = std::min(std::max(DroneIconScale,            0.250f),   2.0f);
+	zoomSpeed                      = std::min(std::max(zoomSpeed,                 0.125f),   8.0f);
+	GNSSReceiverBaudRate           =          std::max(GNSSReceiverBaudRate,        1200);
+	SurveyRegionPartitioningMethod = std::min(std::max(SurveyRegionPartitioningMethod, 0),      1);
 }
 
 inline void ProgOptions::SaveToDisk(void) {

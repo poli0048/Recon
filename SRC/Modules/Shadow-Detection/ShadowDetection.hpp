@@ -73,6 +73,7 @@ namespace ShadowDetection {
 			std::thread       m_engineThread;
 			std::atomic<bool> m_running;
 			std::atomic<bool> m_abort;
+			std::atomic<bool> m_autosaveOnStop;
 			
 			//We use a staging area to register and unregister callbacks. In ProcessFrame(), we check to see if the staging area has
 			//been modified and update our "official" callbacks structure if necessary. This allows us to invoke our callbacks
@@ -125,7 +126,7 @@ namespace ShadowDetection {
 			static ShadowDetectionEngine & Instance() { static ShadowDetectionEngine Obj; return Obj; }
 			
 			//Constructors and Destructors
-			ShadowDetectionEngine() : m_running(false), m_abort(false) {
+			ShadowDetectionEngine() : m_running(false), m_abort(false), m_autosaveOnStop(false) {
 				m_engineThread = std::thread(&ShadowDetectionEngine::ModuleMain, this);
 			}
 			~ShadowDetectionEngine() { Shutdown(); }
@@ -160,6 +161,9 @@ namespace ShadowDetection {
 	};
 
 	inline void ShadowDetectionEngine::Shutdown(void) {
+		if (m_running)
+			Stop(); //Gracefully stop processing - will also trigger save if still running on real drone
+		
 		m_abort = true;
 		if (m_engineThread.joinable())
 			m_engineThread.join();
@@ -177,11 +181,12 @@ namespace ShadowDetection {
 		}
 		m_ImageProviderDroneSerial = DroneSerial; //Actual connection will occur in ModuleMain()
 		m_unprocessedFrames.clear(); //Clear any unprocessed imagery
+		m_autosaveOnStop = false; //Default to false - will be set to true on drone connection if drone is real
 		m_running = true;
 	}
 
 	inline void ShadowDetectionEngine::Stop(void) {
-		std::scoped_lock lock(m_ImageProviderMutex);
+		m_ImageProviderMutex.lock();
 		m_ImageProviderDroneSerial.clear();
 		if (m_ImageProviderDrone != nullptr) {
 			if (m_DroneImageCallbackHandle >= 0) {
@@ -191,6 +196,11 @@ namespace ShadowDetection {
 			m_ImageProviderDrone = nullptr;
 		}
 		m_running = false;
+		m_ImageProviderMutex.unlock();
+
+		if (m_autosaveOnStop)
+			SaveAndFlushShadowMapHistory();
+		m_autosaveOnStop = false; //Reset to false - will be set back to true next time it's started on a real drone
 	}
 
 	inline bool ShadowDetectionEngine::IsRunning(void) {
@@ -244,6 +254,11 @@ namespace ShadowDetection {
 								m_unprocessedFrames.push_back(std::make_tuple(frameCopy, Timestamp));
 							}
 						});
+
+						//If the module was started on a real drone, enable auto-saving of shadow map histories
+						DroneInterface::RealDrone * realDronePtr = dynamic_cast<DroneInterface::RealDrone *>(m_ImageProviderDrone);
+						if (realDronePtr != nullptr)
+							m_autosaveOnStop = true;
 					}
 				}
 				

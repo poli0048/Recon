@@ -424,7 +424,11 @@ void GuidanceOverlay::Reset() {
 	std::scoped_lock lock(m_mutex);
 	m_SurveyRegionPartition.clear();
 	m_SurveyRegionPartitionTriangulation.clear();
+	m_PartitionLabels.clear();
 	m_Triangles.clear();
+	m_TriangleLabels.clear();
+	m_Missions.clear();
+	m_Sequences.clear();
 }
 
 //Set the partition of the survey region to draw

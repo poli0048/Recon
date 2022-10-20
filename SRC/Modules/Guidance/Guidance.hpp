@@ -55,29 +55,27 @@ namespace Guidance {
 			int               m_MessageToken2;
 			int               m_MessageToken3;
 			
-			bool m_missionPrepDone;
+			//This block holds the variables that we are given or that we latch when starting a mission
 			std::vector<DroneInterface::Drone *> m_dronesUnderCommand; //pointers to the drones we are allowed to command for current mission
-			std::unordered_map<std::string, std::tuple<int, DroneInterface::WaypointMission>> m_currentDroneMissions; //Serial -> (missionNum, Mission)
-			ShadowPropagation::TimeAvailableFunction m_TA;
-			bool m_TA_initialized = false;
-			int m_coverageExpected;
-			
-			//Add additional necessary state data to keep track of mission progress, etc.
 			PolygonCollection m_surveyRegion;
 			ImagingRequirements m_ImagingReqs;
+
+			//This block holds the results of any mission prep work (1-off things that need to be computed once per mission)
+			bool m_missionPrepDone;
 			std::Evector<PolygonCollection> m_surveyRegionPartition;
-			
-			std::vector<DroneInterface::WaypointMission> m_completedDroneMissions;
+			std::vector<DroneInterface::WaypointMission> m_droneMissions; //Item n covers component n of the partition
+
+			//This block holds fields that are periodically updated throughout a mission
+			std::unordered_map<std::string, std::tuple<int, DroneInterface::WaypointMission>> m_currentDroneMissions; //Serial -> (missionNum, Mission)
+			ShadowPropagation::TimeAvailableFunction m_TA;
+			int m_coverageExpected;
 			std::set<int> m_missionIndicesToAssign;
 			std::vector<std::vector<int>> m_subregionSequences;
-
-			std::vector<DroneInterface::WaypointMission> m_droneMissions; //Item n covers component n of the partition
-			std::vector<DroneInterface::Waypoint> m_droneStartPositions;
 			std::vector<bool> m_flyingMissionStatus;
 			std::vector<bool> m_wasPredictedToFinishWithoutShadows;
-			//other items... e.g. the partition of the survey region, pre-planned waypoint missions for each, a vector of completed sub-regions, etc.
 			
 			void ModuleMain(void);
+			void ResetIntermediateData(void); //Clear mission prep data and periodically updated fields
 			
 		public:
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW /*May not be needed - check for fixed-size Eigen data types in fields*/
@@ -87,23 +85,21 @@ namespace Guidance {
 			
 			//Constructors and Destructors
 			GuidanceEngine() : m_running(false), m_abort(false), m_missionPrepDone(false) {
+				m_TA.Timestamp  = std::chrono::steady_clock::now(); //Will ensure any new TA functions trigger an update
 				m_MessageToken1 = MapWidget::Instance().m_messageBoxOverlay.GetAvailableToken();
 				m_MessageToken2 = MapWidget::Instance().m_messageBoxOverlay.GetAvailableToken();
 				m_MessageToken3 = MapWidget::Instance().m_messageBoxOverlay.GetAvailableToken();
 				m_engineThread = std::thread(&GuidanceEngine::ModuleMain, this);
 			}
-			~GuidanceEngine() {
-				m_abort = true;
-				if (m_engineThread.joinable())
-					m_engineThread.join();
-			}
+			~GuidanceEngine() { Shutdown(); }
+			inline void Shutdown(void); //Stop processing and terminate engine thread
 			
 			//Starting a survey mission and adding a drone will automatically instruct the vehicle control to stop commanding the relavent drones
 			bool StartSurvey(std::vector<std::string> const & LowFlierSerials, ImagingRequirements const & Reqs); //Start a survey mission (currently active region) using the given drones
 			bool AddLowFlier(std::string const & Serial); //Add a drone to the collection of low fliers and start commanding it
 			bool RemoveLowFlier(std::string const & Serial); //Stop commanding the drone with the given serial
 			bool IsRunning(void); //Returns true if currently commanding a mission, false otherwise
-			void RefreshDronePositions(void);
+			void GetDroneCurrentPositions(std::vector<DroneInterface::Waypoint> & DronePositions);
 			void RefreshSequence(void);
 
 			inline std::vector<std::string> GetSerialsOfDronesUnderCommand(void);
@@ -133,8 +129,12 @@ namespace Guidance {
 	//Partition        - Output - A vector of sub-regions, each one a polygon collection in NM coords (typical case will have a single poly in each sub-region)
 	//TargetFlightTime - Input  - The approx time (in seconds) a drone should be able to fly each sub-region in, given the max vehicle speed and sidelap
 	//ImagingReqs      - Input  - Parameters specifying speed and row spacing (see definitions in struct declaration)
-	void PartitionSurveyRegion(PolygonCollection const & Region, std::Evector<PolygonCollection> & Partition, double TargetFlightTime,
-	                           ImagingRequirements const & ImagingReqs);
+	//
+	//Note: These functions are not defined in Guidance.cpp, but are instead each in their own source files (RegionPartitioning_*.cpp)
+	void PartitionSurveyRegion_TriangleFusion(PolygonCollection const & Region, std::Evector<PolygonCollection> & Partition, double TargetFlightTime,
+	                                          ImagingRequirements const & ImagingReqs);
+	void PartitionSurveyRegion_IteratedCuts  (PolygonCollection const & Region, std::Evector<PolygonCollection> & Partition, double TargetFlightTime,
+	                                          ImagingRequirements const & ImagingReqs);
 	
 	//4 - Take a region or sub-region and plan a trajectory to cover it at a given height that meets the specified imaging requirements. In this case we specify
 	//    the imaging requirements using a maximum speed and sidelap fraction.
@@ -217,6 +217,13 @@ namespace Guidance {
 	// *********************************************************************************************************************************
 	// ****************************************   GuidanceEngine Inline Functions Definitions   ****************************************
 	// *********************************************************************************************************************************
+	//Stop processing and terminate engine thread
+	inline void GuidanceEngine::Shutdown(void) {
+		m_abort = true;
+		if (m_engineThread.joinable())
+			m_engineThread.join();
+	}
+
 	inline std::vector<std::string> GuidanceEngine::GetSerialsOfDronesUnderCommand(void) {
 		std::scoped_lock lock(m_mutex);
 		std::vector<std::string> serials;

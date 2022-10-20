@@ -8,8 +8,11 @@
 #include "shadow_utils.hpp"
 #include "FRF.h"
 #include "ShadowMapIO.hpp"
+#include "../GNSS-Receiver/GNSSReceiver.hpp"
 
 #define PI 3.14159265358979
+
+//inline bool TimestampToGPSTime(TimePoint const & Timestamp, uint32_t & GPS_Week, double & GPS_TOW);
 
 namespace ShadowDetection {
 	//Save the shadow map history to an FRF file with the given path. Return true on success and false on failure
@@ -23,9 +26,22 @@ namespace ShadowDetection {
 		if (!shadowMap.SetHeight(512U))
 		std::cerr << "Failed to set image height.\r\n";
 		
+		//Create a shadow map info block and default the absolute time info to "unknown time"
 		ShadowMapInfoBlock myShadowMapInfoBlock;
 		myShadowMapInfoBlock.FileTimeEpoch_Week = 0U;
-		myShadowMapInfoBlock.FileTimeEpoch_TOW = std::nan("");
+		myShadowMapInfoBlock.FileTimeEpoch_TOW  = std::nan("");
+
+		//Grab the first timestamp and use it as our file time reference epoch
+		if (! Timestamps.empty()) {
+			//If we have the ability to get the absolute time of the file time 0 reference epoch, set the absolute time
+			uint32_t GPS_Week = 0U;
+			double   GPS_TOW  = std::nan("");
+			if (GNSSReceiver::GNSSManager::Instance().TimestampToGPSTime(Timestamps[0], GPS_Week, GPS_TOW)) {
+				myShadowMapInfoBlock.FileTimeEpoch_Week = GPS_Week;
+				myShadowMapInfoBlock.FileTimeEpoch_TOW  = GPS_TOW;
+			}
+		}
+
 		// Iterate through the Maps
 		for (int i = 0; i < (int) Maps.size(); i++){
 			//Add a new layer and set it up
@@ -39,10 +55,12 @@ namespace ShadowDetection {
 			newLayer->AllocateStorage(); //This needs to be called before the layer can be accessed
 			
 			set_NewValue((uint) shadowMap.Rows(), (uint) shadowMap.Rows(), newLayer, Maps[i]);
-			//set_NewValue((uint) shadowMap.Rows(), (uint) shadowMap.Rows(), newLayer, Maps[i]);
 
-			myShadowMapInfoBlock.LayerTimeTags.push_back(i);
+			//Get timestamp as a number of seconds from the reference epoch
+			double layerFileTime = SecondsElapsed(Timestamps[0], Timestamps[i]);
+			myShadowMapInfoBlock.LayerTimeTags.push_back(layerFileTime);
 		}
+		
 		FRFVisualizationColormap* viz = shadowMap.AddVisualizationColormap();
 		viz->LayerIndex = 0U; //Base the visualization on the first layer of the shadow map
 		viz->SetPoints.push_back(std::make_tuple(0.0, 1.0, 1.0, 1.0)); //Map value 0 (unshadowed) to white (RGB all set to 1)
@@ -61,9 +79,8 @@ namespace ShadowDetection {
 			std::cerr << "ShadowMapHistory::SaveFRFFile(). Error saving ShadowMapHistory\r\n";
 			return false;
 		}
-		else {
+		else
 			return true;
-		}
 	}
 	
 	//A lock is already held on the object when this function is called so don't lock it here

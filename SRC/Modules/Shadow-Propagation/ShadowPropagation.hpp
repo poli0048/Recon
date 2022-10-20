@@ -65,7 +65,7 @@ namespace ShadowPropagation {
 			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 			using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 
-        static ShadowPropagationEngine & Instance() { static ShadowPropagationEngine Obj; return Obj; }
+			static ShadowPropagationEngine & Instance() { static ShadowPropagationEngine Obj; return Obj; }
 			
 			//Constructors and Destructors
 			ShadowPropagationEngine() : m_abort(false), m_running(false) {

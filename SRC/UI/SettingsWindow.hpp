@@ -36,7 +36,7 @@ inline void SettingsWindow::Draw() {
 	ImExt::Window::Options wOpts;
 	wOpts.Flags = WindowFlags::NoCollapse | WindowFlags::NoSavedSettings | WindowFlags::NoDocking | WindowFlags::NoTitleBar | WindowFlags::NoResize;
 	wOpts.POpen = &Visible;
-	wOpts.Size(Math::Vector2(35.0f*ImGui::GetFontSize(), 32.0f*ImGui::GetFontSize()), Condition::Appearing);
+	wOpts.Size(Math::Vector2(35.0f*ImGui::GetFontSize(), 35.0f*ImGui::GetFontSize()), Condition::Appearing);
 	if (ImExt::Window window("Settings", wOpts); window.ShouldDrawContents()) {
 		ImExt::Style style(StyleVar::WindowPadding, Math::Vector2(20.0f));
 		
@@ -44,7 +44,7 @@ inline void SettingsWindow::Draw() {
 		ImGui::TextUnformatted("User Interface:");
 		ImGui::Dummy(ImVec2(1, 10));
 		
-		float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("High Visibility Cursor:").x + 15.0f;
+		float col2Start = ImGui::GetCursorPosX() + ImGui::CalcTextSize("  High Visibility Cursor:  ").x + 15.0f;
 		float col3Start = std::max(ImGui::GetContentRegionAvail().x - defaultButtonWidth, col2Start + 50.0f);
 		float sliderWidth = std::max(col3Start - col2Start - 10.0f, 50.0f);
 		
@@ -224,6 +224,7 @@ inline void SettingsWindow::Draw() {
 		else if (ProgOptions::Instance()->GNSSReceiverBaudRate == 256000) item_current = 7;
 		if (item_current >= 0) {
 			ImGui::PushItemWidth(sliderWidth);
+			ImExt::Style popupStyle(StyleVar::WindowPadding, Math::Vector2(4.0f, 4.0f));
 			if (ImGui::Combo("##GNSS-BaudRate-Combo", &item_current, items, IM_ARRAYSIZE(items))) {
 				switch (item_current) {
 					case 0:  ProgOptions::Instance()->GNSSReceiverBaudRate = 9600;   break;
@@ -264,7 +265,41 @@ inline void SettingsWindow::Draw() {
 		ImGui::SameLine(col2Start);
 		if (ImGui::Button("Reset GNSS receiver module", ImVec2(sliderWidth, 0)))
 			GNSSReceiver::GNSSManager::Instance().Reset();
-		
+
+		// Guidance Module Settings   ******************************************************************************************************
+		ImGui::Dummy(ImVec2(1, ImGui::GetFontSize()));
+		ImGui::TextUnformatted("Guidance Module Setting:");
+		ImGui::Dummy(ImVec2(1, 10));
+		ImGui::TextUnformatted("Partitioning Method ");
+		ImGui::SameLine();
+		ImGui::TextDisabled(u8"\uf059");
+		if (ImGui::IsItemHovered()) {
+			ImExt::Style tooltipStyle(StyleVar::WindowPadding, Math::Vector2(4.0f));
+			ImGui::BeginTooltip();
+			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+			ImGui::TextUnformatted("This selects the algorithm used to break a survey region into smaller, bite-sized pieces, which can "
+			                       "then be dispatched to various drones during a survey mission. Setting takes effect after starting a new mission.\n\n"
+			                       "Triangle Fusion: The region is decomposed into a collection of small triangles. Adjacent triangles are then "
+			                       "iteratively merged into larger and larger regions until components of appropriate size are obtained. This is "
+			                       "very general, but can result in 'pointier', or more irregular-shaped components.\n\n"
+			                       "Iterated Cuts: Pieces of the survey region that are too large are repeatedly cut based on heuristics until pieces "
+			                       "of appropriate size are obtained.");
+			ImGui::PopTextWrapPos();
+			ImGui::EndTooltip();
+		}
+		ImGui::SameLine();
+		ImGui::TextUnformatted(":");
+		ImGui::SameLine(col2Start);
+		ImGui::PushItemWidth(sliderWidth);
+		{
+			ImExt::Style popupStyle(StyleVar::WindowPadding, Math::Vector2(4.0f, 4.0f));
+			ImGui::Combo("## Partitioning-Method-Combo", &(ProgOptions::Instance()->SurveyRegionPartitioningMethod), "Triangle Fusion\0Iterated Cuts\0");
+		}
+		ImGui::PopItemWidth();
+		ImGui::SameLine(col3Start);
+		if (ImGui::Button(" Default ##Partitioning-Method"))
+			ProgOptions::Instance()->SurveyRegionPartitioningMethod = 1;
+
 		ImGui::Dummy(ImVec2(1, ImGui::GetFontSize()));
 		if (ImGui::Button("      Close      "))
 			Visible = false;

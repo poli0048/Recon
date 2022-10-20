@@ -111,12 +111,6 @@ public:
 	Eigen::Vector2d m_pointB;
 	Eigen::Vector2d m_pointC;
 
-	void Bisect(Triangle & subTriangleADC, Triangle & subTriangleABD);
-	SimplePolygon ToSimplePolygon();
-	Polygon ToPolygon();
-	bool isSameTriangle(Triangle const & otherTriangle);
-	double GetArea();
-	bool BisectIntersection(const Eigen::Vector2d & Intersection, Triangle & subTriangleADC, Triangle & subTriangleABD);
 	//Tell Cereal which members to serialize (must be public)
 	template<class Archive> void serialize(Archive & archive) { archive(m_pointA, m_pointB, m_pointC); }
 };
@@ -190,6 +184,9 @@ public:
 	//Returns true if this polygon intersects with the given "other" polygon. Not stable if the intersection has 0 area.
 	bool IntersectsWith(SimplePolygon const & OtherPoly) const;
 
+	//Find the vector that minimizes the size of the orthogonal projection of the polygon onto the line defined by the vector
+	Eigen::Vector2d FindShortestAxis(void) const;
+
 	//Find the vector that maximizes the size of the orthogonal projection of the polygon onto the line defined by the vector
 	Eigen::Vector2d FindLongestAxis(void) const;
 
@@ -200,15 +197,6 @@ public:
 	//Cut a simple polygon along the line containing points A and B. Return all resulting pieces as simple polygons. This can
 	//result in arbitrarily many pieces, depending on the object's geometry and the cut location
 	std::Evector<SimplePolygon> CutAlongLine(Eigen::Vector2d const & A, Eigen::Vector2d const & B) const;
-
-	//Added to support triangle fusion algorithm for region partitioning
-	bool CheckIntersect(SimplePolygon const & otherPolygon, std::vector<Eigen::Vector2d> & FinalIntersect);
-
-	//Added to support triangle fusion algorithm for region partitioning
-	bool CheckAdjacency(SimplePolygon const & otherPolygon);
-
-	//Added to support triangle fusion algorithm for region partitioning
-	void CustomSanitize(std::Evector<LineSegment> segments);
 
 	//Populate a vector of triangles exactly covering the same area as the polygon collection. Uses Earcut algorithm.
 	//This function does not clear "Triangles" - it appends to it. This is so we can ask multiple objects to add their triangles to the same vector
@@ -285,6 +273,9 @@ public:
 	//Returns true if this polygon intersects with the given "other" polygon. Not stable if the intersection has 0 area.
 	bool IntersectsWith(Polygon const & OtherPoly) const;
 
+	//Find the vector that minimizes the size of the orthogonal projection of the polygon onto the line defined by the vector
+	Eigen::Vector2d FindShortestAxis(void) const;
+	
 	//Find the vector that maximizes the size of the orthogonal projection of the polygon onto the line defined by the vector
 	Eigen::Vector2d FindLongestAxis(void) const;
 
@@ -330,8 +321,8 @@ public:
 
 	//Simple query and sanitization methods
 	void Clear(void) { m_components.clear(); }
-	void RemoveTrivialHoles(void); //Remove trivial holes from all components
-	void RemoveEmptyHoles(void);   //Remove empty holes from all components
+	void RemoveTrivialHoles(void);      //Remove trivial holes from all components
+	void RemoveEmptyHoles(void);        //Remove empty holes from all components
 	void RemoveTrivialComponents(void); //Remove trivial components
 	void RemoveEmptyComponents(void);   //Remove components with empty boundaries
 
@@ -361,19 +352,7 @@ inline std::ostream & operator<<(std::ostream & Str, PolygonCollection const & v
 	return Str;
 }
 
-class TriangleAdjacencyMap {
-public:
-	struct Triangle {
-		int id;
-		int score;
-	};
-	std::vector<Triangle> nodes;
-	std::vector<std::vector<int>> edges;
-	std::vector<std::vector<int>> groups;
-};
-
 //Public Utility functions
 //static bool PointsAreColinear(Eigen::Vector2d const & p1, Eigen::Vector2d const & p2, Eigen::Vector2d const & p3);
 std::Evector<LineSegment> SanitizeCollectionOfSegments(std::Evector<LineSegment> const & InputSegments);
-
 

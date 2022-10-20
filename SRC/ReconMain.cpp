@@ -345,12 +345,15 @@ int main(int argc, const char * argv[]) {
 	//engine relies on the shadow detection engine, so we shut them down in reverse order.
 	ShadowPropagation::ShadowPropagationEngine::Instance().Shutdown();
 	ShadowDetection::ShadowDetectionEngine::Instance().Shutdown();
-	
-	//Destroy context for ImPlot
-	ImPlot::DestroyContext();
+
+	//Shut down the guidance module - it may access data elsewhere (like program options)
+	Guidance::GuidanceEngine::Instance().Shutdown();
 	
 	//Shutdown the GNSS receiver manager thread
 	GNSSReceiver::GNSSManager::Instance().Shutdown();
+
+	//Destroy context for ImPlot
+	ImPlot::DestroyContext();
 	
 	//Stop modules with private threads before cleaning up the data providers
 	VehicleControlWidget::Instance().Stop();
