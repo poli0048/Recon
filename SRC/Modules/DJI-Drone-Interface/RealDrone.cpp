@@ -646,10 +646,13 @@ namespace DroneInterface {
 	
 	//Stop current mission, if running. Then load, verify, and start new waypoint mission.
 	void RealDrone::ExecuteWaypointMission(WaypointMission & Mission) {
+		WaypointMission sanitizedMission = Mission;
+		SanitizeMissionForRealDrone(sanitizedMission);
+
 		m_mutex_B.lock();
-		m_currentWaypointMission = Mission;
+		m_currentWaypointMission = sanitizedMission;
 		m_mutex_B.unlock();
-		this->SendPacket_ExecuteWaypointMission(Mission.LandAtLastWaypoint, Mission.CurvedTrajectory, Mission.Waypoints);
+		this->SendPacket_ExecuteWaypointMission(sanitizedMission.LandAtLastWaypoint, sanitizedMission.CurvedTrajectory, sanitizedMission.Waypoints);
 	}
 	
 	//Populate Result with whether or not a waypoint mission is currently being executed
@@ -734,6 +737,83 @@ namespace DroneInterface {
 		
 		this->ExecuteWaypointMission(mission);
 	}
+
+	//Modify mission in place (if needed) to meet DJI rules - in particular, there is apparently a secret rule that consecutive waypoints
+	//within a mission must not be within 0.5 meters (3D) of each other (also between the first and last waypoint). Rather than doings it's
+	//best or adjusting the mission the DJI flight controller will just fail and reject a mission that doesn't meet this criteria.
+	//This function will nudge or remove redundant waypoints to try and get a mission as close as possible to the requested one that
+	//the flight controller will (hopefully) not reject.
+	//Technically the drone interface iOS App is responsible for sanitizing missions when needed, but it currently doesn't do much in
+	//this regard and doing what we can server-side allows us to get more feedback about what's going on.
+	void RealDrone::SanitizeMissionForRealDrone(WaypointMission & Mission) {
+		//Set a minimum waypoint separation (in meters). This should be greater than 0.5, since we don't know if the flight controller
+		//estimates distance the same way that we do.
+		double minWpSep = 1.0; //Min waypoint separation (m)
+
+		int wpIndex             = 0;
+		int waypointAdjustments = 0;
+		int waypointDeletions   = 0;
+		while (wpIndex < (int) Mission.Waypoints.size()) {
+			int nextWpIndex = (wpIndex + 1U < Mission.Waypoints.size()) ? wpIndex + 1U : 0U;
+			double dist3D = DistBetweenWaypoints3D(Mission.Waypoints[wpIndex], Mission.Waypoints[nextWpIndex]);
+			if (dist3D < minWpSep) {
+				//We have an issue and intervention is needed.
+				Waypoint & WPA(Mission.Waypoints[wpIndex]);
+				Waypoint & WPB(Mission.Waypoints[nextWpIndex]);
+				if (nextWpIndex > wpIndex) {
+					//Two ordinary consecutive waypoints are too close. Try to nudge or remove the second waypoint
+					//to respect the min separation requirement. Only adjust the second waypoint so we know that
+					//adjustments to later waypoints don't mess up the separation of earlier ones.
+					Eigen::Vector3d WPA_ECEF = LLA2ECEF(Eigen::Vector3d(WPA.Latitude, WPA.Longitude, 0.0));
+					Eigen::Vector3d WPB_ECEF = LLA2ECEF(Eigen::Vector3d(WPB.Latitude, WPB.Longitude, 0.0));
+					Eigen::Vector3d V_ECEF   = WPB_ECEF - WPA_ECEF;
+					V_ECEF.normalize();
+					if (V_ECEF.norm() < 0.5) {
+						//WPA and WPB have the same 2D positions to machine precision. Trim the second one.
+						Mission.Waypoints.erase(Mission.Waypoints.begin() + nextWpIndex);
+						waypointDeletions++;
+					}
+					else {
+						//We can nudge the second one in the direction of V to respect the min separation requirement.
+						//This ensures that all adjustments of consecutive waypoints are 2D adjustments (we don't mess with altitude).
+						WPB_ECEF = WPA_ECEF + minWpSep*V_ECEF;
+						Eigen::Vector3d WPB_LLA = ECEF2LLA(WPB_ECEF);
+						WPB.Latitude  = WPB_LLA(0);
+						WPB.Longitude = WPB_LLA(1);
+						wpIndex++;
+						waypointAdjustments++;
+					}
+				}
+				else {
+					//The first and last waypoints are too close (not sure why on Earth this would be a problem but I don't work for DJI)
+					//If we adjust the 2D position of either waypoint we might violate the separation requirement between those
+					//waypoints and their other adjacent waypoints. Instead, adjust the vertical positions to meet sep requirement.
+					double meanRelAlt = 0.5*WPA.RelAltitude + 0.5*WPB.RelAltitude;
+					if (WPA.RelAltitude < WPB.RelAltitude) {
+						WPA.RelAltitude = meanRelAlt - 0.5*minWpSep;
+						WPB.RelAltitude = meanRelAlt + 0.5*minWpSep;
+					}
+					else {
+						WPA.RelAltitude = meanRelAlt + 0.5*minWpSep;
+						WPB.RelAltitude = meanRelAlt - 0.5*minWpSep;
+					}
+					//We might want to make sure both rel altitudes are positive, but there may be cases where you want
+					//to fly beneath your takeoff altitude and this would mess that up. Also, unless we have reason to
+					//believe that the flight controller rejects missions based on this, we have no good reason to do
+					//farther manipulation here.
+					wpIndex++;
+					waypointAdjustments++;
+				}
+			}
+		}
+		if (waypointDeletions + waypointAdjustments > 0) {
+			std::cerr << "Warning: Adjustments made during waypoint mission sanitization.\r\n";
+			if (waypointDeletions > 0)
+				std::cerr << waypointDeletions << " waypoints deleted due to redundancy.\r\n";
+			if (waypointAdjustments > 0)
+				std::cerr << waypointAdjustments << " waypoints nudged to respect min separation requirement.\r\n";
+		}
+	}
 	
 	void RealDrone::SendPacket(DroneInterface::Packet & packet, tacopie::tcp_client * TCPClient) {
 		std::vector<char> ch_data(packet.m_data.begin(), packet.m_data.end()); //Is this copy necessary?
@@ -774,7 +854,7 @@ namespace DroneInterface {
 		RealDrone::SendPacket(packet, TCPClient);
 	}
 	
-	void RealDrone::SendPacket_ExecuteWaypointMission(uint8_t LandAtEnd, uint8_t CurvedFlight, std::vector<Waypoint> Waypoints) {
+	void RealDrone::SendPacket_ExecuteWaypointMission(uint8_t LandAtEnd, uint8_t CurvedFlight, std::vector<Waypoint> const & Waypoints) {
 		DroneInterface::Packet packet;
 		DroneInterface::Packet_ExecuteWaypointMission packet_ewm;
 

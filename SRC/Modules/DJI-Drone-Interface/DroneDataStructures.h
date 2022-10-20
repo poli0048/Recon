@@ -1,4 +1,10 @@
+//This header provides basic data structures used for interacting with DJI drones (and some very small utilities)
+//Author: Bryan Poling
+//Copyright (c) 2022 Sentek Systems, LLC. All rights reserved.
 #pragma once
+
+//Project Includes
+#include "../../Maps/MapUtils.hpp"
 
 namespace DroneInterface {
 	//VirtualStickMode has several different configuration settings that impact how each control is interpreted. We
@@ -114,6 +120,29 @@ namespace DroneInterface {
 		Str << "LoiterTime --: " <<          v.LoiterTime   << " s\r\n";
 		Str << "GimbalPitch -: " << 180.0/PI*v.GimbalPitch  << " degrees\r\n";
 		return Str;
+	}
+
+	//Get the distance (m) between two waypoints, in a 2D (East-North) sense.
+	//DJI drones don't really know their true altitude (everything works relative to takeoff alt), so the most natural things to
+	//do, which is to project the locations to the same local-level plane at the waypoints average altitude, and compute their distance,
+	//isn't really possible. Instead we project both waypoints down to the reference ellipsoid and compute distance. Consequently, this
+	//is an approximation, but generally a pretty good one unless the waypoints are very far apart or extremely far from sea level.
+	inline double DistBetweenWaypoints2D(Waypoint const & WPA, Waypoint const & WPB) {
+		Eigen::Vector3d WPA_ECEF = LLA2ECEF(Eigen::Vector3d(WPA.Latitude, WPA.Longitude, 0.0));
+		Eigen::Vector3d WPB_ECEF = LLA2ECEF(Eigen::Vector3d(WPB.Latitude, WPB.Longitude, 0.0));
+		return (WPB_ECEF - WPA_ECEF).norm();
+	}
+
+	//Get the distance (m) between two waypoints, in a 3D sense (actual distance).
+	//As with the 2D distance function, we can't do this properly because DJI drones don't know their true absolute altitudes and work
+	//with relative altitude. Consequently this function gives an approximation to 3D distance. It should generally be a pretty good one
+	//though, unless the waypoints are very far apart or extremely far from sea level.
+	inline double DistBetweenWaypoints3D(Waypoint const & WPA, Waypoint const & WPB) {
+		Eigen::Vector3d WPA_ECEF = LLA2ECEF(Eigen::Vector3d(WPA.Latitude, WPA.Longitude, 0.0));
+		Eigen::Vector3d WPB_ECEF = LLA2ECEF(Eigen::Vector3d(WPB.Latitude, WPB.Longitude, 0.0));
+		double distance2D   = (WPB_ECEF - WPA_ECEF).norm();
+		double distanceVert = std::fabs(WPB.RelAltitude - WPA.RelAltitude);
+		return std::sqrt(distance2D*distance2D + distanceVert*distanceVert);
 	}
 	
 	//This struct holds a waypoint mission for a single drone. The full DJI waypoint mission interface is relatively complex - we only implement the

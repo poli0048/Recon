@@ -142,6 +142,8 @@ namespace Guidance {
 	//Region      - Input  - The input survey region or sub-region to cover (polygon collection in NM coords)
 	//Mission     - Output - The planned mission that covers the input region
 	//ImagingReqs - Input  - Parameters specifying speed and row spacing (see definitions in struct declaration)
+	//
+	//Note: This function is not defined in Guidance.cpp, but is instead in FlightPlanning.cpp
 	void PlanMission(PolygonCollection const & Region, DroneInterface::WaypointMission & Mission, ImagingRequirements const & ImagingReqs);
 	
 	//5 - Take a Time Available function, a waypoint mission, and a progress indicator (where in the mission you are) and detirmine whether or not the drone

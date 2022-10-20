@@ -191,7 +191,7 @@ public:
 	Eigen::Vector2d FindLongestAxis(void) const;
 
 	//Cut simple polygon with a half plane. Keep the portion satisfying X dot V <= P. This may result in 0 simple polygons
-	//or arbitrarily many, depending on the geometry of the polygon and the chosen half plane.
+	//or arbitrarily many, depending on the geometry of the polygon and the chosen half plane. V must be a unit vector.
 	std::Evector<SimplePolygon> IntersectWithHalfPlane(Eigen::Vector2d const & VArg, double P) const;
 
 	//Cut a simple polygon along the line containing points A and B. Return all resulting pieces as simple polygons. This can
@@ -201,6 +201,9 @@ public:
 	//Populate a vector of triangles exactly covering the same area as the polygon collection. Uses Earcut algorithm.
 	//This function does not clear "Triangles" - it appends to it. This is so we can ask multiple objects to add their triangles to the same vector
 	void Triangulate(std::Evector<Triangle> & Triangles) const;
+
+	//Clip the infinite line X dot V = P to the simple polygon. Return all interior segments. V must be a unit vector.
+	std::Evector<LineSegment> ClipLine(Eigen::Vector2d const & VArg, double P) const;
 
 	//Tell Cereal which members to serialize (must be public)
 	template<class Archive> void serialize(Archive & archive) { archive(m_vertices); }
@@ -264,6 +267,9 @@ public:
 	//Test to see if polygon contains a point
 	bool ContainsPoint(Eigen::Vector2d const & Point) const;
 
+	//Get the X and Y bounds of the polygon (An Axis-Aligned Bounding Box). Returned as a vector: (XMin, XMax, YMin, YMax).
+	Eigen::Vector4d GetAABB(void) const;
+
 	//Get the area of a *valid* polygon.
 	double GetArea(void) const;
 
@@ -280,7 +286,7 @@ public:
 	Eigen::Vector2d FindLongestAxis(void) const;
 
 	//Cut polygon with a half plane. Keep the portion satisfying X dot V <= P. This may result in 0 polygons
-	//or arbitrarily many, depending on the geometry of the polygon and the chosen half plane.
+	//or arbitrarily many, depending on the geometry of the polygon and the chosen half plane. V must be a unit vector.
 	std::Evector<Polygon> IntersectWithHalfPlane(Eigen::Vector2d const & VArg, double P) const;
 
 	//Cut polygon along the line containing points A and B. Return all resulting pieces as polygons. This can
@@ -292,6 +298,9 @@ public:
 	//Populate a vector of triangles exactly covering the same area as the polygon collection. Assumes object is valid. Uses Earcut algorithm.
 	//This function does not clear "Triangles" - it appends to it. This is so we can ask multiple objects to add their triangles to the same vector
 	void Triangulate(std::Evector<Triangle> & Triangles) const;
+
+	//Clip the infinite line X dot V = P to the polygon. Return all interior segments. V must be a unit vector.
+	std::Evector<LineSegment> ClipLine(Eigen::Vector2d const & VArg, double P) const;
 
 	//Tell Cereal which members to serialize (must be public)
 	template<class Archive> void serialize(Archive & archive) { archive(m_boundary, m_holes); }
@@ -326,7 +335,11 @@ public:
 	void RemoveTrivialComponents(void); //Remove trivial components
 	void RemoveEmptyComponents(void);   //Remove components with empty boundaries
 
+	//Test to see if polygon collection contains a point
 	bool ContainsPoint(Eigen::Vector2d const & Point) const;
+
+	//Get the X and Y bounds of the polygon collection (An Axis-Aligned Bounding Box). Returned as a vector: (XMin, XMax, YMin, YMax).
+	Eigen::Vector4d GetAABB(void) const;
 
 	//Get the area of a *valid* polygon collection
 	double GetArea(void) const;

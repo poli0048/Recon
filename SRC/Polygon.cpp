@@ -500,7 +500,7 @@ bool SimplePolygon::ContainsPoint(Eigen::Vector2d const & Point) const {
 //Get the X and Y bounds of the polygon (An Axis-Aligned Bounding Box). Returned as a vector (XMin, XMax, YMin, YMax).
 Eigen::Vector4d SimplePolygon::GetAABB(void) const {
 	if (m_vertices.empty())
-		return Eigen::Vector4d(0.0, 0.0, 0.0, 0.0);
+		return Eigen::Vector4d(std::nan(""), std::nan(""), std::nan(""), std::nan(""));
 
 	double XMin = m_vertices.front()(0);
 	double XMax = m_vertices.front()(0);
@@ -1094,6 +1094,82 @@ void SimplePolygon::Triangulate(std::Evector<Triangle> & Triangles) const {
 	}
 }
 
+//Clip the infinite line X dot V = P to the simple polygon. Return all interior segments. V must be a unit vector.
+std::Evector<LineSegment> SimplePolygon::ClipLine(Eigen::Vector2d const & VArg, double P) const {
+	std::Evector<LineSegment> segments;
+
+	Eigen::Vector2d V = VArg;
+	V.normalize();
+	if (V.norm() < 0.5) {
+		std::cerr << "Error in SimplePolygon::ClipLine() - V must be a unit vector. Given 0.\r\n";
+		return segments;
+	}
+
+	Eigen::Vector4d AABB = GetAABB();
+
+	//Using the corners of the AABB get lower and upper bounds for the objects projection onto V
+	Eigen::Vector2d p1(AABB(0), AABB(2));
+	Eigen::Vector2d p2(AABB(0), AABB(3));
+	Eigen::Vector2d p3(AABB(1), AABB(2));
+	Eigen::Vector2d p4(AABB(1), AABB(3));
+	double proj1 = p1.dot(V);
+	double proj2 = p2.dot(V);
+	double proj3 = p3.dot(V);
+	double proj4 = p4.dot(V);
+	double projLowerBound = std::min(std::min(proj1, proj2), std::min(proj3, proj4));
+	double projUpperBound = std::max(std::max(proj1, proj2), std::max(proj3, proj4));
+
+	//If we can rule out any intersection because the line doesn't intersect the AABB, stop now.
+	if ((P < projLowerBound) || (P > projUpperBound))
+		return segments;
+
+	//Find all intersection points between the boundary and the line - record as dot products with the orthogonal to V
+	Eigen::Vector2d VOrth(V(1), -1.0*V(0));
+	std::vector<double> intersectionDotsWithVOrth;
+	std::Evector<LineSegment> boundarySegments = GetLineSegments();
+	for (LineSegment const & L : boundarySegments) {
+		double p1Proj = L.m_endpoint1.dot(V);
+		double p2Proj = L.m_endpoint2.dot(V);
+		if (((p1Proj <= P) && (p2Proj >= P)) || ((p2Proj <= P) && (p1Proj >= P))) {
+			//The line segment intersects the infinite line
+			Eigen::Vector2d W = L.m_endpoint2 - L.m_endpoint1;
+			W.normalize();
+			if (W.norm() < 0.5) {
+				//Segment is degenerate and on line - use the midpoint as the intersection
+				Eigen::Vector2d Intersection = 0.5*L.m_endpoint1 + 0.5*L.m_endpoint2;
+				intersectionDotsWithVOrth.push_back(Intersection.dot(VOrth));
+			}
+			else if (std::fabs(W.dot(VOrth)) > 0.99999999) {
+				//Line segment was non-degenerate but is nearly parallel to the line.
+				//Intersection computation will be unstable. Project midpoint to line for intersection.
+				Eigen::Vector2d Intersection = 0.5*L.m_endpoint1 + 0.5*L.m_endpoint2;
+				Eigen::Vector2d residualVec = (Intersection.dot(V) - P)*V;
+				Intersection = Intersection - residualVec;
+				intersectionDotsWithVOrth.push_back(Intersection.dot(VOrth));
+			}
+			else {
+				//Typical case
+				Eigen::Vector2d Intersection = FindIntersectionWithLine(L.m_endpoint1, L.m_endpoint2, V, P);
+				intersectionDotsWithVOrth.push_back(Intersection.dot(VOrth));
+			}
+		}
+	}
+
+	//Sort the intersections and build segments for interior pieces
+	std::sort(intersectionDotsWithVOrth.begin(), intersectionDotsWithVOrth.end());
+	for (size_t n = 0U; n < intersectionDotsWithVOrth.size(); n++) {
+		if (n + 1U < intersectionDotsWithVOrth.size()) {
+			Eigen::Vector2d p1 = P*V + intersectionDotsWithVOrth[n     ]*VOrth;
+			Eigen::Vector2d p2 = P*V + intersectionDotsWithVOrth[n + 1U]*VOrth;
+			Eigen::Vector2d midpoint = 0.5*p1 + 0.5*p2;
+			if (ContainsPoint(midpoint))
+				segments.emplace_back(p1, p2);
+		}
+	}
+
+	return segments;
+}
+
 //Trace the outline of the polygonal object represented by m_vertices. Compute new vertices from the outline that traces the object and keeps
 //it's interior to the left. If m_vertices already defined a valid simple polygon and kept the interior to the left this should (I hope) leave
 //the object essentially unchanged, except it might add vertices if the polygon touched itself at an isolated point, but the shape should be the same.
@@ -1449,6 +1525,11 @@ bool Polygon::ContainsPoint(Eigen::Vector2d const & Point) const {
 		}
 	}
 	return (m_boundary.ContainsPoint(Point) && (! inHole));
+}
+
+//Get the X and Y bounds of the polygon (An Axis-Aligned Bounding Box). Returned as a vector: (XMin, XMax, YMin, YMax).
+Eigen::Vector4d Polygon::GetAABB(void) const {
+	return m_boundary.GetAABB();
 }
 
 //Get the area of a *valid* polygon.
@@ -1956,6 +2037,87 @@ void Polygon::Triangulate(std::Evector<Triangle> & Triangles) const {
 	}
 }
 
+//Clip the infinite line X dot V = P to the polygon. Return all interior segments. V must be a unit vector.
+std::Evector<LineSegment> Polygon::ClipLine(Eigen::Vector2d const & VArg, double P) const {
+	std::Evector<LineSegment> segments;
+
+	Eigen::Vector2d V = VArg;
+	V.normalize();
+	if (V.norm() < 0.5) {
+		std::cerr << "Error in Polygon::ClipLine() - V must be a unit vector. Given 0.\r\n";
+		return segments;
+	}
+
+	Eigen::Vector4d AABB = GetAABB();
+
+	//Using the corners of the AABB get lower and upper bounds for the objects projection onto V
+	Eigen::Vector2d p1(AABB(0), AABB(2));
+	Eigen::Vector2d p2(AABB(0), AABB(3));
+	Eigen::Vector2d p3(AABB(1), AABB(2));
+	Eigen::Vector2d p4(AABB(1), AABB(3));
+	double proj1 = p1.dot(V);
+	double proj2 = p2.dot(V);
+	double proj3 = p3.dot(V);
+	double proj4 = p4.dot(V);
+	double projLowerBound = std::min(std::min(proj1, proj2), std::min(proj3, proj4));
+	double projUpperBound = std::max(std::max(proj1, proj2), std::max(proj3, proj4));
+
+	//If we can rule out any intersection because the line doesn't intersect the AABB, stop now.
+	if ((P < projLowerBound) || (P > projUpperBound))
+		return segments;
+
+	//Find all intersection points between the boundary and the line and all intersection points between interior holes and the line
+	//Record as dot products with the orthogonal to V.
+	Eigen::Vector2d VOrth(V(1), -1.0*V(0));
+	std::vector<double> intersectionDotsWithVOrth;
+	std::Evector<LineSegment> polySegments = m_boundary.GetLineSegments();
+	for (SimplePolygon const & hole : m_holes) {
+		std::Evector<LineSegment> holeSegments = hole.GetLineSegments();
+		polySegments.insert(polySegments.end(), holeSegments.begin(), holeSegments.end());
+	}
+	for (LineSegment const & L : polySegments) {
+		double p1Proj = L.m_endpoint1.dot(V);
+		double p2Proj = L.m_endpoint2.dot(V);
+		if (((p1Proj <= P) && (p2Proj >= P)) || ((p2Proj <= P) && (p1Proj >= P))) {
+			//The line segment intersects the infinite line
+			Eigen::Vector2d W = L.m_endpoint2 - L.m_endpoint1;
+			W.normalize();
+			if (W.norm() < 0.5) {
+				//Segment is degenerate and on line - use the midpoint as the intersection
+				Eigen::Vector2d Intersection = 0.5*L.m_endpoint1 + 0.5*L.m_endpoint2;
+				intersectionDotsWithVOrth.push_back(Intersection.dot(VOrth));
+			}
+			else if (std::fabs(W.dot(VOrth)) > 0.99999999) {
+				//Line segment was non-degenerate but is nearly parallel to the line.
+				//Intersection computation will be unstable. Project midpoint to line for intersection.
+				Eigen::Vector2d Intersection = 0.5*L.m_endpoint1 + 0.5*L.m_endpoint2;
+				Eigen::Vector2d residualVec = (Intersection.dot(V) - P)*V;
+				Intersection = Intersection - residualVec;
+				intersectionDotsWithVOrth.push_back(Intersection.dot(VOrth));
+			}
+			else {
+				//Typical case
+				Eigen::Vector2d Intersection = FindIntersectionWithLine(L.m_endpoint1, L.m_endpoint2, V, P);
+				intersectionDotsWithVOrth.push_back(Intersection.dot(VOrth));
+			}
+		}
+	}
+
+	//Sort the intersections and build segments for interior pieces
+	std::sort(intersectionDotsWithVOrth.begin(), intersectionDotsWithVOrth.end());
+	for (size_t n = 0U; n < intersectionDotsWithVOrth.size(); n++) {
+		if (n + 1U < intersectionDotsWithVOrth.size()) {
+			Eigen::Vector2d p1 = P*V + intersectionDotsWithVOrth[n     ]*VOrth;
+			Eigen::Vector2d p2 = P*V + intersectionDotsWithVOrth[n + 1U]*VOrth;
+			Eigen::Vector2d midpoint = 0.5*p1 + 0.5*p2;
+			if (ContainsPoint(midpoint))
+				segments.emplace_back(p1, p2);
+		}
+	}
+
+	return segments;
+}
+
 // ************************************************************************************************************************************************
 // ********************************************************   PolygonCollection Definitions   *****************************************************
 // ************************************************************************************************************************************************
@@ -1994,12 +2156,35 @@ void PolygonCollection::RemoveEmptyComponents(void) {
 	}
 }
 
+//Test to see if polygon collection contains a point
 bool PolygonCollection::ContainsPoint(Eigen::Vector2d const & Point) const {
 	for (auto const & poly : m_components) {
 		if (poly.ContainsPoint(Point))
 			return true;
 	}
 	return false;
+}
+
+//Get the X and Y bounds of the polygon collection (An Axis-Aligned Bounding Box). Returned as a vector: (XMin, XMax, YMin, YMax).
+Eigen::Vector4d PolygonCollection::GetAABB(void) const {
+	Eigen::Vector4d AABB(std::nan(""), std::nan(""), std::nan(""), std::nan(""));
+	if (m_components.empty())
+		return AABB;
+
+	for (size_t compIndex = 0U; compIndex < m_components.size(); compIndex++) {
+		Eigen::Vector4d compAABB = m_components[compIndex].GetAABB();
+		if (! std::isnan(compAABB(0))) {
+			//Non-empty component - update AABB
+			if (std::isnan(AABB(0)))
+				AABB = compAABB;
+
+			AABB(0) = std::min(AABB(0), compAABB(0));
+			AABB(1) = std::max(AABB(1), compAABB(1));
+			AABB(2) = std::min(AABB(2), compAABB(2));
+			AABB(3) = std::max(AABB(3), compAABB(3));
+		}
+	}
+	return AABB;
 }
 
 //Get the area of a *valid* polygon collection
