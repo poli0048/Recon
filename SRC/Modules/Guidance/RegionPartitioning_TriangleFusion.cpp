@@ -257,23 +257,23 @@ static bool CheckAdjacency(SimplePolygon const & PolyA, SimplePolygon const & Po
 }
 
 //3.1 Helper Function -- Gets the "score" (estimated flight time) of a triangle based on a square.
-static double GetTriangleScore(Triangle & triangle, Guidance::ImagingRequirements const & ImagingReqs){
+static double GetTriangleScore(Triangle & triangle, Guidance::MissionParameters const & MissionParams) {
 	//Row spacing = 2 * HAG * tan(0.5 * HFOV) * (1 - SidelapFraction) <In Meters>
-	double row_spacing = 2 * ImagingReqs.HAG * tan(0.5 * ImagingReqs.HFOV) * (1 - ImagingReqs.SidelapFraction);
+	double row_spacing = 2 * MissionParams.HAG * tan(0.5 * MissionParams.HFOV) * (1 - MissionParams.SidelapFraction);
 	double length = sqrt(2 * GetArea(triangle));
-	return length * (length / row_spacing) / ImagingReqs.TargetSpeed;
+	return length * (length / row_spacing) / MissionParams.TargetSpeed;
 }
 
 //3.2 Helper Function -- Recursively bisects triangles until they score less than the targeted flight time.
-static void PartitionSurveyRegionRec(Triangle & mainTriangle, std::Evector<Triangle> & allTriangles, double TargetFlightTime, Guidance::ImagingRequirements const & ImagingReqs){
-	if (GetTriangleScore(mainTriangle, ImagingReqs) > TargetFlightTime){
+static void PartitionSurveyRegionRec(Triangle & mainTriangle, std::Evector<Triangle> & allTriangles, Guidance::MissionParameters const & MissionParams) {
+	if (GetTriangleScore(mainTriangle, MissionParams) > MissionParams.SubregionTargetFlightTime){
 		//Split the triangle into two triangles
 		Triangle subTriangleA;
 		Triangle subTriangleB;
 		BisectTriangle(mainTriangle, subTriangleA, subTriangleB);
 
-		PartitionSurveyRegionRec(subTriangleA, allTriangles, TargetFlightTime, ImagingReqs);
-		PartitionSurveyRegionRec(subTriangleB, allTriangles, TargetFlightTime, ImagingReqs);
+		PartitionSurveyRegionRec(subTriangleA, allTriangles, MissionParams);
+		PartitionSurveyRegionRec(subTriangleB, allTriangles, MissionParams);
 	}
 	else
 		allTriangles.push_back(mainTriangle);
@@ -484,9 +484,8 @@ namespace Guidance {
 	//Arguments:
 	//Region           - Input  - The input survey region to cover (polygon collection in NM coords)
 	//Partition        - Output - A vector of sub-regions, each one a polygon collection in NM coords (typical case will have a single poly in each sub-region)
-	//TargetFlightTime - Input  - The approx time (in seconds) a drone should be able to fly each sub-region in, given the max vehicle speed and sidelap
-	//ImagingReqs      - Input  - Parameters specifying speed and row spacing (see definitions in struct declaration)
-	void PartitionSurveyRegion_TriangleFusion(PolygonCollection const & Region, std::Evector<PolygonCollection> & Partition, double TargetFlightTime, ImagingRequirements const & ImagingReqs) {
+	//MissionParams    - Input  - Parameters specifying speed and row spacing (see definitions in struct declaration)
+	void PartitionSurveyRegion_TriangleFusion(PolygonCollection const & Region, std::Evector<PolygonCollection> & Partition, MissionParameters const & MissionParams) {
         // *********************** MESHING SECTION **************************************************
         //Slice the polygon into triangles.
 		std::Evector<Triangle> allTrianglesTriangulate;
@@ -504,7 +503,7 @@ namespace Guidance {
 
 		//Recursively slice triangles until they are smaller than the Target Flight Time.
 		for (Triangle & triangle: allTrianglesTriangulate)
-			PartitionSurveyRegionRec(triangle, allTriangles, TargetFlightTime/2, ImagingReqs);
+			PartitionSurveyRegionRec(triangle, allTriangles, MissionParams);
 
 		allTrianglesTriangulate.clear();
 
@@ -583,7 +582,7 @@ namespace Guidance {
 		for (int i = 0; i < (int) allTriangles.size(); i++) {
 			TriangleAdjacencyMap::Triangle tri;
 			tri.id = i;
-			tri.score = GetTriangleScore(allTriangles[i], ImagingReqs);
+			tri.score = GetTriangleScore(allTriangles[i], MissionParams);
 			map.nodes.push_back(tri);
 			map.edges.push_back({});
 			for (int j = 0; j < (int) allTriangles.size(); j++) {
@@ -615,7 +614,7 @@ namespace Guidance {
 			//While there are edges attached to this group, try to add them in.
 			while (currentCandidateEdges.size() > 0) {
 				int n = currentCandidateEdges[0];
-				if (map.nodes[n].score + groupScoreList.back() < TargetFlightTime && assignedGroups[n] == -1) {
+				if (map.nodes[n].score + groupScoreList.back() < MissionParams.SubregionTargetFlightTime && assignedGroups[n] == -1) {
 					map.groups.back().push_back(map.nodes[n].id);
 					groupScoreList.back() += map.nodes[n].score;
 					assignedGroups[n] = map.groups.size()-1;
@@ -672,7 +671,7 @@ namespace Guidance {
 		MapWidget::Instance().m_guidanceOverlay.SetTriangleLabels(triangleLabels);
 
 		//(NON-IMPACTING -- FOR DEVELOPER USE ONLY) Display polygon information on the terminal.
-		std::cout<<"Target Score: " << TargetFlightTime << std::endl;
+		std::cout<<"Target Score: " << MissionParams.SubregionTargetFlightTime << std::endl;
 		std::cout<<"There are " << map.nodes.size() << " nodes in the graph. This should equal the number of triangles." << std::endl;
 		std::cout<<"There are " << map.groups.size() << " groups in the graph." << std::endl;
 		//Information on individual triangles.

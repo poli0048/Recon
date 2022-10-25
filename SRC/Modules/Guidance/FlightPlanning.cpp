@@ -80,7 +80,7 @@ static int FindSegmentWithEndpointClosestToPoint(std::Evector<LineSegment> const
 	return bestSegIndex;
 }
 
-void PlanMission_Elaina(PolygonCollection const & Region, DroneInterface::WaypointMission & Mission, Guidance::ImagingRequirements const & ImagingReqs) {
+void PlanMission_Elaina(PolygonCollection const & Region, DroneInterface::WaypointMission & Mission, Guidance::MissionParameters const & MissionParams) {
 	auto startTime = std::chrono::steady_clock::now();
 
 	Mission.Waypoints.clear();
@@ -188,7 +188,7 @@ void PlanMission_Elaina(PolygonCollection const & Region, DroneInterface::Waypoi
 		// Start first hatch line half the row spacing from top of box, which is yMax
 		// Build horizontal lines until y-value is less than yMin
 		// All lines go from Xmin to Xmax
-		double rowSpacing = 2 * ImagingReqs.HAG * tan(0.5 * ImagingReqs.HFOV) * (1 - ImagingReqs.SidelapFraction);
+		double rowSpacing = 2 * MissionParams.HAG * tan(0.5 * MissionParams.HFOV) * (1 - MissionParams.SidelapFraction);
 		double rowSpacing_NM = MetersToNMUnits(rowSpacing, MaxMax_NM(1));
 
 		// This is for debugging. Useful to understand distances in meters
@@ -346,8 +346,8 @@ void PlanMission_Elaina(PolygonCollection const & Region, DroneInterface::Waypoi
 			DroneInterface::Waypoint newWayPoint;
 			newWayPoint.Latitude = LatLonPoint[0];
 			newWayPoint.Longitude = LatLonPoint[1];
-			newWayPoint.RelAltitude = ImagingReqs.HAG;
-			newWayPoint.Speed = ImagingReqs.TargetSpeed;
+			newWayPoint.RelAltitude = MissionParams.HAG;
+			newWayPoint.Speed = MissionParams.TargetSpeed;
 			newWayPoint.LoiterTime   = std::nanf("");
 			newWayPoint.GimbalPitch   = std::nanf("");
 			newWayPoint.CornerRadius = 5.0f;
@@ -368,16 +368,16 @@ namespace Guidance {
 	//4 - Take a region or sub-region and plan a trajectory to cover it at a given height that meets the specified imaging requirements. In this case we specify
 	//    the imaging requirements using a maximum speed and sidelap fraction.
 	//Arguments:
-	//Region      - Input  - The input survey region or sub-region to cover (polygon collection in NM coords)
-	//Mission     - Output - The planned mission that covers the input region
-	//ImagingReqs - Input  - Parameters specifying speed and row spacing (see definitions in struct declaration)
-	void PlanMission(PolygonCollection const & Region, DroneInterface::WaypointMission & Mission, ImagingRequirements const & ImagingReqs) {
-		//PlanMission_Elaina(Region, Mission, ImagingReqs);
+	//Region        - Input  - The input survey region or sub-region to cover (polygon collection in NM coords)
+	//Mission       - Output - The planned mission that covers the input region
+	//MissionParams - Input  - Parameters specifying speed and row spacing (see definitions in struct declaration)
+	void PlanMission(PolygonCollection const & Region, DroneInterface::WaypointMission & Mission, MissionParameters const & MissionParams) {
+		//PlanMission_Elaina(Region, Mission, MissionParams);
 		//return;
 
 		//Compute row spacing in meters
 		auto startTime = std::chrono::steady_clock::now();
-		double RowSpacing_m = 2.0 * ImagingReqs.HAG * std::tan(0.5 * ImagingReqs.HFOV) * (1.0 - ImagingReqs.SidelapFraction);
+		double RowSpacing_m = 2.0 * MissionParams.HAG * std::tan(0.5 * MissionParams.HFOV) * (1.0 - MissionParams.SidelapFraction);
 
 		//Lay down hatch lines separately for each disjoint component of the region.
 		std::Evector<LineSegment> hatchLines;
@@ -464,11 +464,11 @@ namespace Guidance {
 			Mission.Waypoints.emplace_back();
 			Mission.Waypoints.back().Latitude = waypoint_LatLon(0);
 			Mission.Waypoints.back().Longitude = waypoint_LatLon(1);
-			Mission.Waypoints.back().RelAltitude = ImagingReqs.HAG;
+			Mission.Waypoints.back().RelAltitude = MissionParams.HAG;
 			Mission.Waypoints.back().CornerRadius = 5.0f;
-			Mission.Waypoints.back().Speed = ImagingReqs.TargetSpeed;
-			Mission.Waypoints.back().LoiterTime = std::nanf("");
-			Mission.Waypoints.back().GimbalPitch = std::nanf("");
+			Mission.Waypoints.back().Speed = MissionParams.TargetSpeed;
+			//Mission.Waypoints.back().LoiterTime = std::nanf("");
+			//Mission.Waypoints.back().GimbalPitch = std::nanf("");
 		}
 		
 		double runtime_ms = SecondsElapsed(startTime)*1000.0;

@@ -685,7 +685,7 @@ static bool TestBench9(std::string const & Arg)  {
 				MissionIndicesToAssign.insert(i);    
 			}
 
-			Guidance::ImagingRequirements ImagingReqs;
+			Guidance::MissionParameters ImagingReqs;
 			ImagingReqs.TargetSpeed = 10;
 			std::chrono::time_point<std::chrono::steady_clock> T0 = std::chrono::steady_clock::now();
 			SelectSubregionSequences(TA, SubregionMissions, DroneStartPositions, MissionIndicesToAssign, Sequences, ImagingReqs);

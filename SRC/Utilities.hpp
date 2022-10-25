@@ -37,6 +37,11 @@ inline double SecondsElapsed(std::chrono::time_point<std::chrono::steady_clock> 
 	return SecondsElapsed(Start, Now);
 }
 
+//Advance a timepoint by a given amount of time (in seconds). Advancement has a resolution of 1 ms.
+inline std::chrono::time_point<std::chrono::steady_clock> AdvanceTimepoint(std::chrono::time_point<std::chrono::steady_clock> const & T, double Seconds) {
+	return (T + std::chrono::milliseconds(int64_t(std::round(1000.0*Seconds))));
+}
+
 //Make sure a filename is sane (no crazy characters or too short/long). This looks at the name only - it does not check the filesystem in any way
 inline bool isFilenameReasonable(std::string Filename) {
 	const std::string allowedChars("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890 (),[]:.<>'+=-_");

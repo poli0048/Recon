@@ -22,10 +22,10 @@
 // *********************************************************************************************************************************
 
 //Get the approximate area (in m^2) that can be flown in the given number of seconds, given the imaging requirements
-static double FlightTimeToApproxArea(double TargetFlightTime, Guidance::ImagingRequirements const & ImagingReqs) {
-	double rowSpacing = 2.0 * ImagingReqs.HAG * std::tan(0.5 * ImagingReqs.HFOV) * (1.0 - ImagingReqs.SidelapFraction);
-	double coverageRate = rowSpacing * ImagingReqs.TargetSpeed; //m^2/s - not including first pass, which is more productive
-	return TargetFlightTime * coverageRate;
+static double FlightTimeToApproxArea(Guidance::MissionParameters const & MissionParams) {
+	double rowSpacing = 2.0 * MissionParams.HAG * std::tan(0.5 * MissionParams.HFOV) * (1.0 - MissionParams.SidelapFraction);
+	double coverageRate = rowSpacing * MissionParams.TargetSpeed; //m^2/s - not including first pass, which is more productive
+	return MissionParams.SubregionTargetFlightTime * coverageRate;
 }
 
 //Convert an area from m^2 to squared NM units. This is approximate and depends on the NM y coordinate of our operating zone,
@@ -47,10 +47,9 @@ namespace Guidance {
 	//Arguments:
 	//Region           - Input  - The input survey region to cover (polygon collection in NM coords)
 	//Partition        - Output - A vector of sub-regions, each one a polygon collection in NM coords (typical case will have a single poly in each sub-region)
-	//TargetFlightTime - Input  - The approx time (in seconds) a drone should be able to fly each sub-region in, given the max vehicle speed and sidelap
-	//ImagingReqs      - Input  - Parameters specifying speed and row spacing (see definitions in struct declaration)
+	//MissionParams    - Input  - Parameters specifying speed and row spacing (see definitions in struct declaration)
 	void PartitionSurveyRegion_IteratedCuts(PolygonCollection const & Region, std::Evector<PolygonCollection> & Partition,
-	                                        double TargetFlightTime, ImagingRequirements const & ImagingReqs) {
+	                                        MissionParameters const & MissionParams) {
 		//Get an approximate center point for the survey region - use it to convert approx flight time to approx component area
 		Eigen::Vector4d AABB(std::nanf(""), std::nanf(""), std::nanf(""), std::nanf(""));
 		for (Polygon const & poly : Region.m_components) {
@@ -63,7 +62,7 @@ namespace Guidance {
 	    		AABB(3) = std::max(AABB(3), polyAABB(3));
     		}
     		double yCenter_NM = 0.5*AABB(2) + 0.5*AABB(3);
-    		double compTargetArea_SqMeters = FlightTimeToApproxArea(TargetFlightTime, ImagingReqs);
+    		double compTargetArea_SqMeters = FlightTimeToApproxArea(MissionParams);
     		double compTargetArea_NMUnits  = Area_SquareMeters_To_NM(compTargetArea_SqMeters, yCenter_NM);
     		std::cerr << "Comp approx area: " << compTargetArea_SqMeters << " m^2, " << compTargetArea_NMUnits << " squared NM units.\r\n";
 		//Note: In at least one test the conversion to m^2 seems correct (agrees with Cheetah flight calc tool)
@@ -143,8 +142,6 @@ namespace Guidance {
 		Partition.reserve(pieces.size());
 		for (Polygon const & comp : pieces)
 			Partition.emplace_back(comp);
-
-		MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
 
 		//This is for testing purposes only - grab just the first simple ploygon
 		/*Partition.clear();

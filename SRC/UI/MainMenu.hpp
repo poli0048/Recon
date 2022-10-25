@@ -336,6 +336,14 @@ inline void MainMenu::Draw() {
 				DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation G4"s, Eigen::Vector3d(lat, lon, alt));
 				MapWidget::Instance().StartAnimation(lat - 2.0*eps, lat + 2.0*eps, lon - 2.0*eps, lon + 2.0*eps);
 			}
+			if (MyGui::MenuItem(u8"\uf04b", labelMargin, "Foley (1 Drone)")) {
+				double lat = 45.614902*PI/180.0;
+				double lon = -93.842709*PI/180.0;
+				double alt = 299.56;
+				DroneInterface::DroneManager::Instance().ClearSimulatedDrones();
+				auto dronePtr = DroneInterface::DroneManager::Instance().AddSimulatedDrone("Simulation H1"s, Eigen::Vector3d(lat, lon, alt));
+				MapWidget::Instance().StartAnimation(lat - eps, lat + eps, lon - eps, lon + eps);
+			}
 			unsigned int NumSimDrones = DroneInterface::DroneManager::Instance().NumSimulatedDrones();
 			ImGui::Separator();
 			if (MyGui::MenuItem(u8"\uf04d", labelMargin, "End Simulation (Destroy all sim drones)", NULL, false, (NumSimDrones > 0)))

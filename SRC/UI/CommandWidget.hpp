@@ -90,11 +90,18 @@ class CommandWidget {
 		//An avoidance zone violation occurs when a drone is in an avoidance zone
 		bool  m_CheckAvoidanceZones = true;
 		
+		//Drone Selection Options
 		std::vector<bool> m_useDroneFlags;
+
+		//Imaging Parameters and Mission Settings
 		float m_missionHAG_Feet = 150.0f;
 		float m_missionSpeed_mph = 33.6f;
 		float m_missionSidelapPercentage = 75.0f;
 		float m_missionLowFlierHFOV_Deg = 35.0f;
+
+		float m_StaggerInterval_Feet = 10.0f;       //Feet between drone flight planes
+		float m_SubRegionTargetFlightTime = 100.0f; //Subregion size - Num seconds it takes to fly sub-region
+		float m_TakeoffStaggerInterval = 15.0f;     //Seconds between successive takeoff events for drones on ground at start of mission (s)
 		
 		float ContentHeight; //Height of widget content from last draw pass
 		float RecommendedHeight; //Recommended height for widget
@@ -390,12 +397,18 @@ inline void CommandWidget::Draw() {
 							atLeast1DroneSelected = atLeast1DroneSelected || flag;
 						}
 
-						//Mission Parameters
+						//Core Imaging Parameters
 						ImGui::NewLine();
 						ImGui::DragFloat("Height Above Ground##Drag", &m_missionHAG_Feet,          0.25f, 20.0f, 400.0f, "%.0f (feet)");
-						ImGui::DragFloat("Speed##Drag",               &m_missionSpeed_mph,         0.05f, 1.0f,  33.6f, "%.1f (mph)");
-						ImGui::DragFloat("Sidelap##Drag",             &m_missionSidelapPercentage, 0.1f,  0.0f,  99.5f, "%.1f (%%)");
+						ImGui::DragFloat("Speed##Drag",               &m_missionSpeed_mph,         0.05f, 1.0f,  33.6f,  "%.1f (mph)");
+						ImGui::DragFloat("Sidelap##Drag",             &m_missionSidelapPercentage, 0.1f,  0.0f,  99.5f,  "%.1f (%%)");
 						ImGui::DragFloat("Sensor HFOV##Drag",         &m_missionLowFlierHFOV_Deg,  0.05f, 1.0f,  179.0f, "%.0f (Degrees)");
+
+						//Other Mission Options
+						ImGui::NewLine();
+						ImGui::DragFloat("Stagger Drone Heights##Drag",         &m_StaggerInterval_Feet,      0.10f, 0.0f,  25.0f,  "%.1f (feet)");
+						ImGui::DragFloat("Stagger Takeoff Times##Drag",         &m_TakeoffStaggerInterval,    0.05f, 0.0f,  30.0f,  "%.0f (seconds)");
+						ImGui::DragFloat("Sub-Region Size (Flight Time)##Drag", &m_SubRegionTargetFlightTime, 0.18f, 20.0f, 600.0f, "%.0f (seconds)");
 						
 						ImGui::NewLine();
 						if (ImGui::BeginMenu("Start Mission", atLeast1DroneSelected)) {
@@ -410,13 +423,16 @@ inline void CommandWidget::Draw() {
 								}
 
 								double PI = 3.14159265358979;
-								Guidance::ImagingRequirements ImagingReqs;
-								ImagingReqs.HAG = double(m_missionHAG_Feet) * 0.3048;
-								ImagingReqs.TargetSpeed = double(m_missionSpeed_mph) * 0.44704;
-								ImagingReqs.SidelapFraction = std::clamp(double(m_missionSidelapPercentage)/100.0, 0.0, 1.0);
-								ImagingReqs.HFOV = m_missionLowFlierHFOV_Deg * PI/180.0;
+								Guidance::MissionParameters MissionParams;
+								MissionParams.HAG = double(m_missionHAG_Feet) * 0.3048;
+								MissionParams.TargetSpeed = double(m_missionSpeed_mph) * 0.44704;
+								MissionParams.SidelapFraction = std::clamp(double(m_missionSidelapPercentage)/100.0, 0.0, 1.0);
+								MissionParams.HFOV = double(m_missionLowFlierHFOV_Deg) * PI/180.0;
+								MissionParams.HeightStaggerInterval = double(m_StaggerInterval_Feet) * 0.3048;
+								MissionParams.SubregionTargetFlightTime = double(m_SubRegionTargetFlightTime);
+								MissionParams.TakeoffStaggerInterval = double(m_TakeoffStaggerInterval);
 
-								Guidance::GuidanceEngine::Instance().StartSurvey(serialsToCommand, ImagingReqs);
+								Guidance::GuidanceEngine::Instance().StartSurvey(serialsToCommand, MissionParams);
 							}
 							ImGui::EndMenu();
 						}
@@ -427,7 +443,7 @@ inline void CommandWidget::Draw() {
 				//UI for a mission in progress
 
 				ImGui::NewLine();
-				float col2Start = ImGui::CalcTextSize("Height Above Ground:  ").x;
+				float col2Start = ImGui::CalcTextSize("Sub-Region Size (Flight Time):   ").x;
 				ImGui::TextDisabled(" ------- Mission Parameters ------- ");
 				ImGui::TextDisabled("Height Above Ground:");
 				ImGui::SameLine(col2Start);
@@ -446,20 +462,34 @@ inline void CommandWidget::Draw() {
 				ImGui::TextDisabled("%.0f Degrees", m_missionLowFlierHFOV_Deg);
 
 				ImGui::NewLine();
+				ImGui::TextDisabled("Stagger Drone Heights:");
+				ImGui::SameLine(col2Start);
+				ImGui::TextDisabled("%.1f feet", m_StaggerInterval_Feet);
+
+				ImGui::TextDisabled("Stagger Takeoff Times:");
+				ImGui::SameLine(col2Start);
+				ImGui::TextDisabled("%.0f seconds", m_TakeoffStaggerInterval);
+
+				ImGui::TextDisabled("Sub-Region Size (Flight Time):");
+				ImGui::SameLine(col2Start);
+				ImGui::TextDisabled("%.0f seconds", m_SubRegionTargetFlightTime);
+
+				ImGui::NewLine();
 				if (ImGui::BeginMenu("Stop Mission (Drones Hover)")) {
 					if (ImGui::MenuItem("Confirm Command", NULL, false, true)) {
-						std::vector<std::string> serials = Guidance::GuidanceEngine::Instance().GetSerialsOfDronesUnderCommand();
-						for (std::string serial : serials)
-							Guidance::GuidanceEngine::Instance().RemoveLowFlier(serial);
+						Guidance::GuidanceEngine::Instance().AbortMission();
 						VehicleControlWidget::Instance().AllDronesStopAndHover();
 					}
 					ImGui::EndMenu();
 				}
+				if (ImGui::BeginMenu("Stop Mission (Coordinated Landing)")) {
+					if (ImGui::MenuItem("Confirm Command", NULL, false, true)) {
+						Guidance::GuidanceEngine::Instance().AbortMission();
+						VehicleControlWidget::Instance().AllDronesReturnHomeAndLand();
+					}
+					ImGui::EndMenu();
+				}
 			}
-			
-			
-			//ImGui::CloseCurrentPopup();
-			
 			
 			ImGui::EndPopup();
 		}
@@ -550,37 +580,34 @@ inline void CommandWidget::Draw() {
 		ImExt::Style styleSitter(StyleVar::WindowPadding, ImVec2(4.0f, 4.0f));
 		if (ImGui::BeginPopup("Emergency Popup", ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize)) {
 			float labelMargin = 1.5f*ImGui::GetFontSize();
-			if (MyGui::BeginMenu(u8"\uf28b", labelMargin, "All drones Stop & Hover")) {
+			if (MyGui::BeginMenu(u8"\uf28b", labelMargin, "All drones: Stop & Hover")) {
 				if (ImGui::MenuItem("Confirm Command", NULL, false, true))
 					VehicleControlWidget::Instance().AllDronesStopAndHover();
 				ImGui::EndMenu();
 			}
-			if (MyGui::BeginMenu(u8"\uf0ab", labelMargin, "All drones Hit the Deck")) {
+			if (MyGui::BeginMenu(u8"\uf0ab", labelMargin, "All drones: Hit the Deck")) {
 				if (ImGui::MenuItem("Confirm Command", NULL, false, true))
 					VehicleControlWidget::Instance().AllDronesHitTheDeck();
 				ImGui::EndMenu();
 			}
 			if (VehicleControlWidget::Instance().ReturnHomeSequenceInProgress()) {
-				if (MyGui::BeginMenu(u8"\uf015", labelMargin, "Cancel Home & Land sequence")) {
+				if (MyGui::BeginMenu(u8"\uf015", labelMargin, "Cancel Coordinated Landing")) {
 					if (ImGui::MenuItem("Confirm Command", NULL, false, true))
 						VehicleControlWidget::Instance().AllDronesStopAndHover();
 					ImGui::EndMenu();
 				}
 			}
 			else {
-				if (MyGui::BeginMenu(u8"\uf015", labelMargin, "All drones return home and land")) {
+				if (MyGui::BeginMenu(u8"\uf015", labelMargin, "Coordinated Landing (All drones RTL)")) {
 					if (ImGui::MenuItem("Confirm Command", NULL, false, true))
 						VehicleControlWidget::Instance().AllDronesReturnHomeAndLand();
 					ImGui::EndMenu();
 				}
 			}
-
-			
 			
 			ImGui::EndPopup();
 		}
 	}
-	
 	
 	//After drawing, update content height and recommended widget height
 	ContentHeight = ImGui::GetCursorPos().y - cursorStartYPos;

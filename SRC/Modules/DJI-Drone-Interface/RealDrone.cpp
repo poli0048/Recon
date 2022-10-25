@@ -649,6 +649,9 @@ namespace DroneInterface {
 		WaypointMission sanitizedMission = Mission;
 		SanitizeMissionForRealDrone(sanitizedMission);
 
+		//Debug
+		std::cerr << "ExecuteWaypointMission on mission:\r\n" << Mission << "\r\n";
+
 		m_mutex_B.lock();
 		m_currentWaypointMission = sanitizedMission;
 		m_mutex_B.unlock();
@@ -805,6 +808,8 @@ namespace DroneInterface {
 					waypointAdjustments++;
 				}
 			}
+			else
+				wpIndex++;
 		}
 		if (waypointDeletions + waypointAdjustments > 0) {
 			std::cerr << "Warning: Adjustments made during waypoint mission sanitization.\r\n";

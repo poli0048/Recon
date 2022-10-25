@@ -174,5 +174,15 @@ namespace DroneInterface {
 			return true;
 		}
 	};
+
+	inline std::ostream & operator<<(std::ostream & Str, WaypointMission const & M) { 
+		Str << "*****   Waypoint Mission   *****\r\n";
+		Str << "LandAtLastWaypoint: " << (M.LandAtLastWaypoint ? "True" : "False") << "\r\n";
+		Str << "CurvedTrajectory: " << (M.CurvedTrajectory ? "True" : "False") << "\r\n";
+		Str << "Waypoints:\r\n";
+		for (auto const & WP : M.Waypoints)
+			Str << WP << "\r\n";
+		return Str;
+	}
 }
 

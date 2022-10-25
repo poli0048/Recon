@@ -400,7 +400,7 @@ void GuidanceOverlay::Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDrawL
 		//Lightly draw planned missions on top of the partition
 		for (size_t compIndex = 0U; compIndex < m_SurveyRegionPartition.size(); compIndex++) {
 			//Only show missions for sub-regions that have a drone assigned (this helps visually distinguish between region types)
-			if (taskedDrones[compIndex] >= 0) {
+			//if (taskedDrones[compIndex] >= 0) {
 				auto const & mission(m_Missions[compIndex]);
 				for (size_t n = 0U; (n + 1U) < mission.Waypoints.size(); n++) {
 					DroneInterface::Waypoint const & wp1(mission.Waypoints[n]);
@@ -414,7 +414,7 @@ void GuidanceOverlay::Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDrawL
 
 					DrawList->AddLine(wp1_SS, wp2_SS, IM_COL32(255, 255, 255, 255.0f*opacity/100.0f), 2.0f);
 				}
-			}
+			//}
 		}
 	}
 }

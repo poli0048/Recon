@@ -353,10 +353,14 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 						double MSA;
 						Eigen::Vector2d Position_NM = LatLonToNM(Eigen::Vector2d(dronePos_LLA(0), dronePos_LLA(1)));
 						if (Maps::DataTileProvider::Instance()->TryGetData(Position_NM, Maps::DataLayer::MinSafeAltitude, MSA)) {
-							double groundAlt = dronePos_LLA(2) - droneHAG;
-							double minSafeHAG = MSA - groundAlt;
-							double targetHAG = minSafeHAG + 1.0; //Fly 1 meter above MSA to avoid triggering watchdog alarms
-							myState->m_targetHAGFeet = targetHAG*3.280839895;
+							if (std::isnan(MSA))
+								std::cerr << "Can't fly at deck - no min safe altitude at location.\r\n";
+							else {
+								double groundAlt = dronePos_LLA(2) - droneHAG;
+								double minSafeHAG = MSA - groundAlt;
+								double targetHAG = minSafeHAG + 1.0; //Fly 1 meter above MSA to avoid triggering watchdog alarms
+								myState->m_targetHAGFeet = targetHAG*3.280839895;
+							}
 						}
 					}
 					
@@ -1309,6 +1313,9 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 }
 
 inline void VehicleControlWidget::AllDronesStopAndHover(void) {
+	//Abort any mission the guidance module may be running since this is an All-drone command
+	Guidance::GuidanceEngine::Instance().AbortMission();
+
 	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
 	m_RTL_State = -1; //Cancel any RTL in progress
 	MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_messageToken);
@@ -1332,6 +1339,9 @@ inline void VehicleControlWidget::AllDronesStopAndHover(void) {
 }
 
 inline void VehicleControlWidget::AllDronesHitTheDeck(void) {
+	//Abort any mission the guidance module may be running since this is an All-drone command
+	Guidance::GuidanceEngine::Instance().AbortMission();
+
 	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
 	m_RTL_State = -1; //Cancel any RTL in progress
 	MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_messageToken);
@@ -1368,9 +1378,12 @@ inline void VehicleControlWidget::AllDronesReturnHomeAndLand(void) {
 	//Step 3 - Get max of MSA on all lines from each drone to it's respective home point
 	//Step 4 - Assign staggered RTL HAGs that keeps all drones above max MSA
 	//Step 5 - Start RTL sequence for each drone, with corresponding RTL HAG
-	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
+	
+	//Abort any mission the guidance module may be running since this is an All-drone command
+	Guidance::GuidanceEngine::Instance().AbortMission();
 
-	std::cerr << "TODO: RTL Sequence requested.\r\n";
+	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
+	std::cerr << "RTL Sequence initiated.\r\n";
 
 	//Iterate through the connected (flying) drones - put each pointer in a vector - also grab state objects (touching if necessary)
 	//Leave out drones for which GetDrone returns a nullptr so we don't have to constantly check for that later in this function
