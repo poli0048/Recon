@@ -120,6 +120,17 @@ namespace Guidance {
         return false;
     }
 
+    bool GuidanceEngine::IsCommandingDrone(std::string const & Serial) {
+    	std::scoped_lock lock(m_mutex);
+    	if (! m_running)
+            return false;
+        for (size_t n = 0U; n < m_dronesUnderCommand.size(); n++) {
+            if (m_dronesUnderCommand[n]->GetDroneSerial() == Serial)
+            	return true;
+        }
+        return false;
+    }
+
     //Returns true if currently commanding a mission, false otherwise
     bool GuidanceEngine::IsRunning(void) {
         std::scoped_lock lock(m_mutex);
