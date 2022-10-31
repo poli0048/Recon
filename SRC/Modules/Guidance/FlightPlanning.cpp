@@ -462,13 +462,13 @@ namespace Guidance {
 		for (Eigen::Vector2d const & waypoint_NM : waypoints_NM) {
 			Eigen::Vector2d waypoint_LatLon = NMToLatLon(waypoint_NM);
 			Mission.Waypoints.emplace_back();
-			Mission.Waypoints.back().Latitude = waypoint_LatLon(0);
-			Mission.Waypoints.back().Longitude = waypoint_LatLon(1);
-			Mission.Waypoints.back().RelAltitude = MissionParams.HAG;
+			Mission.Waypoints.back().Latitude     = waypoint_LatLon(0);
+			Mission.Waypoints.back().Longitude    = waypoint_LatLon(1);
+			Mission.Waypoints.back().RelAltitude  = MissionParams.HAG;
 			Mission.Waypoints.back().CornerRadius = 5.0f;
-			Mission.Waypoints.back().Speed = MissionParams.TargetSpeed;
-			//Mission.Waypoints.back().LoiterTime = std::nanf("");
-			//Mission.Waypoints.back().GimbalPitch = std::nanf("");
+			Mission.Waypoints.back().Speed        = MissionParams.TargetSpeed;
+			Mission.Waypoints.back().LoiterTime   = std::nanf("");
+			Mission.Waypoints.back().GimbalPitch  = std::nanf("");
 		}
 		
 		double runtime_ms = SecondsElapsed(startTime)*1000.0;

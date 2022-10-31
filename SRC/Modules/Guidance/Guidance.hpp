@@ -1,6 +1,6 @@
 //This module provides the main interface for the guidance system
 //Authors: Bryan Poling
-//Copyright (c) 2021 Sentek Systems, LLC. All rights reserved. 
+//Copyright (c) 2021 Sentek Systems, LLC. All rights reserved.
 #pragma once
 
 //System Includes
@@ -90,21 +90,14 @@ namespace Guidance {
 
 			//Drone state activity definition: 0 = On ground (available), 1 = In air (available), 2 = Tasked with mission (not started), 3 = Mission ongoing
 			std::unordered_map<std::string, std::tuple<int, int, TimePoint>> m_droneStates; //Serial -> (activity, missionIndex, timestamp). missionIndex = -1 when not tasked or flying a real mission
+			std::unordered_map<int, double> m_taskedMissionDistances; //MissionIndex -> Total travel distance for mission (including getting to WP0)
+			std::unordered_map<int, double> m_taskedMissionProgress;  //MissionIndex -> Distance traveled since mission start
 			std::Eunordered_map<std::string, Eigen::Vector3d> m_dronePositions; //Serial -> last known position (LLA)
 			std::unordered_set<int> m_availableMissionIndices;
-
-
-
-			//std::unordered_map<std::string, std::tuple<int, DroneInterface::WaypointMission>> m_currentDroneMissions; //Serial -> (missionNum, Mission)
-			//int m_coverageExpected;
-			//std::set<int> m_missionIndicesToAssign;
-			//std::vector<std::vector<int>> m_subregionSequences;
-			//std::vector<bool> m_flyingMissionStatus;
-			//std::vector<bool> m_wasPredictedToFinishWithoutShadows;
 			
 			void ModuleMain(void);
 			void ResetIntermediateData(void); //Clear mission prep data and periodically updated fields
-			void UpdateDronePositions(void);
+			void UpdateDronePositionsAndMissionProgress(void);
 			void MissionPrepWork(int PartitioningMethod); //Any work that needs to be done before starting a mission is done here
 			void TaskDroneWithMission(DroneInterface::Drone * MyDrone, DroneInterface::WaypointMission Mission);
 			void UpdateDroneStatesBasedOnMissionProgress(void);
@@ -134,8 +127,6 @@ namespace Guidance {
 			bool RemoveLowFlier(std::string const & Serial); //Stop commanding the drone with the given serial
 			bool IsCommandingDrone(std::string const & Serial); //Returns true if drone is under guidance module command - false otherwise
 			bool IsRunning(void); //Returns true if currently commanding a mission, false otherwise
-			//void GetDroneCurrentPositions(std::vector<DroneInterface::Waypoint> & DronePositions);
-			//void RefreshSequence(void);
 
 			inline std::vector<std::string> GetSerialsOfDronesUnderCommand(void);
 			inline std::string GetMissionStatusStr(void); //Get status string for current mission
@@ -194,13 +185,15 @@ namespace Guidance {
 	//    distant region. At a minimum we should ensure that we don't task a drone to a region that we don't expect it to be able to finish without getting hit
 	//    with shadows.
 	//Arguments:
-	//TA                - Input - Time Available function
-	//SubregionMissions - Input - A vector of drone Missions - Element n is the mission for sub-region n.
-	//StartPos          - Input - The starting position of the drone (to tell us how far away from each sub-region mission it is)
+	//TA                      - Input - Time Available function
+	//SubregionMissions       - Input - A vector of drone Missions - Element n is the mission for sub-region n.
+	//AvailableMissionIndices - Input - Set of indices of missions in SubregionMissions to consider
+	//StartPos                - Input - The starting position of the drone (to tell us how far away from each sub-region mission it is)
+	//MissionParams           - Input - Parameters specifying speed and row spacing (see definitions in struct declaration)
 	//
 	//Returns: The index of the drone mission (and sub-region) to task the drone to. Returns -1 if none are plausable
 	int SelectSubRegion(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
-	                    DroneInterface::Waypoint const & StartPos, MissionParameters const & MissionParams);
+	                    std::unordered_set<int> const & AvailableMissionIndices, DroneInterface::Waypoint const & StartPos, MissionParameters const & MissionParams);
 	
 	//7 - Given a Time Available function, a collection of sub-regions (with their pre-planned missions), and a collection of drone start positions, choose
 	//    sequences (of a given length) of sub-regions for each drone to fly, in order. When the mission time exceeds our prediction horizon the time available
@@ -210,39 +203,12 @@ namespace Guidance {
 	//SubregionMissions   - Input  - A vector of drone Missions - Element n is the mission for sub-region n.
 	//DroneStartPositions - Input  - Element k is the starting position of drone k
 	//Sequences           - Output - Element k is a vector of sub-region indices to task drone k to (in order)
+	//
+	//Note: This function is not currently used - and is not currently implemented. The initial implementation was removed since
+	//it was unsafe (very high computational burden in many cases would lead to full program hang if not called very carefully)
 	void SelectSubregionSequences(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
 	                             std::vector<DroneInterface::Waypoint> const & DroneStartPositions, std::set<int> MissionIndicesToAssign, std::vector<std::vector<int>> & Sequences,
 	                             MissionParameters const & MissionParams);
-	//Note: This function takes *way* too long on larger problems. Needs a re-write to bound complexity.
-	
-
-	// Extends v_dest with v_src
-    void extend(std::vector<int> & v_dest, const std::vector<int> & v_src);
-	
-	// GenerateCombos helper function
-	void GenerateCombosHelper(std::vector<std::vector<int>> & combos, std::vector<int> & combo, const std::vector<int> & elements, int left, int k);
-	
-	// Recursively generates all combinations of elements of length k
-	std::vector<std::vector<int>> GenerateCombos(const std::vector<int> & elements, int k);
-	
-	// Recursively generates all permutations of elements of length elements.size()
-	std::vector<std::vector<int>> GeneratePerms(std::vector<int> & elements);
-	
-	// Input: Assignable missions and number of drones i.e., <1, 3, 7, 0>, 3
-    // Output: Every unordered way to assign missions to drones i.e., [3, 1] [7] [0]
-	void RecurseAssignments(std::vector<std::vector<std::vector<int>>> & AllAssignments, std::vector<std::vector<int>> & CurrentAssignments, 
-							const std::vector<int> & AssignableMissions, const int MissionIndex, const int NumDrones);
-	
-	// Input: Unordered way to assign missions to drones i.e., [3, 1] [7] [0]
-    // Output: All ordered ways to assign missions to drones i.e., [3, 1] [7] [0], [1, 3] [7] [0]
-	void RecurseSequences(std::vector<std::vector<std::vector<int>>> & AllSequences, std::vector<std::vector<int>> & CurrentSequences, 
-						  int DroneIndex, const int NumDrones);
-	
-	// Return the number of subregions that can be completely imaged given TA
-	int GetCoverage(std::vector<int> & PredictedCoverage, std::vector<int> & MissionDurations, ShadowPropagation::TimeAvailableFunction const & TA, 
-					std::vector<DroneInterface::WaypointMission> const & SubregionMissions, std::vector<std::vector<int>> const & Sequences, 
-					std::vector<DroneInterface::Waypoint> const & StartPositions, MissionParameters const & MissionParams, const int NumDrones);
-
 
 	// *********************************************************************************************************************************
 	// ****************************************   GuidanceEngine Inline Functions Definitions   ****************************************
@@ -276,7 +242,17 @@ namespace Guidance {
 	
 	//Get progress string for current mission
 	inline std::string GuidanceEngine::GetMissionProgressStr(void) {
-		return "Progress info not available"s;
+		std::scoped_lock lock(m_mutex);
+		if (m_running) {
+			int numMissions         = (int) m_droneMissions.size();
+			int numStillAvailable   = (int) m_availableMissionIndices.size();
+			int numDoneOrInProgress = numMissions - numStillAvailable;
+			std::string progressStr = std::to_string(numDoneOrInProgress) + " of "s +
+			                          std::to_string(numMissions) + " sub-regions done/in progress"s;
+			return progressStr;
+		}
+		else
+			return ""s;
 	}
 
 	inline void GuidanceEngine::AbortMission(void) {

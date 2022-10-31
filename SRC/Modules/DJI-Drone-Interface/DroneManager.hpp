@@ -1,6 +1,6 @@
 //The drone interface module provides the software interface to DJI drones, connected over network sockets
 //Author: Bryan Poling
-//Copyright (c) 2021 Sentek Systems, LLC. All rights reserved. 
+//Copyright (c) 2021 Sentek Systems, LLC. All rights reserved.
 #pragma once
 
 //System Includes
@@ -16,7 +16,7 @@
 #include "../GNSS-Receiver/GNSSReceiver.hpp"
 
 namespace DroneInterface {
-	//The DroneManager is a singleton class; it provides the main drone interface to other software components
+	//The DroneManager is a singleton class; it provides the main drone interface to other software components.
 	//Drones are identified by their serial numbers. A vector of serial numbers for currently connected drones
 	//can be retrieved by the drone manager and individual drones can be accessed by serial number. Once a drone
 	//object is created for a drone with a specific serial, the drone object should remain in existence for the
@@ -71,6 +71,7 @@ namespace DroneInterface {
 					size_t n = 0U;
 					while (n < m_droneRealHoldingPool.size()) {
 						RealDrone * drone = m_droneRealHoldingPool[n];
+						std::string serial = drone->GetDroneSerial();
 						if (drone->IsDead()) {
 							//This drone has taken possession of an existing drone - we can delete this object
 							std::cerr << "Drone in holding pool has taken possession of existing drone. Destroying dead drone.\r\n";
@@ -81,8 +82,8 @@ namespace DroneInterface {
 							//See if there is an existing object with the same serial number to merge with
 							RealDrone * mergeTarget = nullptr;
 							for (RealDrone * existingDrone : m_droneRealVector) {
-								if (existingDrone->GetDroneSerial() == drone->GetDroneSerial()) {
-									std::cerr << "Target for possession set for drone in holding pool.\r\n";
+								if (existingDrone->GetDroneSerial() == serial) {
+									std::cerr << "Target for possession set for drone with serial " << serial << " in holding pool.\r\n";
 									mergeTarget = existingDrone;
 									break;
 								}
@@ -94,7 +95,7 @@ namespace DroneInterface {
 							}
 							else {
 								//There is no existing drone with the same serial number as the new drone
-								std::cerr << "No existing drone with serial " << drone->GetDroneSerial() << ". Moving drone from holding pool.\r\n";
+								std::cerr << "No existing drone with serial " << serial << ". Moving drone from holding pool.\r\n";
 								m_droneRealVector.push_back(drone);
 								m_droneRealHoldingPool.erase(m_droneRealHoldingPool.begin() + n);
 							}

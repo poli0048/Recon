@@ -266,8 +266,8 @@ int main(int argc, const char * argv[]) {
 	std::filesystem::path UserDataFolderPath = Handy::Paths::ThisExecutableDirectory();
 	std::filesystem::path CacheFolderPath    = Handy::Paths::CacheDirectory("SentekRecon");
 	
-	//Create a journal file - overwrite mode. This is to help debug crashes.
-	Journal log(UserDataFolderPath / "ReconSessionLog.txt", &(std::cerr), false);
+	//Create a journal file - append mode. This is to help debug crashes and other problems.
+	Journal log(UserDataFolderPath / "ReconSessionLog.txt", &(std::cerr), true);
 	SetupTerminalIOHighlights();
 	log.print_continued("Program Started: ");
 	

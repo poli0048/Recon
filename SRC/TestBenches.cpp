@@ -569,6 +569,7 @@ static void print_vec(std::string const & name, std::vector<int> & v) {
 }
 
 static bool TestBench7(std::string const & Arg)  {
+	std::cerr << "TestBench7 not usable after Guidance Module rework.\r\n";
 	// Ctrl + Click to copy coordinates to clipboard
 	// ./BIN/Recon -t 7 to run the test
 
@@ -577,7 +578,7 @@ static bool TestBench7(std::string const & Arg)  {
 	// Need to add video to Simulation-Data-Sets
 
 	// Test extend()
-	std::cout << "\n-----TEST: extend-----\n" << std::endl;
+	/*std::cout << "\n-----TEST: extend-----\n" << std::endl;
 	
 	std::vector<int> d{ 1, 2, 4, 7, 6, -1 };
 	std::vector<int> s{ 0, 3, 5, 6, 1 };
@@ -647,7 +648,7 @@ static bool TestBench7(std::string const & Arg)  {
 		}
 		std::cout << ">" << std::endl;
 	}
-	std::cout << std::endl << AllSequences.size() << " sequences found." << std::endl;
+	std::cout << std::endl << AllSequences.size() << " sequences found." << std::endl;*/
 
 	return true;
 }
