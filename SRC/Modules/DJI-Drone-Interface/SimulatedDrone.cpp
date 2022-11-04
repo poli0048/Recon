@@ -443,6 +443,86 @@ namespace DroneInterface {
 		Altitude  = m_takeoffAlt;
 		return true;
 	}
+
+	//Get a log of the most recent 100 or so received packets, their timestamps, PIDs, and hash check results
+	void SimulatedDrone::GetMostRecentPacketLog(std::vector<std::tuple<TimePoint, int, bool>> & Log, bool ReverseOrdering) {
+		Log.clear();
+		std::scoped_lock lock(m_mutex);
+		if (m_packetLog_CircBuf.empty())
+			return;
+		else
+			Log.reserve(m_packetLog_CircBuf.size());
+
+		int oldestIndex = m_packetLog_LastUsedIndex + 1;
+		if (oldestIndex >= (int) m_packetLog_CircBuf.size())
+			oldestIndex = 0;
+
+		if (ReverseOrdering) {
+			int index = m_packetLog_LastUsedIndex;
+			while (index != oldestIndex) {
+				Log.push_back(m_packetLog_CircBuf[index]);
+				index--;
+				if (index < 0)
+					index = int(m_packetLog_CircBuf.size()) - 1;
+			}
+			Log.push_back(m_packetLog_CircBuf[index]);
+		}
+		else {
+			int index = oldestIndex;
+			while (index != m_packetLog_LastUsedIndex) {
+				Log.push_back(m_packetLog_CircBuf[index]);
+				index++;
+				if (index >= (int) m_packetLog_CircBuf.size())
+					index = 0;
+			}
+			Log.push_back(m_packetLog_CircBuf[index]);
+		}
+	}
+	
+	//Get a distribution of the time delta between consecutive core and extended telemetry packets (from first connection to now)
+	//Distributions are passed back as vectors of doubles, adding to 1 (unless they are all 0), indicating the density falling
+	//within a set of consecutive bins. Bins cover 0.1 seconds, with bin 0 representing deltaTs between 0 and 0.1 seconds.
+	//Bin 1 covers deltaTs between 0.1 and 0.2 seconds, etc. The histograms are truncated at a reasonable value and any
+	//deltaTs beyond the last bin are coalesced into the final bin.
+	void SimulatedDrone::GetTelemetryDeltaTDistributions(std::vector<double> & CoreTelemDist, std::vector<double> & ExtendedTelemDist) {
+		std::scoped_lock lock(m_mutex);
+		if (CoreTelemDist.size() != m_deltaTDist_coreTelem.size())
+			CoreTelemDist = std::vector<double>(m_deltaTDist_coreTelem.size(), 0.0);
+		if (ExtendedTelemDist.size() != m_deltaTDist_extendedTelem.size())
+			ExtendedTelemDist = std::vector<double>(m_deltaTDist_extendedTelem.size(), 0.0);
+
+		int64_t sampleCount = 0;
+		for (int tally : m_deltaTDist_coreTelem)
+			sampleCount += tally;
+		if (sampleCount > 0) {
+			for (size_t n = 0U; n < m_deltaTDist_coreTelem.size(); n++)
+				CoreTelemDist[n] = double(m_deltaTDist_coreTelem[n])/double(sampleCount);
+		}
+
+		sampleCount = 0;
+		for (int tally : m_deltaTDist_extendedTelem)
+			sampleCount += tally;
+		if (sampleCount > 0) {
+			for (size_t n = 0U; n < m_deltaTDist_extendedTelem.size(); n++)
+				ExtendedTelemDist[n] = double(m_deltaTDist_extendedTelem[n])/double(sampleCount);
+		}
+	}
+
+	//m_mutex should be locked externally
+	void SimulatedDrone::AddReceivedPacketToLog(TimePoint const & T, int PID, bool DecodeSuccess) {
+		if (m_packetLog_CircBuf.size() < 300U) {
+			//Grow buffer - don't go into circular mode yet
+			m_packetLog_LastUsedIndex = (int) m_packetLog_CircBuf.size();
+			m_packetLog_CircBuf.push_back(std::make_tuple(T, PID, DecodeSuccess));
+		}
+		else {
+			//Buffer is full - go into circular mode
+			m_packetLog_LastUsedIndex++;
+			if (m_packetLog_LastUsedIndex >= (int) m_packetLog_CircBuf.size())
+				m_packetLog_LastUsedIndex = 0;
+			m_packetLog_CircBuf[m_packetLog_LastUsedIndex] = std::make_tuple(T, PID, DecodeSuccess);
+		}
+	}
 	
 	//True: Imagery will be provided at close-to-real-time rate. False: Imagery is provided as fast as possible
 	void SimulatedDrone::SetRealTime(bool Realtime) {
@@ -485,6 +565,20 @@ namespace DroneInterface {
 		while (! m_abort) {
 			m_mutex.lock();
 			
+			//Simulate the receiving of telemetry packets from the drone
+			AddReceivedPacketToLog(std::chrono::steady_clock::now(), 0, true); //Core telemetry packet
+			AddReceivedPacketToLog(std::chrono::steady_clock::now(), 1, true); //Extended telemetry packet
+			{
+				double deltaT = SecondsElapsed(m_LastPoseUpdate, std::chrono::steady_clock::now());
+				if (m_deltaTDist_coreTelem.size() < 50U)
+					m_deltaTDist_coreTelem = std::vector<int>(50U, 0);
+				if (m_deltaTDist_extendedTelem.size() < 50U)
+					m_deltaTDist_extendedTelem = std::vector<int>(50U, 0);
+				int histBin = (int) std::clamp(std::floor(deltaT*10.0), 0.0, 49.0);
+				m_deltaTDist_coreTelem[histBin]++;
+				m_deltaTDist_extendedTelem[histBin]++;
+			}
+
 			//Update the drones position and orientation based on current mode, state, and objective
 			UpdateDronePose();
 			
@@ -513,6 +607,7 @@ namespace DroneInterface {
 					m_NextFrameMutex.unlock();
 					m_FrameNumber++;
 					m_FrameTimestamp = std::chrono::steady_clock::now();
+					AddReceivedPacketToLog(m_FrameTimestamp, 5, true); //Compressed Image packet
 					for (auto const & kv : m_ImageryCallbacks)
 						kv.second(m_Frame, m_FrameTimestamp);
 				}
@@ -658,7 +753,7 @@ namespace DroneInterface {
 		Eigen::Matrix3d C_ECEF_ENU = latLon_2_C_ECEF_ENU(m_Lat, m_Lon);
 		Eigen::Matrix3d C_ENU_ECEF = C_ECEF_ENU.transpose();
 		TimePoint now = std::chrono::steady_clock::now();
-		double deltaT = SecondsElapsed(m_LastPoseUpdate, now); 
+		double deltaT = SecondsElapsed(m_LastPoseUpdate, now);
 		m_LastPoseUpdate = now;
 		
 		//Update drone battery level

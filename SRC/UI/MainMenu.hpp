@@ -23,6 +23,7 @@
 #include "../Modules/Shadow-Propagation/ShadowPropagation.hpp"
 #include "GNSSReceiverWindow.hpp"
 #include "LiveFiducialsWidget.hpp"
+#include "DJICommLinkAnalysisWindow.hpp"
 
 class MainMenu {
 	public:
@@ -74,11 +75,21 @@ inline void MainMenu::Draw() {
 				ImGui::SameLine();
 				ImGui::SetCursorPosX(cursorX + 16.0f*ImGui::GetFontSize());
 				ImGui::TextUnformatted("\xef\x9e\xbf");
-				ImGui::Separator();
 			}
-			
-			//if (ImGui::MenuItem("Show GNSS Receiver Window"))
-			//	GNSSReceiverWindow::Instance().Visible = true;
+
+			{
+				float cursorX = ImGui::GetCursorPosX();
+				float selectableWidth = 16.0f*ImGui::GetFontSize() + ImGui::CalcTextSize("\uf6ff").x;
+				if (ImGui::Selectable("Show DJI Comm Link Analysis Tool", false, 0, ImVec2(selectableWidth,0))) {
+					DJICommLinkAnalysisWindow::Instance().Visible = true;
+					ImExt::Window::FocusWindow("DJI Comm Link Analysis Tool");
+				}
+				ImGui::SameLine();
+				ImGui::SetCursorPosX(cursorX + 16.0f*ImGui::GetFontSize());
+				ImGui::TextUnformatted("\uf6ff");
+			}
+
+			ImGui::Separator();
 			
 			if (ImGui::MenuItem("Show/Hide Demo Window"))
 				ReconUI::Instance().show_demo_window = ! ReconUI::Instance().show_demo_window;

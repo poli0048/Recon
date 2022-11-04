@@ -3,6 +3,7 @@
 #include <condition_variable>
 #include <iostream>
 #include <mutex>
+#include <algorithm>
 
 // C Includes
 #include <signal.h>
@@ -45,8 +46,7 @@ namespace DroneInterface {
 		m_isConnected = false;
 	}
 	
-	void RealDrone::LoadTestWaypointMission(WaypointMission & testMission){
-
+	void RealDrone::LoadTestWaypointMission(WaypointMission & testMission) {
 	    testMission.Waypoints.clear();
 	    testMission.Waypoints.emplace_back();
 	    testMission.Waypoints.back().Latitude     =  44.237308 * PI/180.0; // radians
@@ -296,6 +296,86 @@ namespace DroneInterface {
 		else
 			return false;
 	}
+
+	//Get a log of the most recent packets, their types, and whether they were decoded successfully or not
+	void RealDrone::GetMostRecentPacketLog(std::vector<std::tuple<TimePoint, int, bool>> & Log, bool ReverseOrdering) {
+		Log.clear();
+		std::scoped_lock lock(m_mutex_B);
+		if (m_packetLog_CircBuf.empty())
+			return;
+		else
+			Log.reserve(m_packetLog_CircBuf.size());
+
+		int oldestIndex = m_packetLog_LastUsedIndex + 1;
+		if (oldestIndex >= (int) m_packetLog_CircBuf.size())
+			oldestIndex = 0;
+
+		if (ReverseOrdering) {
+			int index = m_packetLog_LastUsedIndex;
+			while (index != oldestIndex) {
+				Log.push_back(m_packetLog_CircBuf[index]);
+				index--;
+				if (index < 0)
+					index = int(m_packetLog_CircBuf.size()) - 1;
+			}
+			Log.push_back(m_packetLog_CircBuf[index]);
+		}
+		else {
+			int index = oldestIndex;
+			while (index != m_packetLog_LastUsedIndex) {
+				Log.push_back(m_packetLog_CircBuf[index]);
+				index++;
+				if (index >= (int) m_packetLog_CircBuf.size())
+					index = 0;
+			}
+			Log.push_back(m_packetLog_CircBuf[index]);
+		}
+	}
+
+	//Get a distribution of the time delta between consecutive core and extended telemetry packets (from first connection to now)
+	//Distributions are passed back as vectors of doubles, adding to 1 (unless they are all 0), indicating the density falling
+	//within a set of consecutive bins. Bins cover 0.1 seconds, with bin 0 representing deltaTs between 0 and 0.1 seconds.
+	//Bin 1 covers deltaTs between 0.1 and 0.2 seconds, etc. The histograms are truncated at a reasonable value and any
+	//deltaTs beyond the last bin are coalesced into the final bin.
+	void RealDrone::GetTelemetryDeltaTDistributions(std::vector<double> & CoreTelemDist, std::vector<double> & ExtendedTelemDist) {
+		std::scoped_lock lock(m_mutex_B);
+		if (CoreTelemDist.size() != m_deltaTDist_coreTelem.size())
+			CoreTelemDist = std::vector<double>(m_deltaTDist_coreTelem.size(), 0.0);
+		if (ExtendedTelemDist.size() != m_deltaTDist_extendedTelem.size())
+			ExtendedTelemDist = std::vector<double>(m_deltaTDist_extendedTelem.size(), 0.0);
+
+		int64_t sampleCount = 0;
+		for (int tally : m_deltaTDist_coreTelem)
+			sampleCount += tally;
+		if (sampleCount > 0) {
+			for (size_t n = 0U; n < m_deltaTDist_coreTelem.size(); n++)
+				CoreTelemDist[n] = double(m_deltaTDist_coreTelem[n])/double(sampleCount);
+		}
+
+		sampleCount = 0;
+		for (int tally : m_deltaTDist_extendedTelem)
+			sampleCount += tally;
+		if (sampleCount > 0) {
+			for (size_t n = 0U; n < m_deltaTDist_extendedTelem.size(); n++)
+				ExtendedTelemDist[n] = double(m_deltaTDist_extendedTelem[n])/double(sampleCount);
+		}
+	}
+
+	//m_mutex_B should be locked externally
+	void RealDrone::AddReceivedPacketToLog(TimePoint const & T, int PID, bool DecodeSuccess) {
+		if (m_packetLog_CircBuf.size() < 300U) {
+			//Grow buffer - don't go into circular mode yet
+			m_packetLog_LastUsedIndex = (int) m_packetLog_CircBuf.size();
+			m_packetLog_CircBuf.push_back(std::make_tuple(T, PID, DecodeSuccess));
+		}
+		else {
+			//Buffer is full - go into circular mode
+			m_packetLog_LastUsedIndex++;
+			if (m_packetLog_LastUsedIndex >= (int) m_packetLog_CircBuf.size())
+				m_packetLog_LastUsedIndex = 0;
+			m_packetLog_CircBuf[m_packetLog_LastUsedIndex] = std::make_tuple(T, PID, DecodeSuccess);
+		}
+	}
 	
 	bool RealDrone::ProcessFullReceivedPacket(void) {
 		uint8_t PID;
@@ -316,13 +396,23 @@ namespace DroneInterface {
 					}
 
 					//std::cout << this->m_packet_ct;
+					if (this->m_packet_ct_received) {
+						//Before updating our core telemetry data and timestamp, record the deltaT from the last packet
+						if (m_deltaTDist_coreTelem.size() < 50U)
+							m_deltaTDist_coreTelem = std::vector<int>(50U, 0);
+						double deltaT = SecondsElapsed(this->m_PacketTimestamp_ct);
+						int histBin = (int) std::clamp(std::floor(deltaT*10.0), 0.0, 49.0);
+						m_deltaTDist_coreTelem[histBin]++;
+					}
 					this->m_packet_ct_received = true;
 					this->m_PacketTimestamp_ct = std::chrono::steady_clock::now();
+					AddReceivedPacketToLog(this->m_PacketTimestamp_ct, (int) PID, true);
 					m_mutex_B.unlock();
 					return true;
 				}
 				else {
 					std::cerr << "Error: Tried to deserialize invalid Core Telemetry packet." << std::endl;
+					AddReceivedPacketToLog(std::chrono::steady_clock::now(), (int) PID, false);
 					m_mutex_B.unlock();
 					return false;
 				}
@@ -331,12 +421,22 @@ namespace DroneInterface {
 				std::scoped_lock lock(m_mutex_B);
 				if (this->m_packet_et.Deserialize(*m_packet_fragment)) {
 					//std::cout << this->m_packet_et;
+					if (this->m_packet_et_received) {
+						//Before updating our extended telemetry data and timestamp, record the deltaT from the last packet
+						if (m_deltaTDist_extendedTelem.size() < 50U)
+							m_deltaTDist_extendedTelem = std::vector<int>(50U, 0);
+						double deltaT = SecondsElapsed(this->m_PacketTimestamp_et);
+						int histBin = (int) std::clamp(std::floor(deltaT*10.0), 0.0, 49.0);
+						m_deltaTDist_extendedTelem[histBin]++;
+					}
 					this->m_packet_et_received = true;
 					this->m_PacketTimestamp_et = std::chrono::steady_clock::now();
+					AddReceivedPacketToLog(this->m_PacketTimestamp_et, (int) PID, true);
 					return true;
 				}
 				else {
 					std::cerr << "Error: Tried to deserialize invalid Extended Telemetry packet." << std::endl;
+					AddReceivedPacketToLog(std::chrono::steady_clock::now(), (int) PID, false);
 					return false;
 				}
 			}
@@ -349,15 +449,21 @@ namespace DroneInterface {
 					AddImageTimestampToLogAndFPSReport(this->m_PacketTimestamp_imagery);
 					for (auto const & kv : m_ImageryCallbacks)
 						kv.second(m_MostRecentFrame, m_PacketTimestamp_imagery);
+					AddReceivedPacketToLog(this->m_PacketTimestamp_imagery, (int) PID, true);
 					return true;
 				}
 				else {
+					std::scoped_lock lock(m_mutex_B);
 					std::cerr << "Error: Tried to deserialize invalid Image packet." << std::endl;
+					AddReceivedPacketToLog(std::chrono::steady_clock::now(), (int) PID, false);
 					return false;
 				}
 			}
 			case 3U: {
 				if (this->m_packet_ack.Deserialize(*m_packet_fragment)) {
+					m_mutex_B.lock();
+					AddReceivedPacketToLog(std::chrono::steady_clock::now(), (int) PID, true);
+					m_mutex_B.unlock();
 					if ((this->m_packet_ack.Positive == uint8_t(1)) && (this->m_packet_ack.SourcePID == uint8_t(252)))
 						return true; //Don't spam terminal with positive acks from virtualStick commands
 					else {
@@ -366,17 +472,23 @@ namespace DroneInterface {
 					}
 				}
 				else {
+					std::scoped_lock lock(m_mutex_B);
 					std::cerr << "Error: Tried to deserialize invalid Acknowledgment packet." << std::endl;
+					AddReceivedPacketToLog(std::chrono::steady_clock::now(), (int) PID, false);
 					return false;
 				}
 			}
 			case 4U: {
 				if (this->m_packet_ms.Deserialize(*m_packet_fragment)) {
+					std::scoped_lock lock(m_mutex_B);
 					std::cout << this->m_packet_ms;
+					AddReceivedPacketToLog(std::chrono::steady_clock::now(), (int) PID, true);
 					return true;
 				}
 				else {
+					std::scoped_lock lock(m_mutex_B);
 					std::cerr << "Error: Tried to deserialize invalid Message String packet." << std::endl;
+					AddReceivedPacketToLog(std::chrono::steady_clock::now(), (int) PID, false);
 					return false;
 				}
 			}
@@ -389,15 +501,20 @@ namespace DroneInterface {
 					AddImageTimestampToLogAndFPSReport(this->m_PacketTimestamp_imagery);
 					for (auto const & kv : m_ImageryCallbacks)
 						kv.second(m_MostRecentFrame, m_PacketTimestamp_imagery);
+					AddReceivedPacketToLog(this->m_PacketTimestamp_imagery, (int) PID, true);
 					return true;
 				}
 				else {
+					std::scoped_lock lock(m_mutex_B);
 					std::cerr << "Error: Tried to deserialize invalid Compressed Image packet." << std::endl;
+					AddReceivedPacketToLog(std::chrono::steady_clock::now(), (int) PID, false);
 					return false;
 				}
 			}
 			default: {
+				std::scoped_lock lock(m_mutex_B);
 				std::cerr << "Error: Unrecognized PID - failed to decode packet from drone." << std::endl;
+				AddReceivedPacketToLog(std::chrono::steady_clock::now(), -1, false);
 				return false;
 			}
 		}
@@ -650,7 +767,7 @@ namespace DroneInterface {
 		SanitizeMissionForRealDrone(sanitizedMission);
 
 		//Debug
-		std::cerr << "ExecuteWaypointMission on mission:\r\n" << Mission << "\r\n";
+		std::cerr << "ExecuteWaypointMission on mission:\r\n" << sanitizedMission << "\r\n";
 
 		m_mutex_B.lock();
 		m_currentWaypointMission = sanitizedMission;
@@ -747,7 +864,8 @@ namespace DroneInterface {
 	//This function will nudge or remove redundant waypoints to try and get a mission as close as possible to the requested one that
 	//the flight controller will (hopefully) not reject.
 	//Technically the drone interface iOS App is responsible for sanitizing missions when needed, but it currently doesn't do much in
-	//this regard and doing what we can server-side allows us to get more feedback about what's going on.
+	//this regard and doing what we can server-side allows us to get more feedback about what's going on. Additionally, if the mission has
+	//rounded corners, we must sanitize the corner radii to meet various rules.
 	void RealDrone::SanitizeMissionForRealDrone(WaypointMission & Mission) {
 		//Set a minimum waypoint separation (in meters). This should be greater than 0.5, since we don't know if the flight controller
 		//estimates distance the same way that we do.
@@ -817,6 +935,27 @@ namespace DroneInterface {
 				std::cerr << waypointDeletions << " waypoints deleted due to redundancy.\r\n";
 			if (waypointAdjustments > 0)
 				std::cerr << waypointAdjustments << " waypoints nudged to respect min separation requirement.\r\n";
+		}
+
+		if (Mission.CurvedTrajectory) {
+			//Make sure the corner radii meet DJI rules. In particular, the first and last waypoints must have radii set to 0.2 m.
+			//All other waypoints must satisfy that for 2 consecutive waypoints A and B, with corner radii RA, RB, RA + RB < dist(A, B).
+			for (size_t n = 0U; n < Mission.Waypoints.size(); n++) {
+				if ((n == 0U) || (n + 1U == Mission.Waypoints.size()))
+					Mission.Waypoints[n].CornerRadius = 0.2;
+				else {
+					//This is an interior waypoint. Make sure the radii is less than half the distance to the previous and less than
+					//half the distance to the next waypoint. This will ensure that RA + RB < dist(A, B) for all consecutive A and B.
+					Waypoint & WPA(Mission.Waypoints[n - 1U]);
+					Waypoint & WPB(Mission.Waypoints[n]);
+					Waypoint & WPC(Mission.Waypoints[n + 1U]);
+
+					double distAB = DistBetweenWaypoints3D(WPA, WPB);
+					double distBC = DistBetweenWaypoints3D(WPB, WPC);
+					double maxCornerRadius = std::clamp(std::min(distAB, distBC)/2.0 - 0.1, 0.2, 1000.0);
+					Mission.Waypoints[n].CornerRadius = std::clamp(Mission.Waypoints[n].CornerRadius, 0.2f, (float) maxCornerRadius);
+				}
+			}
 		}
 	}
 	

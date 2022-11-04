@@ -22,6 +22,7 @@
 #include "SimFiducialsWidget.hpp"
 #include "LiveFiducialsWidget.hpp"
 #include "GNSSReceiverWindow.hpp"
+#include "DJICommLinkAnalysisWindow.hpp"
 #include "../Utilities.hpp"
 
 #define PI 3.14159265358979
@@ -126,6 +127,7 @@ void ReconUI::Draw() {
 	SimFiducialsWidget::Instance().Draw();
 	LiveFiducialsWidget::Instance().Draw();
 	GNSSReceiverWindow::Instance().Draw();
+	DJICommLinkAnalysisWindow::Instance().Draw();
 	
 	//Draw secondary non-singleton windows
 	DrawChildren();

@@ -87,6 +87,17 @@ namespace DroneInterface {
         
         //Dev and Testing Methods
         virtual void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG) = 0;
+
+        //Diagnostic tools
+		//Get a log of the most recent 100 or so received packets, their timestamps, PIDs, and hash check results
+		virtual void GetMostRecentPacketLog(std::vector<std::tuple<TimePoint, int, bool>> & Log, bool ReverseOrdering = false) = 0;
+		
+		//Get a distribution of the time delta between consecutive core and extended telemetry packets (from first connection to now)
+		//Distributions are passed back as vectors of doubles, adding to 1 (unless they are all 0), indicating the density falling
+		//within a set of consecutive bins. Bins cover 0.1 seconds, with bin 0 representing deltaTs between 0 and 0.1 seconds.
+		//Bin 1 covers deltaTs between 0.1 and 0.2 seconds, etc. The histograms are truncated at a reasonable value and any
+		//deltaTs beyond the last bin are coalesced into the final bin.
+		virtual void GetTelemetryDeltaTDistributions(std::vector<double> & CoreTelemDist, std::vector<double> & ExtendedTelemDist) = 0;
     };
 
 	//The RealDrone class provides an interface to interact with a single real drone
@@ -135,13 +146,24 @@ namespace DroneInterface {
 		//Dev and Testing Methods
 		void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG) override;
 
-		//RealDrone-specific methods
+		//Diagnostic tools
+		//Get a log of the most recent 100 or so received packets, their timestamps, PIDs, and hash check results
+		void GetMostRecentPacketLog(std::vector<std::tuple<TimePoint, int, bool>> & Log, bool ReverseOrdering = false) override;
+		
+		//Get a distribution of the time delta between consecutive core and extended telemetry packets (from first connection to now)
+		//Distributions are passed back as vectors of doubles, adding to 1 (unless they are all 0), indicating the density falling
+		//within a set of consecutive bins. Bins cover 0.1 seconds, with bin 0 representing deltaTs between 0 and 0.1 seconds.
+		//Bin 1 covers deltaTs between 0.1 and 0.2 seconds, etc. The histograms are truncated at a reasonable value and any
+		//deltaTs beyond the last bin are coalesced into the final bin.
+		void GetTelemetryDeltaTDistributions(std::vector<double> & CoreTelemDist, std::vector<double> & ExtendedTelemDist) override;
+
+		//RealDrone-specific methods   **************************************************************************************************
 		void DisconnectHandler(void);
 		void DataReceivedHandler(const std::shared_ptr<tacopie::tcp_client>& client, const tacopie::tcp_client::read_result& res);
 		void Possess(RealDrone * Target); //Transfer state to another RealDrone Object on the next opportunity, leaving this object dead
 		bool IsDead(void); //Returns true if state has been transferred to another object. Can safely be destroyed if dead.
 
-		// test functions
+		//Test functions
 		void LoadTestWaypointMission(WaypointMission & testMission);
 		void SendTestVirtualStickPacketA();
 		void SendTestVirtualStickPacketB();
@@ -158,6 +180,8 @@ namespace DroneInterface {
 		bool ProcessFullReceivedPacket(void); //Process a full packet. Returns true on success and false on failure (likily hash check fail)
 		void AddImageTimestampToLogAndFPSReport(TimePoint Timestamp);
 		bool TransferStateToTargetObject(void); //Used for possession
+
+		void AddReceivedPacketToLog(TimePoint const & T, int PID, bool DecodeSuccess); //m_mutex_B should be locked externally
 		
 		//Note: There are two mutexes in this class, protecting resources in two groups. To avoid deadlocks, it is critical that whenever both
 		//locks are needed at the same time, they be locked in a single call to lock(), through the construction of a single scoped_lock, or they
@@ -187,6 +211,10 @@ namespace DroneInterface {
 		RealDrone *              m_possessionTarget = nullptr; //Nullptr if no possession requested
 		bool                     m_isDead = false; //Set to true after possessing another object. Can be destroyed safely.
 		WaypointMission          m_currentWaypointMission;
+		std::vector<std::tuple<TimePoint, int, bool>> m_packetLog_CircBuf;            //(timestamp, PID, packetGood). PID = -1 for invalid PID
+		int                                           m_packetLog_LastUsedIndex = -1; //Last index written to
+		std::vector<int>                              m_deltaTDist_coreTelem;         //Dist of deltaTs for core telemetry packets
+		std::vector<int>                              m_deltaTDist_extendedTelem;     //Dist of deltaTs for extended telemetry packets
 		
 		std::atomic<bool> m_isConnected;
 		
@@ -248,7 +276,18 @@ namespace DroneInterface {
 			//Dev and Testing Methods
 			void StartSampleWaypointMission(int NumWaypoints, bool CurvedTrajectories, bool LandAtEnd, Eigen::Vector2d const & StartOffset_EN, double HAG) override;
 
-			//SimulatedDrone-specific methods
+			//Diagnostic tools
+			//Get a log of the most recent 100 or so received packets, their timestamps, PIDs, and hash check results
+			void GetMostRecentPacketLog(std::vector<std::tuple<TimePoint, int, bool>> & Log, bool ReverseOrdering = false) override;
+			
+			//Get a distribution of the time delta between consecutive core and extended telemetry packets (from first connection to now)
+			//Distributions are passed back as vectors of doubles, adding to 1 (unless they are all 0), indicating the density falling
+			//within a set of consecutive bins. Bins cover 0.1 seconds, with bin 0 representing deltaTs between 0 and 0.1 seconds.
+			//Bin 1 covers deltaTs between 0.1 and 0.2 seconds, etc. The histograms are truncated at a reasonable value and any
+			//deltaTs beyond the last bin are coalesced into the final bin.
+			void GetTelemetryDeltaTDistributions(std::vector<double> & CoreTelemDist, std::vector<double> & ExtendedTelemDist) override;
+
+			//SimulatedDrone-specific methods   *****************************************************************************************
 			void SetRealTime(bool Realtime); //True: Imagery will be provided at close-to-real-time rate. False: Imagery is provided as fast as possible
 			void SetSourceVideoFile(std::filesystem::path const & VideoPath); //Should be set before calling StartDJICamImageFeed()
 			std::filesystem::path GetSourceVideoFile(void);
@@ -307,6 +346,12 @@ namespace DroneInterface {
 			int m_flightMode_LastPass = 0;       //State on last call to UpdateDronePose()
 			WaypointMission m_LastMission;       //A copy of the last waypoint mission uploaded to the drone
 
+			//Simulated comm link timing data - updated in main loop
+			std::vector<std::tuple<TimePoint, int, bool>> m_packetLog_CircBuf;            //(timestamp, PID, packetGood). PID = -1 for invalid PID
+			int                                           m_packetLog_LastUsedIndex = -1; //Last index written to
+			std::vector<int>                              m_deltaTDist_coreTelem;         //Dist of deltaTs for core telemetry packets
+			std::vector<int>                              m_deltaTDist_extendedTelem;     //Dist of deltaTs for extended telemetry packets
+
 			void   DroneMain(void);
 			void   UpdateDronePose(void);
 			void   UpdateDrone2DPositionBasedOnVelocity(double deltaT, Eigen::Matrix3d const & C_ENU_ECEF);
@@ -315,6 +360,7 @@ namespace DroneInterface {
 			void   Update2DVelocityBasedOnTarget(double deltaT, Eigen::Vector2d const & V_Target_EN, double max2DAcc, double max2DDec, double max2DSpeed);
 			void   ComputeTarget2DVelocityBasedOnTargetPosAndSpeed(double TargetLat, double TargetLon, double TargetMoveSpeed,
 			                                                       Eigen::Vector2d & V_Target_EN, Eigen::Matrix3d const & C_ECEF_ENU);
+			void   AddReceivedPacketToLog(TimePoint const & T, int PID, bool DecodeSuccess);
 	};
 
 }
