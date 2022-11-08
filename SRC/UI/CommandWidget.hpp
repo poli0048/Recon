@@ -94,12 +94,12 @@ class CommandWidget {
 		std::vector<bool> m_useDroneFlags;
 
 		//Imaging Parameters and Mission Settings
-		float m_missionHAG_Feet = 150.0f;
-		float m_missionSpeed_mph = 33.6f;
-		float m_missionSidelapPercentage = 75.0f;
+		float m_missionHAG_Feet = 200.0f;
+		float m_missionSpeed_mph = 14.8f;
+		float m_missionSidelapPercentage = 80.0f;
 		float m_missionLowFlierHFOV_Deg = 35.0f;
 
-		float m_StaggerInterval_Feet = 10.0f;       //Feet between drone flight planes
+		float m_StaggerInterval_Feet = 15.0f;       //Feet between drone flight planes
 		float m_SubRegionTargetFlightTime = 100.0f; //Subregion size - Num seconds it takes to fly sub-region
 		float m_TakeoffStaggerInterval = 15.0f;     //Seconds between successive takeoff events for drones on ground at start of mission (s)
 		

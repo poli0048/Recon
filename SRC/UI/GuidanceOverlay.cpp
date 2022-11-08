@@ -73,8 +73,10 @@ Eigen::Vector2d GetCentroid(std::Evector<Eigen::Vector2d> const & points) {
 
 //If CenteredLabels is true, labels are centered in the first polygon component of each item in the partition. If false,
 //labels are drawn underneath the first polygon component.
+//If HideComponentsMarketComplete is true, hide sub-regions listed in m_CompletedSubRegions. Otherwise, draw all components
 void GuidanceOverlay::Draw_Partition(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds,
-                                     std::vector<ImU32> const & Colors, std::vector<std::string> const & Labels, bool CenteredLabels) const {
+                                     std::vector<ImU32> const & Colors, std::vector<std::string> const & Labels, bool CenteredLabels,
+                                     bool HideComponentsMarketComplete) const {
 	float opacity = VisWidget::Instance().Opacity_GuidanceOverlay; //Opacity for overlay (0-100)
 	if ((! m_SurveyRegionPartitionTriangulation.empty()) && (opacity > 0.0f)) {
 		//Render triangles (the interiors of each component)
@@ -84,42 +86,50 @@ void GuidanceOverlay::Draw_Partition(Eigen::Vector2d const & CursorPos_NM, ImDra
 			//Get a good color to render this component in
 			//ImU32 compColor = IndexToColor(compIndex, m_SurveyRegionPartitionTriangulation.size(), opacity/100.0f);
 			
-			auto prevFlags = DrawList->Flags;
-			DrawList->Flags = (DrawList->Flags & (~ImDrawListFlags_AntiAliasedFill)); //Disable anti-aliasing to prevent seams along triangle edges
-			for (Triangle const & triangle : compTriangulation) {
-				Eigen::Vector2d pointA_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointA);
-				Eigen::Vector2d pointB_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointB);
-				Eigen::Vector2d pointC_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointC);
-				DrawList->AddTriangleFilled(pointA_ScreenSpace, pointB_ScreenSpace, pointC_ScreenSpace, Colors[compIndex]);
+			bool drawComp = ((! HideComponentsMarketComplete) || (m_CompletedSubRegions.count((int) compIndex) == 0U));
+			if (drawComp) {
+				auto prevFlags = DrawList->Flags;
+				DrawList->Flags = (DrawList->Flags & (~ImDrawListFlags_AntiAliasedFill)); //Disable anti-aliasing to prevent seams along triangle edges
+				for (Triangle const & triangle : compTriangulation) {
+					Eigen::Vector2d pointA_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointA);
+					Eigen::Vector2d pointB_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointB);
+					Eigen::Vector2d pointC_ScreenSpace = MapWidget::Instance().NormalizedMercatorToScreenCoords(triangle.m_pointC);
+					DrawList->AddTriangleFilled(pointA_ScreenSpace, pointB_ScreenSpace, pointC_ScreenSpace, Colors[compIndex]);
+				}
+				DrawList->Flags = prevFlags; //Restore previous flags (restore previous anti-aliasing state)
 			}
-			DrawList->Flags = prevFlags; //Restore previous flags (restore previous anti-aliasing state)
 		}
 		
 		//After rendering the interiors of all components, render their boundaries
 		float edgeThickness_pixels = VisWidget::Instance().SurveyRegionEdgeThickness; //Just use the edge thickness for survey regions for now
 		std::Evector<std::Evector<Eigen::Vector2d>> compVertices_SS;
 		compVertices_SS.reserve(m_SurveyRegionPartition.size());
-		for (PolygonCollection const & polyCollection : m_SurveyRegionPartition) {
-			for (Polygon const & poly : polyCollection.m_components) {
-				std::vector<SimplePolygon const *> simplePolys;
-				simplePolys.reserve(1U + poly.m_holes.size());
-				simplePolys.push_back(&(poly.m_boundary));
-				for (SimplePolygon const & simplePoly : poly.m_holes)
-					simplePolys.push_back(& simplePoly);
-				
-				//Draw each simple poly
-				for (SimplePolygon const * simplePoly : simplePolys) {
-					std::Evector<Eigen::Vector2d> const & Vertices_NM(simplePoly->GetVertices());
-					std::Evector<Eigen::Vector2d> Vertices_SS;
-					Vertices_SS.reserve(Vertices_NM.size());
+		for (size_t compIndex = 0U; compIndex < m_SurveyRegionPartition.size(); compIndex++) {
+			PolygonCollection const & polyCollection(m_SurveyRegionPartition[compIndex]);
+			
+			bool drawComp = ((! HideComponentsMarketComplete) || (m_CompletedSubRegions.count((int) compIndex) == 0U));
+			if (drawComp) {
+				for (Polygon const & poly : polyCollection.m_components) {
+					std::vector<SimplePolygon const *> simplePolys;
+					simplePolys.reserve(1U + poly.m_holes.size());
+					simplePolys.push_back(&(poly.m_boundary));
+					for (SimplePolygon const & simplePoly : poly.m_holes)
+						simplePolys.push_back(& simplePoly);
 					
-					for (auto const & Vertex_NM : Vertices_NM)
-						Vertices_SS.push_back(MapWidget::Instance().NormalizedMercatorToScreenCoords(Vertex_NM));
-					
-					for (int index = 0; index < int(Vertices_SS.size()); index++) {
-						Eigen::Vector2d p1 = Vertices_SS[index];
-						Eigen::Vector2d p2 = (index + 1 == int(Vertices_SS.size())) ? Vertices_SS[0] : Vertices_SS[index + 1];
-						DrawList->AddLine(p1, p2, IM_COL32(0, 0, 0, 255.0f*opacity/100.0f), edgeThickness_pixels);
+					//Draw each simple poly
+					for (SimplePolygon const * simplePoly : simplePolys) {
+						std::Evector<Eigen::Vector2d> const & Vertices_NM(simplePoly->GetVertices());
+						std::Evector<Eigen::Vector2d> Vertices_SS;
+						Vertices_SS.reserve(Vertices_NM.size());
+						
+						for (auto const & Vertex_NM : Vertices_NM)
+							Vertices_SS.push_back(MapWidget::Instance().NormalizedMercatorToScreenCoords(Vertex_NM));
+						
+						for (int index = 0; index < int(Vertices_SS.size()); index++) {
+							Eigen::Vector2d p1 = Vertices_SS[index];
+							Eigen::Vector2d p2 = (index + 1 == int(Vertices_SS.size())) ? Vertices_SS[0] : Vertices_SS[index + 1];
+							DrawList->AddLine(p1, p2, IM_COL32(0, 0, 0, 255.0f*opacity/100.0f), edgeThickness_pixels);
+						}
 					}
 				}
 			}
@@ -141,6 +151,10 @@ void GuidanceOverlay::Draw_Partition(Eigen::Vector2d const & CursorPos_NM, ImDra
 			
 			std::string const & label(Labels[compIndex]);
 			if (label.empty())
+				continue;
+
+			bool drawComp = ((! HideComponentsMarketComplete) || (m_CompletedSubRegions.count((int) compIndex) == 0U));
+			if (! drawComp)
 				continue;
 
 			std::Evector<Eigen::Vector2d> const & Vertices_SS(compVertices_SS[compIndex]);
@@ -241,7 +255,7 @@ void GuidanceOverlay::GetPartColorsByTaskedDrone(std::vector<ImU32> & Colors, fl
 	Colors.resize(m_SurveyRegionPartition.size());
 	for (size_t compIndex = 0U; compIndex < m_SurveyRegionPartition.size(); compIndex++) {
 		if (TaskedDrones[compIndex] < 0)
-			Colors[compIndex] = ImGui::GetColorU32(ImVec4(0, 0, 0, 0));
+			Colors[compIndex] = ImGui::GetColorU32(ImVec4(1.0f, 0.5f, 0.2f, Opacity/200.0f));
 		else
 			Colors[compIndex] = IndexToColor((size_t) TaskedDrones[compIndex], m_Sequences.size(), Opacity/100.0f);
 	}
@@ -295,13 +309,13 @@ void GuidanceOverlay::Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDrawL
 	
 	std::scoped_lock lock(m_mutex);
 	float opacity = VisWidget::Instance().Opacity_GuidanceOverlay; //Opacity for overlay (0-100)
-	if (VisWidget::Instance().GuidanceOverlay_Vis == 0) {
+	if (VisWidget::Instance().GuidanceOverlay_View == 0) {
 		//Draw the survey region partition
 		std::vector<ImU32> colors;
 		GetPartColorsByComponent(colors, opacity);
-		Draw_Partition(CursorPos_NM, DrawList, CursorInBounds, colors, m_PartitionLabels, true);
+		Draw_Partition(CursorPos_NM, DrawList, CursorInBounds, colors, m_PartitionLabels, true, false);
 	}
-	else if (VisWidget::Instance().GuidanceOverlay_Vis == 1) {
+	else if (VisWidget::Instance().GuidanceOverlay_View == 1) {
 		//Draw the triangle collection
 		if ((! m_Triangles.empty()) && (opacity > 0.0f)) {
 			//Draw the triangle interiors
@@ -351,75 +365,51 @@ void GuidanceOverlay::Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDrawL
 			}
 		}
 	}
-	else if (VisWidget::Instance().GuidanceOverlay_Vis == 2) {
-		//Draw current plans
+	else if (VisWidget::Instance().GuidanceOverlay_View == 2) {
+		//Draw current tasking, future plans, and (optionally) planned missions
 		std::vector<int> taskedDrones(m_SurveyRegionPartition.size(), -1); //Object n is the index of the drone that will fly component n
 		std::vector<std::string> labels;
-		//std::vector<std::string> labels(m_SurveyRegionPartition.size());
 		for (int droneIndex = 0; droneIndex < (int) m_Sequences.size(); droneIndex++) {
 			for (int missionNumber = 0; missionNumber < (int) m_Sequences[droneIndex].size(); missionNumber++) {
 				int compIndex = (m_Sequences[droneIndex])[missionNumber];
-				if ((compIndex >= 0) && (compIndex < (int) m_SurveyRegionPartition.size())) {
+				if ((compIndex >= 0) && (compIndex < (int) m_SurveyRegionPartition.size()))
 					taskedDrones[compIndex] = droneIndex;
-					//if (missionNumber == 0)
-					//	labels[compIndex] = "Drone "s + std::to_string(droneIndex + 1);
-				}
 			}
 		}
 
 		std::vector<ImU32> colors;
 		GetPartColorsByTaskedDrone(colors, opacity, taskedDrones);
-		Draw_Partition(CursorPos_NM, DrawList, CursorInBounds, colors, labels, false);
-
-		//Draw visual indication of mission sequences
-		Draw_MissionSequenceArrows(CursorPos_NM, DrawList, CursorInBounds, opacity);
-	}
-	else if (VisWidget::Instance().GuidanceOverlay_Vis == 3) {
-		//Draw current plans & Missions
-		std::vector<int> taskedDrones(m_SurveyRegionPartition.size(), -1); //Object n is the index of the drone that will fly component n
-		std::vector<std::string> labels;
-		//std::vector<std::string> labels(m_SurveyRegionPartition.size());
-		for (int droneIndex = 0; droneIndex < (int) m_Sequences.size(); droneIndex++) {
-			for (int missionNumber = 0; missionNumber < (int) m_Sequences[droneIndex].size(); missionNumber++) {
-				int compIndex = (m_Sequences[droneIndex])[missionNumber];
-				if ((compIndex >= 0) && (compIndex < (int) m_SurveyRegionPartition.size())) {
-					taskedDrones[compIndex] = droneIndex;
-					//if (missionNumber == 0)
-					//	labels[compIndex] = "Drone "s + std::to_string(droneIndex + 1);
-				}
-			}
-		}
-
-		std::vector<ImU32> colors;
-		GetPartColorsByTaskedDrone(colors, opacity, taskedDrones);
-		Draw_Partition(CursorPos_NM, DrawList, CursorInBounds, colors, labels, false);
+		bool hideCompleteSubregions = VisWidget::Instance().GuidanceOverlay_HideCompleteSubregions;
+		Draw_Partition(CursorPos_NM, DrawList, CursorInBounds, colors, labels, false, hideCompleteSubregions);
 
 		//Draw visual indication of mission sequences
 		Draw_MissionSequenceArrows(CursorPos_NM, DrawList, CursorInBounds, opacity);
 
 		//Lightly draw planned missions on top of the partition
-		for (size_t compIndex = 0U; compIndex < m_SurveyRegionPartition.size(); compIndex++) {
-			//Only show missions for sub-regions that have a drone assigned (this helps visually distinguish between region types)
-			//if (taskedDrones[compIndex] >= 0) {
-				auto const & mission(m_Missions[compIndex]);
-				for (size_t n = 0U; (n + 1U) < mission.Waypoints.size(); n++) {
-					DroneInterface::Waypoint const & wp1(mission.Waypoints[n]);
-					DroneInterface::Waypoint const & wp2(mission.Waypoints[n + 1U]);
+		if (VisWidget::Instance().GuidanceOverlay_ShowMissions) {
+			for (size_t compIndex = 0U; compIndex < m_SurveyRegionPartition.size(); compIndex++) {
+				bool drawComp = ((! hideCompleteSubregions) || (m_CompletedSubRegions.count((int) compIndex) == 0U));
+				if (drawComp) {
+					auto const & mission(m_Missions[compIndex]);
+					for (size_t n = 0U; (n + 1U) < mission.Waypoints.size(); n++) {
+						DroneInterface::Waypoint const & wp1(mission.Waypoints[n]);
+						DroneInterface::Waypoint const & wp2(mission.Waypoints[n + 1U]);
 
-					Eigen::Vector2d wp1_NM = LatLonToNM(Eigen::Vector2d(wp1.Latitude, wp1.Longitude));
-					Eigen::Vector2d wp1_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(wp1_NM);
+						Eigen::Vector2d wp1_NM = LatLonToNM(Eigen::Vector2d(wp1.Latitude, wp1.Longitude));
+						Eigen::Vector2d wp1_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(wp1_NM);
 
-					Eigen::Vector2d wp2_NM = LatLonToNM(Eigen::Vector2d(wp2.Latitude, wp2.Longitude));
-					Eigen::Vector2d wp2_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(wp2_NM);
+						Eigen::Vector2d wp2_NM = LatLonToNM(Eigen::Vector2d(wp2.Latitude, wp2.Longitude));
+						Eigen::Vector2d wp2_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(wp2_NM);
 
-					DrawList->AddLine(wp1_SS, wp2_SS, IM_COL32(255, 255, 255, 255.0f*opacity/100.0f), 2.0f);
+						DrawList->AddLine(wp1_SS, wp2_SS, IM_COL32(255, 255, 255, 255.0f*opacity/100.0f), 2.0f);
+					}
 				}
-			//}
+			}
 		}
 	}
 }
 
-//Data Setter Methods
+// Data Setters   ***************************************************************************************************************
 void GuidanceOverlay::Reset() {
 	std::scoped_lock lock(m_mutex);
 	m_SurveyRegionPartition.clear();
@@ -429,11 +419,10 @@ void GuidanceOverlay::Reset() {
 	m_TriangleLabels.clear();
 	m_Missions.clear();
 	m_Sequences.clear();
+	m_CompletedSubRegions.clear();
 }
 
-//Set the partition of the survey region to draw
-void GuidanceOverlay::SetSurveyRegionPartition(std::Evector<PolygonCollection> const & Partition) {
-	std::cerr << "Number of components in survey region partition: " << Partition.size() << "\r\n";
+void GuidanceOverlay::SetData_SurveyRegionPartition(std::Evector<PolygonCollection> const & Partition) {
 	std::scoped_lock lock(m_mutex);
 	m_SurveyRegionPartition = Partition;
 	m_SurveyRegionPartitionTriangulation.clear();
@@ -443,63 +432,105 @@ void GuidanceOverlay::SetSurveyRegionPartition(std::Evector<PolygonCollection> c
 		comp.Triangulate(triangles);
 		m_SurveyRegionPartitionTriangulation.push_back(triangles);
 	}
-}
-
-//Clear/delete the partition of the survey region
-void GuidanceOverlay::ClearSurveyRegionPartition() {
-	std::scoped_lock lock(m_mutex);
-	m_SurveyRegionPartition.clear();
-	m_SurveyRegionPartitionTriangulation.clear();
-}
-
-//Set labels to draw over components in the partition (optional)
-void GuidanceOverlay::SetPartitionLabels(std::vector<std::string> const & Labels) {
-	std::scoped_lock lock(m_mutex);
-	m_PartitionLabels = Labels;
-}
-
-//Clear/delete labels for the partition
-void GuidanceOverlay::ClearPartitionLabels(void) {
-	std::scoped_lock lock(m_mutex);
 	m_PartitionLabels.clear();
 }
 
-//Set the collection of triangles
-void GuidanceOverlay::SetTriangles(std::Evector<Triangle> const & Triangles) {
+void GuidanceOverlay::SetData_SurveyRegionPartition(std::Evector<PolygonCollection> const & Partition, std::vector<std::string> const & Labels) {
+	std::scoped_lock lock(m_mutex);
+	m_SurveyRegionPartition = Partition;
+	m_SurveyRegionPartitionTriangulation.clear();
+	m_SurveyRegionPartitionTriangulation.reserve(Partition.size());
+	for (auto const & comp : Partition) {
+		std::Evector<Triangle> triangles;
+		comp.Triangulate(triangles);
+		m_SurveyRegionPartitionTriangulation.push_back(triangles);
+	}
+	m_PartitionLabels = Labels;
+}
+
+void GuidanceOverlay::ClearData_SurveyRegionPartition(void) {
+	std::scoped_lock lock(m_mutex);
+	m_SurveyRegionPartition.clear();
+	m_SurveyRegionPartitionTriangulation.clear();
+	m_PartitionLabels.clear();
+}
+
+void GuidanceOverlay::SetData_Triangulation(std::Evector<Triangle> const & Triangles) {
 	std::scoped_lock lock(m_mutex);
 	m_Triangles = Triangles;
-}
-
-//Clear/delete the collection of triangles
-void GuidanceOverlay::ClearTriangles(void) {
-	std::scoped_lock lock(m_mutex);
-	m_Triangles.clear();
-}
-
-//Set labels to draw over triangles (optional)
-void GuidanceOverlay::SetTriangleLabels(std::vector<std::string> const & Labels) {
-	std::scoped_lock lock(m_mutex);
-	m_TriangleLabels = Labels;
-}
-
-//Clear/delete labels for triangles
-void GuidanceOverlay::ClearTriangleLabels(void) {
-	std::scoped_lock lock(m_mutex);
 	m_TriangleLabels.clear();
 }
 
-//Provide the missions planned for each of the components of the partition of the survey region
-//Item n will be interpereted as the mission that covers component n of the provided partition.
-void GuidanceOverlay::SetMissions(std::vector<DroneInterface::WaypointMission> const & Missions) {
+void GuidanceOverlay::SetData_Triangulation(std::Evector<Triangle> const & Triangles, std::vector<std::string> const & Labels) {
+	std::scoped_lock lock(m_mutex);
+	m_Triangles = Triangles;
+	m_TriangleLabels = Labels;
+}
+
+void GuidanceOverlay::ClearData_Triangulation(void) {
+	std::scoped_lock lock(m_mutex);
+	m_Triangles.clear();
+	m_TriangleLabels.clear();
+}
+
+void GuidanceOverlay::SetData_PlannedMissions(std::vector<DroneInterface::WaypointMission> const & Missions) {
 	std::scoped_lock lock(m_mutex);
 	m_Missions = Missions;
 }
 
-//Provide the currently planned mission sequences for a collection of drones
-void GuidanceOverlay::SetDroneMissionSequences(std::vector<std::vector<int>> const & Sequences) {
+void GuidanceOverlay::ClearData_PlannedMissions(void) {
+	std::scoped_lock lock(m_mutex);
+	m_Missions.clear();
+}
+
+void GuidanceOverlay::SetData_DroneMissionSequences(std::vector<std::vector<int>> const & Sequences) {
 	std::scoped_lock lock(m_mutex);
 	m_Sequences = Sequences;
 }
+
+void GuidanceOverlay::ClearData_DroneMissionSequences(void) {
+	std::scoped_lock lock(m_mutex);
+	m_Sequences.clear();
+}
+
+void GuidanceOverlay::SetData_CompletedSubRegions(std::vector<int> const & CompletedSubregionIndices) {
+	std::scoped_lock lock(m_mutex);
+	m_CompletedSubRegions.clear();
+	m_CompletedSubRegions.insert(CompletedSubregionIndices.begin(), CompletedSubregionIndices.end());
+}
+
+void GuidanceOverlay::ClearData_CompletedSubRegions(void) {
+	std::scoped_lock lock(m_mutex);
+	m_CompletedSubRegions.clear();
+}
+
+
+// Introspection   **************************************************************************************************************
+bool GuidanceOverlay::DoesSupportView_SurveyRegionPartition(void) {
+	std::scoped_lock lock(m_mutex);
+	return (! m_SurveyRegionPartition.empty());
+}
+
+bool GuidanceOverlay::DoesSupportView_Triangulation(void) {
+	std::scoped_lock lock(m_mutex);
+	return (! m_Triangles.empty());
+}
+
+bool GuidanceOverlay::DoesSupportView_DroneTasking(void) {
+	std::scoped_lock lock(m_mutex);
+	return (! m_Sequences.empty());
+}
+
+bool GuidanceOverlay::DoesSupportOption_DrawMissions(void) {
+	std::scoped_lock lock(m_mutex);
+	return (! m_Missions.empty());
+}
+
+bool GuidanceOverlay::DoesSupportOption_HideCompleteSubregions(void) {
+	std::scoped_lock lock(m_mutex);
+	return (! m_CompletedSubRegions.empty());
+}
+
 
 
 

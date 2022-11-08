@@ -649,8 +649,8 @@ namespace Guidance {
 		//Display both the triangles and the grouped polygons on Recon.
 		//MapWidget::Instance().m_guidanceOverlay.ClearPartitionLabels();
 		//MapWidget::Instance().m_guidanceOverlay.ClearSurveyRegionPartition();
-		MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
-		MapWidget::Instance().m_guidanceOverlay.SetPartitionLabels(groupLabels);
+		//MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(Partition);
+		//MapWidget::Instance().m_guidanceOverlay.SetPartitionLabels(groupLabels);
 
 		//Set labels for the individual triangles.
 		//std::vector<std::string> triangleLabels;
@@ -667,8 +667,9 @@ namespace Guidance {
 
 		//MapWidget::Instance().m_guidanceOverlay.ClearTriangleLabels();
 		//MapWidget::Instance().m_guidanceOverlay.ClearTriangles();
-		MapWidget::Instance().m_guidanceOverlay.SetTriangles(allTriangles);
-		MapWidget::Instance().m_guidanceOverlay.SetTriangleLabels(triangleLabels);
+		MapWidget::Instance().m_guidanceOverlay.SetData_Triangulation(allTriangles, triangleLabels);
+		//MapWidget::Instance().m_guidanceOverlay.SetTriangles(allTriangles);
+		//MapWidget::Instance().m_guidanceOverlay.SetTriangleLabels(triangleLabels);
 
 		//(NON-IMPACTING -- FOR DEVELOPER USE ONLY) Display polygon information on the terminal.
 		std::cout<<"Target Score: " << MissionParams.SubregionTargetFlightTime << std::endl;

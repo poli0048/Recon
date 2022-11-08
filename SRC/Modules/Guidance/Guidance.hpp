@@ -93,7 +93,7 @@ namespace Guidance {
 			std::unordered_map<int, double> m_taskedMissionDistances; //MissionIndex -> Total travel distance for mission (including getting to WP0)
 			std::unordered_map<int, double> m_taskedMissionProgress;  //MissionIndex -> Distance traveled since mission start
 			std::Eunordered_map<std::string, Eigen::Vector3d> m_dronePositions; //Serial -> last known position (LLA)
-			std::unordered_set<int> m_availableMissionIndices;
+			std::unordered_set<int> m_availableMissionIndices; //Indices of missions that have not been assigned yet
 			
 			void ModuleMain(void);
 			void ResetIntermediateData(void); //Clear mission prep data and periodically updated fields
@@ -103,7 +103,7 @@ namespace Guidance {
 			void UpdateDroneStatesBasedOnMissionProgress(void);
 			std::vector<DroneInterface::Drone *> GetDronesAvailableForTasking(void);
 			void TaskDroneToAvailableMission(DroneInterface::Drone * DroneToTask);
-			void UpdateGuidanceOverlayWithMissionSequences(void);
+			void UpdateGuidanceOverlayWithMissionSequencesAndProgress(void);
 			bool AreAnyDronesTaskedWithOrFlyingMissions(void);
 			void AbortMissionsPredictedToGetHitWithShadows(void);
 			

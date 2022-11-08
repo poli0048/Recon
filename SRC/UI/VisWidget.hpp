@@ -52,7 +52,9 @@ class VisWidget {
 		float SurveyRegionVertexRadius;         //Vertex radius (in pixels) when editing.
 		float SurveyRegionEdgeThickness;        //Edge thickness (in pixels) when editing.
 		
-		int GuidanceOverlay_Vis; //0=Partition, 1=Triangles, 2=Sequences, 3=Sequences+Missions
+		int  GuidanceOverlay_View; //0=Partition, 1=Triangles, 2=Sequences
+		bool GuidanceOverlay_ShowMissions; //Relavent when view is "Sequences"
+		bool GuidanceOverlay_HideCompleteSubregions; //Relavent when view is "Sequences"
 		
 		std::array<float, 3> ShadowMapColor; //RGB in range 0 to 1
 		
@@ -84,7 +86,9 @@ class VisWidget {
 			        CEREAL_NVP(SurveyRegionColor),
 			        CEREAL_NVP(SurveyRegionVertexRadius),
 			        CEREAL_NVP(SurveyRegionEdgeThickness),
-			        CEREAL_NVP(GuidanceOverlay_Vis),
+			        CEREAL_NVP(GuidanceOverlay_View),
+			        CEREAL_NVP(GuidanceOverlay_ShowMissions),
+			        CEREAL_NVP(GuidanceOverlay_HideCompleteSubregions),
 			        CEREAL_NVP(ShadowMapColor));
 		}
 	
@@ -135,31 +139,33 @@ inline void VisWidget::LoadFromDisk(void) {
 
 //Set all parameters to defaults (good fallback if file loading fails)
 inline void VisWidget::LoadDefaults(void) {
-	LayerVisible_MSA                  = false;
-	LayerVisible_AvoidanceZones       = false;
-	LayerVisible_SafeLandingZones     = false;
-	LayerVisible_SurveyRegion         = false;
-	LayerVisible_GuidanceOverlay      = false;
-	LayerVisible_ShadowMapOverlay     = false;
-	LayerVisible_TimeAvailableOverlay = false;
+	LayerVisible_MSA                  = true;
+	LayerVisible_AvoidanceZones       = true;
+	LayerVisible_SafeLandingZones     = true;
+	LayerVisible_SurveyRegion         = true;
+	LayerVisible_GuidanceOverlay      = true;
+	LayerVisible_ShadowMapOverlay     = true;
+	LayerVisible_TimeAvailableOverlay = true;
 	
-	Opacity_MSA                  = 100.0f;
-	Opacity_AvoidanceZones       = 100.0f;
-	Opacity_SafeLandingZones     = 100.0f;
-	Opacity_SurveyRegion         = 100.0f;
-	Opacity_GuidanceOverlay      = 100.0f;
-	Opacity_ShadowMapOverlay     = 100.0f;
-	Opacity_TimeAvailableOverlay = 100.0f;
+	Opacity_MSA                  = 50.0f;
+	Opacity_AvoidanceZones       = 50.0f;
+	Opacity_SafeLandingZones     = 50.0f;
+	Opacity_SurveyRegion         = 50.0f;
+	Opacity_GuidanceOverlay      = 50.0f;
+	Opacity_ShadowMapOverlay     = 50.0f;
+	Opacity_TimeAvailableOverlay = 50.0f;
 	
 	MSA_CmapMinVal = 0.0f;
 	MSA_CmapMaxVal = 400.0f;
 	MSA_NoFlyDrawMode = 0;
 	
-	SurveyRegionColor = {0.0f, 0.0f, 0.8f};
+	SurveyRegionColor = {0.8f, 0.8f, 0.0f};
 	SurveyRegionVertexRadius = 5.0f;
 	SurveyRegionEdgeThickness = 3.0f;
 	
-	GuidanceOverlay_Vis = 0;
+	GuidanceOverlay_View = 0;
+	GuidanceOverlay_ShowMissions = true;
+	GuidanceOverlay_HideCompleteSubregions = true;
 	
 	ShadowMapColor = {0.4f, 0.4f, 0.7f};
 }
@@ -184,7 +190,7 @@ inline void VisWidget::SanitizeState(void) {
 	SurveyRegionVertexRadius  = std::clamp(SurveyRegionVertexRadius,  1.0f, 20.0f);
 	SurveyRegionEdgeThickness = std::clamp(SurveyRegionEdgeThickness, 1.0f, 10.0f);
 	
-	GuidanceOverlay_Vis = std::clamp(GuidanceOverlay_Vis, 0, 4);
+	GuidanceOverlay_View = std::clamp(GuidanceOverlay_View, 0, 3);
 
 	ShadowMapColor[0] = std::clamp(ShadowMapColor[0], 0.0f, 1.0f);
 	ShadowMapColor[1] = std::clamp(ShadowMapColor[1], 0.0f, 1.0f);
@@ -345,19 +351,31 @@ inline void VisWidget::Draw() {
 
 			ImGui::TextUnformatted("Region Partition ");
 			ImGui::SameLine(col2Start);
-			ImGui::RadioButton("##Region Partition ", &GuidanceOverlay_Vis, 0);
+			ImGui::RadioButton("##Region Partition ", &GuidanceOverlay_View, 0);
 
 			ImGui::TextUnformatted("Triangle Decomposition ");
 			ImGui::SameLine(col2Start);
-			ImGui::RadioButton("##Triangle Decomposition ", &GuidanceOverlay_Vis, 1);
+			ImGui::RadioButton("##Triangle Decomposition ", &GuidanceOverlay_View, 1);
 			
-			ImGui::TextUnformatted("Current Plans ");
+			ImGui::TextUnformatted("Progress & Plans ");
 			ImGui::SameLine(col2Start);
-			ImGui::RadioButton("##Current Plans ", &GuidanceOverlay_Vis, 2);
+			ImGui::RadioButton("##Progress & Plans ", &GuidanceOverlay_View, 2);
 
-			ImGui::TextUnformatted("Current Plans & Missions ");
-			ImGui::SameLine(col2Start);
-			ImGui::RadioButton("##Current Plans & Missions ", &GuidanceOverlay_Vis, 3);
+			if (GuidanceOverlay_View == 2) {
+				ImGui::Separator();
+				ImGui::NewLine();
+				ImGui::TextUnformatted("Show Planned Missions ");
+				ImGui::SameLine(col2Start);
+				ImGui::Checkbox("##Show Planned Missions", &GuidanceOverlay_ShowMissions);
+
+				ImGui::TextUnformatted("Hide Completed Areas ");
+				ImGui::SameLine(col2Start);
+				ImGui::Checkbox("##Hide Completed Areas", &GuidanceOverlay_HideCompleteSubregions);
+			}
+
+			//ImGui::TextUnformatted("Current Plans & Missions ");
+			//ImGui::SameLine(col2Start);
+			//ImGui::RadioButton("##Current Plans & Missions ", &GuidanceOverlay_View, 3);
 			
 			ImGui::EndPopup();
 		}

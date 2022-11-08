@@ -3,6 +3,10 @@
 //Copyright (c) 2021 Sentek Systems, LLC. All rights reserved.
 #pragma once
 
+//System Includes
+#include <vector>
+#include <unordered_set>
+
 //External Includes
 #include "../HandyImGuiInclude.hpp"
 
@@ -23,13 +27,12 @@ class GuidanceOverlay {
 		
 		std::vector<DroneInterface::WaypointMission> m_Missions;
 		std::vector<std::vector<int>> m_Sequences;
-
-		//std::Evector<std::tuple<LineSegment, float, Eigen::Vector3f>> m_Lines;
-		//std::Evector<std::tuple<Eigen::Vector2d, float, Eigen::Vector3f>> m_Circles;
+		std::unordered_set<int> m_CompletedSubRegions;
 		
 		static ImU32 IndexToColor(size_t Index, size_t N, float Opacity);
 		void Draw_Partition(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds,
-		                    std::vector<ImU32> const & Colors, std::vector<std::string> const & Labels, bool CenteredLabels) const;
+		                    std::vector<ImU32> const & Colors, std::vector<std::string> const & Labels, bool CenteredLabels,
+		                    bool HideComponentsMarketComplete) const;
 		
 		//Get a point inside the given component that is roughly near the center of the first polygon in the component poly collection
 		//The returned point is in Normalized Mercator. CompIndex must be a valid index - this is not checked.
@@ -49,45 +52,46 @@ class GuidanceOverlay {
 		
 		//Called in the draw loop for the map widget
 		void Draw_Overlay(Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList, bool CursorInBounds);
-		
-		//Data Setter Methods. Things the overlay can display:
-		//1 - A partition of a survey region (optionally with labels)
-		//2 - A collection of triangles (optionally with labels)
-		//3 - Planned missions for each component in the given partition
-		//4 - The planned mission sequences for a collection of drones (components flown, in order)
 
-		//Important note:
-		//All points in provided triangles or polygon objects must be in Normalized Mercator.
-		
-		void Reset();
-		
-		//A partition of a survey region is provided as a vector of polygon collections. Each element in the vector represents a component of the partition.
-		void SetSurveyRegionPartition(std::Evector<PolygonCollection> const & Partition); //Set the partition of the survey region to draw
-		void ClearSurveyRegionPartition(void);                                            //Clear/delete the partition of the survey region
-		
-		//Labels are optional; if you don't set them they won't be drawn. If specified, Labels[n] will be drawn on top of element n in the partition.
-		//Label placement is relatively primitive and is based on the centroid of the vertex set of the boundary of the first component of the polygon
-		//collection corresponding to each element in the partition (so holes are not taken into account). Consequently, if you have components that
-		//are disconnected, odly shaped, or have holes, labels may not be drawn in ideal spots, but placement should be fine in most cases. Labels
-		//are culled at zoom levels where they can't fit roughly in the bounding box of the corresponding element of the partition.
-		void SetPartitionLabels(std::vector<std::string> const & Labels);
-		void ClearPartitionLabels(void);
-		
-		//Triangles are independent from the partition, although the inteanded use is to show a triangulation of the survey region
-		void SetTriangles(std::Evector<Triangle> const & Triangles); //Set the collection of triangles
-		void ClearTriangles(void);                                   //Clear/delete the collection of triangles
-		
-		//Here also, labels are optional; if you don't set them they won't be drawn. If specified, Labels[n] will be drawn on top of triangle n.
-		//Labels are culled at zoom levels where the can't fit roughly inside the interior of the corresponding triangle.
-		void SetTriangleLabels(std::vector<std::string> const & Labels);
-		void ClearTriangleLabels(void);
-		
-		//Provide the missions planned for each of the components of the partition of the survey region
-		//Item n will be interpereted as the mission that covers component n of the provided partition.
-		void SetMissions(std::vector<DroneInterface::WaypointMission> const & Missions);
+		//New design. Several views are supported:
+		// 0: Partition of the survey region (with optional labels)
+		// 1: Triangulation of the survey region (with optional labels)
+		// 2: Progress - Planned tasking for drones (vector or subregions for each drone)
+		//    - Option: Draw planned missions
+		//    - Option: Hide complete subregions
 
-		//Provide the currently planned mission sequences for a collection of drones
-		void SetDroneMissionSequences(std::vector<std::vector<int>> const & Sequences);
+		// Data Setters   *****************************************************************************************************
+		// All provided geometry objects (polygons, triangles, etc.) should all use Normalized Mercator coordinates.
+		// Each SetData() function replaces the corresponding data from any previous calls - you don't need to explicitly call
+		// ClearData() in between calls to a data setter.
+		void Reset(); //Clear all internal data
+
+		void SetData_SurveyRegionPartition(std::Evector<PolygonCollection> const & Partition);
+		void SetData_SurveyRegionPartition(std::Evector<PolygonCollection> const & Partition, std::vector<std::string> const & Labels);
+		void ClearData_SurveyRegionPartition(void);
+
+		void SetData_Triangulation(std::Evector<Triangle> const & Triangles);
+		void SetData_Triangulation(std::Evector<Triangle> const & Triangles, std::vector<std::string> const & Labels);
+		void ClearData_Triangulation(void);
+
+		void SetData_PlannedMissions(std::vector<DroneInterface::WaypointMission> const & Missions);
+		void ClearData_PlannedMissions(void);
+
+		void SetData_DroneMissionSequences(std::vector<std::vector<int>> const & Sequences);
+		void ClearData_DroneMissionSequences(void);
+
+		void SetData_CompletedSubRegions(std::vector<int> const & CompletedSubregionIndices);
+		void ClearData_CompletedSubRegions(void);
+
+		// Introspection   ****************************************************************************************************
+		// These can be used to detirmine whether enough data has been provided to draw various views and options. The overlay
+		// is required to handle any combination of visualization settings chosen as best as it can (and without crashing), but
+		// these can be used to only show views and options in the vis widget that can actually be drawn.
+		bool DoesSupportView_SurveyRegionPartition(void);
+		bool DoesSupportView_Triangulation(void);
+		bool DoesSupportView_DroneTasking(void);
+		bool DoesSupportOption_DrawMissions(void);
+		bool DoesSupportOption_HideCompleteSubregions(void);
 };
 
 

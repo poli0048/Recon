@@ -273,7 +273,18 @@ namespace Guidance {
 				PartitionSurveyRegion_IteratedCuts(m_surveyRegion, m_surveyRegionPartition, m_MissionParams);
 			else
 				std::cerr << "Error: Unrecognized partitioning method. Skipping partitioning.\r\n";
-			MapWidget::Instance().m_guidanceOverlay.SetSurveyRegionPartition(m_surveyRegionPartition);
+			std::vector<std::string> compLabels(m_surveyRegionPartition.size());
+			for (size_t n = 0U; n < m_surveyRegionPartition.size(); n++) {
+				Eigen::Vector4d AABB = m_surveyRegionPartition[n].GetAABB();
+				double mPerNMUnit = NMUnitsToMeters(1.0, 0.5*AABB(2) + 0.5*AABB(3));
+				double sqMPerNMAreaUnit = mPerNMUnit * mPerNMUnit;
+				double area_sqM = sqMPerNMAreaUnit * m_surveyRegionPartition[n].GetArea();
+				double area_acres = area_sqM / 4046.86;
+				std::ostringstream outSS;
+				outSS << "Sub-Region " << n << "\n" << std::fixed << std::setprecision(1) << area_acres << " acres";
+				compLabels[n] = outSS.str();
+			}
+			MapWidget::Instance().m_guidanceOverlay.SetData_SurveyRegionPartition(m_surveyRegionPartition, compLabels);
 
 			//Plan missions for each component of the partition
 			m_droneMissions.clear();
@@ -283,7 +294,7 @@ namespace Guidance {
 				PlanMission(component, Mission, m_MissionParams);
 				m_droneMissions.push_back(Mission);
 			}
-			MapWidget::Instance().m_guidanceOverlay.SetMissions(m_droneMissions);
+			MapWidget::Instance().m_guidanceOverlay.SetData_PlannedMissions(m_droneMissions);
 
 			//Initialize states, and available indices
 			m_droneStates.clear();
@@ -458,16 +469,28 @@ namespace Guidance {
 		}
 	}
 
-	void GuidanceEngine::UpdateGuidanceOverlayWithMissionSequences(void) {
+	void GuidanceEngine::UpdateGuidanceOverlayWithMissionSequencesAndProgress(void) {
 		std::vector<std::vector<int>> Sequences;
+		std::unordered_set<int> missionsInProgress;
 		for (DroneInterface::Drone * drone : m_dronesUnderCommand) {
 			std::string serial = drone->GetDroneSerial();
-			if (std::get<0>(m_droneStates.at(serial)) > 1)
-				Sequences.emplace_back(1, std::get<1>(m_droneStates.at(serial)));
+			if (std::get<0>(m_droneStates.at(serial)) > 1) {
+				int missionIndex = std::get<1>(m_droneStates.at(serial));
+				Sequences.emplace_back(1, missionIndex);
+				missionsInProgress.insert(missionIndex);
+			}
 			else
 				Sequences.emplace_back();
 		}
-		MapWidget::Instance().m_guidanceOverlay.SetDroneMissionSequences(Sequences);
+		MapWidget::Instance().m_guidanceOverlay.SetData_DroneMissionSequences(Sequences);
+
+		std::vector<int> completedSubregionIndices;
+		completedSubregionIndices.reserve(m_surveyRegionPartition.size());
+		for (int n = 0; n < (int) m_surveyRegionPartition.size(); n++) {
+			if ((m_availableMissionIndices.count(n) == 0U) && (missionsInProgress.count(n) == 0U))
+				completedSubregionIndices.push_back(n);
+		}
+		MapWidget::Instance().m_guidanceOverlay.SetData_CompletedSubRegions(completedSubregionIndices);
 	}
 
 	bool GuidanceEngine::AreAnyDronesTaskedWithOrFlyingMissions(void) {
@@ -575,7 +598,7 @@ namespace Guidance {
 				for (DroneInterface::Drone * drone : dronesForTasking)
 					TaskDroneToAvailableMission(drone);
 
-				UpdateGuidanceOverlayWithMissionSequences();
+				UpdateGuidanceOverlayWithMissionSequencesAndProgress();
 
 				//Check to see if the mission is complete
 				if ((m_availableMissionIndices.empty()) && (! AreAnyDronesTaskedWithOrFlyingMissions()))
