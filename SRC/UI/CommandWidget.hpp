@@ -348,6 +348,25 @@ inline void CommandWidget::Draw() {
 					ImGui::TextColored(ImVec4(0.9,0,0,1), "Disabled");
 			}
 			
+			//Get vectors of drone serials, and serials of drones available for a mission
+			std::vector<std::string> connectedDroneSerials = DroneInterface::DroneManager::Instance().GetConnectedDroneSerialNumbers();
+			std::vector<std::string> availableDroneSerials;
+			availableDroneSerials.reserve(connectedDroneSerials.size());
+			std::string imageProviderSerial;
+			if (ShadowDetection::ShadowDetectionEngine::Instance().IsRunning())
+				imageProviderSerial = ShadowDetection::ShadowDetectionEngine::Instance().GetProviderDroneSerial();
+			for (std::string serial : connectedDroneSerials) {
+				bool isBeingUsed = false;
+				if (! imageProviderSerial.empty()) {
+					if (imageProviderSerial == serial)
+						isBeingUsed = true;
+				}
+				if (Guidance::GuidanceEngine::Instance().IsCommandingDrone(serial))
+					isBeingUsed = true;
+				if (! isBeingUsed)
+					availableDroneSerials.push_back(serial);
+			}
+
 			if (! Guidance::GuidanceEngine::Instance().IsRunning()) {
 				//UI for starting a mission
 				
@@ -361,19 +380,6 @@ inline void CommandWidget::Draw() {
 				else {
 					//List all connected drones with checkboxes to pick the drones to be used as low-fliers. If a drone is being used
 					//by the shadow detection module, don't let it be selected here.
-					std::vector<std::string> connectedDroneSerials = DroneInterface::DroneManager::Instance().GetConnectedDroneSerialNumbers();
-					std::vector<std::string> availableDroneSerials;
-					if (ShadowDetection::ShadowDetectionEngine::Instance().IsRunning()) {
-						std::string usedDroneSerial = ShadowDetection::ShadowDetectionEngine::Instance().GetProviderDroneSerial();
-						availableDroneSerials.reserve(connectedDroneSerials.size() - 1U);
-						for (std::string serial : connectedDroneSerials) {
-							if (serial != usedDroneSerial)
-								availableDroneSerials.push_back(serial);
-						}
-					}
-					else
-						availableDroneSerials = connectedDroneSerials;
-					
 					if (m_useDroneFlags.size() != availableDroneSerials.size())
 						m_useDroneFlags = std::vector<bool>(availableDroneSerials.size(), true); //Re-initialize flag vector
 					
@@ -474,6 +480,22 @@ inline void CommandWidget::Draw() {
 				ImGui::SameLine(col2Start);
 				ImGui::TextDisabled("%.0f seconds", m_SubRegionTargetFlightTime);
 
+				//If there are available drones, provide options for adding them to the current mission
+				if (! availableDroneSerials.empty()) {
+					ImGui::NewLine();
+					if (ImGui::BeginMenu("Add Drone To Mission")) {
+						for (std::string serial : availableDroneSerials) {
+							if (ImGui::BeginMenu(("Serial #: "s + serial).c_str())) {
+								if (ImGui::MenuItem("Confirm Command", NULL, false, true))
+									Guidance::GuidanceEngine::Instance().AddDroneToMission(serial);
+								ImGui::EndMenu();
+							}
+						}
+						ImGui::EndMenu();
+					}
+				}
+
+				//Stop Mission Commands
 				ImGui::NewLine();
 				if (ImGui::BeginMenu("Stop Mission (Drones Hover)")) {
 					if (ImGui::MenuItem("Confirm Command", NULL, false, true)) {

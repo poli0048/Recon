@@ -123,8 +123,8 @@ namespace Guidance {
 			
 			//Starting a survey mission and adding a drone will automatically instruct the vehicle control to stop commanding the relavent drones
 			bool StartSurvey(std::vector<std::string> const & LowFlierSerials, MissionParameters const & Params); //Start a survey mission (currently active region) using the given drones
-			bool AddLowFlier(std::string const & Serial); //Add a drone to the collection of low fliers and start commanding it
-			bool RemoveLowFlier(std::string const & Serial); //Stop commanding the drone with the given serial
+			bool AddDroneToMission(std::string const & Serial); //Take control of a drone and add it to the current mission
+			bool RemoveDroneFromMission(std::string const & Serial); //Stop commanding the drone with the given serial
 			bool IsCommandingDrone(std::string const & Serial); //Returns true if drone is under guidance module command - false otherwise
 			bool IsRunning(void); //Returns true if currently commanding a mission, false otherwise
 

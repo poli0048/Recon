@@ -1091,7 +1091,7 @@ namespace DroneInterface {
 		//Tell the vehicle control widget and the guidance module to stop commanding this drone.
 		std::string droneSerial = GetDroneSerial();
 		//VehicleControlWidget::Instance().StopCommandingDrone(droneSerial); //Initiated by vehicle control widget, so it does this
-		Guidance::GuidanceEngine::Instance().RemoveLowFlier(droneSerial);
+		Guidance::GuidanceEngine::Instance().RemoveDroneFromMission(droneSerial);
 		
 		//Get drone's current position and the ground altitude
 		DroneInterface::Drone::TimePoint Timestamp;

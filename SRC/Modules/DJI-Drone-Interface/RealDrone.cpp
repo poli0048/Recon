@@ -227,8 +227,10 @@ namespace DroneInterface {
 	bool RealDrone::TransferStateToTargetObject(void) {
 		if (m_possessionTarget != nullptr) {
 			if (m_possessionTarget->m_isConnected) {
-				std::cerr << "Can't take possession of target because it has active socket connection.\r\n";
-				return false;
+				//Print a warning. Note: Don't try to disconnect or cleanup the old connection. Every call we have tried for that
+				//results in some kind on double-free exception. Hopefully it will be cleaned up by Tacopie, but even if it is orphaned
+				//until the program closes it isn't that big of a deal.
+				std::cerr << "Warning: Possession target already has active socket connection. It will be orphaned during possession.\r\n";
 			}
 			
 			std::cerr << "Taking possession of target drone object.\r\n";
@@ -836,7 +838,7 @@ namespace DroneInterface {
 		//Tell the vehicle control widget and the guidance module to stop commanding this drone.
 		std::string droneSerial = GetDroneSerial();
 		//VehicleControlWidget::Instance().StopCommandingDrone(droneSerial); //Initiated by vehicle control widget, so it does this
-		Guidance::GuidanceEngine::Instance().RemoveLowFlier(droneSerial);
+		Guidance::GuidanceEngine::Instance().RemoveDroneFromMission(droneSerial);
 		
 		//Get drone's current position and the ground altitude
 		DroneInterface::Drone::TimePoint Timestamp;

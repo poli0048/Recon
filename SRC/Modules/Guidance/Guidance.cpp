@@ -47,22 +47,112 @@ namespace Guidance {
 			return false;
 	}
 
-	//Add a drone to the collection of low fliers and start commanding it
-	bool GuidanceEngine::AddLowFlier(std::string const & Serial) {
+	//Take control of a drone and add it to the current mission
+	bool GuidanceEngine::AddDroneToMission(std::string const & Serial) {
 		std::scoped_lock lock(m_mutex);
 		if (! m_running)
 			return false;
 		else {
-			for (auto drone : m_dronesUnderCommand) {
-				if (drone->GetDroneSerial() == Serial) {
-					VehicleControlWidget::Instance().StopCommandingDrone(Serial);
-					return true;
-				}
-			}
-			DroneInterface::Drone * ptr = DroneInterface::DroneManager::Instance().GetDrone(Serial);
-			if (ptr != nullptr) {
-				m_dronesUnderCommand.push_back(ptr);
+			DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(Serial);
+			if (drone != nullptr) {
 				VehicleControlWidget::Instance().StopCommandingDrone(Serial);
+
+				m_dronesUnderCommand.push_back(drone);
+				TimePoint NowTime = std::chrono::steady_clock::now();
+
+				//Go through the allowed takeoff times - find the last takeoff time and advance it by the stagger time for the added drone
+				TimePoint lastTimepoint = NowTime;
+				double maxSecondsSinceT0Epoch = 0.0;
+				for (auto const & kv : m_droneAllowedTakeoffTimes) {
+					double secondsAfterT0 = SecondsSinceT0Epoch(kv.second);
+					if (secondsAfterT0 > maxSecondsSinceT0Epoch) {
+						maxSecondsSinceT0Epoch = secondsAfterT0;
+						lastTimepoint = kv.second;
+					}
+				}
+				if (maxSecondsSinceT0Epoch == 0.0)
+					m_droneAllowedTakeoffTimes[Serial] = std::chrono::steady_clock::now(); //There are no other drones
+				else
+					m_droneAllowedTakeoffTimes[Serial] = AdvanceTimepoint(lastTimepoint, m_MissionParams.TakeoffStaggerInterval);
+				
+				//Go through the HAGs and find an available slot for the new drone
+				if (m_droneHAGs.empty())
+					m_droneHAGs[Serial] = m_MissionParams.HAG;
+				else {
+					if (m_MissionParams.HeightStaggerInterval <= 0.0)
+						m_droneHAGs[Serial] = m_MissionParams.HAG;
+					else {
+						//Look at the drones currently assigned to the mission and get their HAGs. Identify the value X that is closest
+						//to the target HAG but at least the staggering amount away from all existing drone HAGs.
+
+						//Find the lowest HAG
+						double lowestHAG = m_droneHAGs.begin()->second;
+						for (auto const & kv : m_droneHAGs) {
+							if (kv.second < lowestHAG)
+								lowestHAG = kv.second;
+						}
+
+						std::vector<double> currentHAGSlots; //HAGs, as multiples of the stagger interval above the lowest HAG
+						currentHAGSlots.reserve(m_droneHAGs.size());
+						for (auto const & kv : m_droneHAGs)
+							currentHAGSlots.push_back((kv.second - lowestHAG) / m_MissionParams.HeightStaggerInterval);
+						std::sort(currentHAGSlots.begin(), currentHAGSlots.end());
+						double maxSlot = currentHAGSlots.back();
+
+						//std::cerr << "Current HAG slots: ";
+						//for (double HAGSlot : currentHAGSlots)
+						//	std::cerr << HAGSlot << " ";
+						//std::cerr << "\r\n";
+
+						//The slots should basically be integers, starting with 0. If there is an interior integer missing we can use the slot
+						double interiorSlot = -1.0;
+						for (double slot = 1.0; slot <= maxSlot; slot += 1.0) {
+							bool slotOK = true;
+							for (double currentSlot : currentHAGSlots) {
+								if (std::fabs(slot - currentSlot) < 0.9) {
+									slotOK = false;
+									break;
+								}
+							}
+							if (slotOK) {
+								interiorSlot = slot;
+								break;
+							}
+						}
+
+						if (interiorSlot >= 0.0) {
+							//HAG slot found
+							m_droneHAGs[Serial] = lowestHAG + m_MissionParams.HeightStaggerInterval*interiorSlot;
+							std::cerr << "Using existing HAG slot for added drone: " << m_droneHAGs.at(Serial) << " m.\r\n";
+						}
+						else {
+							//No interior HAG slots found - add a slot on either the high or low end
+							//Take whichever is closest to the target HAG.
+							double candidateHAG1 = lowestHAG - m_MissionParams.HeightStaggerInterval;
+							double candidateHAG2 = lowestHAG + (maxSlot + 1.0)*m_MissionParams.HeightStaggerInterval;
+							if (std::fabs(candidateHAG1 - m_MissionParams.HAG) < std::fabs(candidateHAG2 - m_MissionParams.HAG))
+								m_droneHAGs[Serial] = candidateHAG1;
+							else
+								m_droneHAGs[Serial] = candidateHAG2;
+							std::cerr << "Using new HAG slot for added drone: " << m_droneHAGs.at(Serial) << " m.\r\n";
+						}
+					}
+				}
+
+				//Initialize the state of the drone
+				bool isFlying = false;
+				TimePoint isFlyingTimestamp;
+				if (drone->IsCurrentlyFlying(isFlying, isFlyingTimestamp) && (SecondsElapsed(isFlyingTimestamp) <= 4.0)) {
+					if (isFlying)
+						m_droneStates[Serial] = std::make_tuple(1, -1, NowTime); //Loitering (available for tasking anyhow)
+					else
+						m_droneStates[Serial] = std::make_tuple(0, -1, NowTime); //On ground and available for tasking
+				}
+				else {
+					std::cerr << "Bad or old telemetry for drone " << Serial << ". Treating as on ground.\r\n";
+					m_droneStates[Serial] = std::make_tuple(0, -1, NowTime); //On ground and available for tasking
+				}
+				
 				return true;
 			}
 			else
@@ -71,7 +161,7 @@ namespace Guidance {
 	}
 
 	//Stop commanding the drone with the given serial
-	bool GuidanceEngine::RemoveLowFlier(std::string const & Serial) {
+	bool GuidanceEngine::RemoveDroneFromMission(std::string const & Serial) {
 		std::scoped_lock lock(m_mutex);
 		if (! m_running)
 			return false;
@@ -91,7 +181,9 @@ namespace Guidance {
 
 				//Remove the drone from our vector of drone pointers under our command
 				m_dronesUnderCommand.erase(m_dronesUnderCommand.begin() + n);
-				std::cerr << "Removing drone from command.\r\n";
+				m_droneHAGs.erase(Serial);
+				m_droneAllowedTakeoffTimes.erase(Serial);
+				std::cerr << "Removing drone " << Serial << " from command.\r\n";
 
 				//If we just removed the last drone, abort the mission - this makes it unnecessary to have an extra UI control
 				//to cancel a mission that has effectively already been canceled through the removal of all drones.

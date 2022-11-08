@@ -123,7 +123,7 @@ class VehicleControlWidget {
 		std::thread       m_controlThread;
 		std::atomic<bool> m_controlThreadAbort = false;
 		
-		std::mutex m_dronesAndStatesMutex; //Protects fields in this block
+		std::recursive_mutex m_dronesAndStatesMutex; //Protects fields in this block
 		std::vector<std::string> m_currentDroneSerials; //Updated in Draw()
 		std::unordered_map<std::string, vehicleState> m_vehicleStates;
 		int m_messageToken = -1;
@@ -858,7 +858,7 @@ inline void VehicleControlWidget::DrawMission_Waypoints(size_t DroneNum, DroneIn
 }
 
 inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & CursorPos_NM, ImDrawList * DrawList,
-                                           bool CursorInBounds) {
+	                                            bool CursorInBounds) {
 	float droneIconWidth_pixels = ProgOptions::Instance()->DroneIconScale*96.0f;
 	
 	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
@@ -1082,6 +1082,7 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 				ImGui::CloseCurrentPopup();
 			}
 			DroneInterface::Drone * drone = drones[m_indexOfDroneWithContextMenuOpen];
+			std::string droneSerial = drone->GetDroneSerial();
 			vehicleState * state = droneStates[m_indexOfDroneWithContextMenuOpen];
 			
 			if (state->m_widgetControlEnabled) {
@@ -1161,7 +1162,7 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 					ImGui::SameLine();
 					if (ImGui::Button(" \uf5af Land Now", ImVec2(ImGui::GetContentRegionAvail().x, 0)))
 						ImGui::OpenPopup("Land Now Popup");
-					if (ImGui::Button(" \uf11b Transfer to controller", ImVec2(ImGui::GetContentRegionAvail().x, 0)))
+					if (ImGui::Button("Hover in Place ( \uf8cc \uf061 \uf11b )", ImVec2(ImGui::GetContentRegionAvail().x, 0)))
 						ImGui::OpenPopup("Transfer To Controller Popup");
 				}
 				
@@ -1275,6 +1276,14 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 						}
 						ImGui::EndMenu();
 					}
+					if ((Guidance::GuidanceEngine::Instance().IsRunning()) &&
+					    (! Guidance::GuidanceEngine::Instance().IsCommandingDrone(droneSerial))) {
+						if (MyGui::BeginMenu(u8"\uf04b", labelMargin, "Add to Current Mission")) {
+							if (ImGui::MenuItem("Confirm Command", NULL, false, true))
+								Guidance::GuidanceEngine::Instance().AddDroneToMission(droneSerial);
+							ImGui::EndMenu();
+						}
+					}
 				}
 				else {
 					if (MyGui::BeginMenu(u8"\uf04c", labelMargin, "Hover In Place")) {
@@ -1296,6 +1305,14 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 						if (ImGui::MenuItem("Enable", NULL, false, true))
 							StartManualControl(*drone, *state);
 						ImGui::EndMenu();
+					}
+					if ((Guidance::GuidanceEngine::Instance().IsRunning()) &&
+					    (! Guidance::GuidanceEngine::Instance().IsCommandingDrone(droneSerial))) {
+						if (MyGui::BeginMenu(u8"\uf04b", labelMargin, "Add to Current Mission")) {
+							if (ImGui::MenuItem("Confirm Command", NULL, false, true))
+								Guidance::GuidanceEngine::Instance().AddDroneToMission(droneSerial);
+							ImGui::EndMenu();
+						}
 					}
 				}
 				//TODO - this should be removed once waypoint mission functionality is tested
@@ -1559,7 +1576,7 @@ inline void VehicleControlWidget::StartManualControl(DroneInterface::Drone & Dro
 	std::cerr << "Starting manual control for drone: " << Drone.GetDroneSerial() << ".\r\n";
 	
 	//Instruct the guidance module to stop commanding this drone (if it currently is)
-	Guidance::GuidanceEngine::Instance().RemoveLowFlier(Drone.GetDroneSerial());
+	Guidance::GuidanceEngine::Instance().RemoveDroneFromMission(Drone.GetDroneSerial());
 	
 	//Initialize the target position to the drone's current position (or NaN if unknown to zero out commanded velocity)
 	DroneInterface::Drone::TimePoint Timestamp;
@@ -1591,21 +1608,21 @@ inline void VehicleControlWidget::StartManualControl(DroneInterface::Drone & Dro
 
 inline void VehicleControlWidget::DroneCommand_Hover(DroneInterface::Drone & Drone, vehicleState & State) {
 	std::cerr << "Drone Command to " << Drone.GetDroneSerial() << ": Hover In Place.\r\n";
-	Guidance::GuidanceEngine::Instance().RemoveLowFlier(Drone.GetDroneSerial()); //Tell the guidance module to stop commanding drone
+	Guidance::GuidanceEngine::Instance().RemoveDroneFromMission(Drone.GetDroneSerial()); //Tell the guidance module to stop commanding drone
 	State.m_widgetControlEnabled = false; //Stop our control loop from commanding the drone
 	Drone.Hover();
 }
 
 inline void VehicleControlWidget::DroneCommand_LandNow(DroneInterface::Drone & Drone, vehicleState & State) {
 	std::cerr << "Drone Command to " << Drone.GetDroneSerial() << ": Land Now.\r\n";
-	Guidance::GuidanceEngine::Instance().RemoveLowFlier(Drone.GetDroneSerial()); //Tell the guidance module to stop commanding drone
+	Guidance::GuidanceEngine::Instance().RemoveDroneFromMission(Drone.GetDroneSerial()); //Tell the guidance module to stop commanding drone
 	State.m_widgetControlEnabled = false; //Stop our control loop from commanding the drone
 	Drone.LandNow();
 }
 
 inline void VehicleControlWidget::DroneCommand_GoHomeAndLand(DroneInterface::Drone & Drone, vehicleState & State) {
 	std::cerr << "Drone Command to " << Drone.GetDroneSerial() << ": Go Home and Land.\r\n";
-	Guidance::GuidanceEngine::Instance().RemoveLowFlier(Drone.GetDroneSerial()); //Tell the guidance module to stop commanding drone
+	Guidance::GuidanceEngine::Instance().RemoveDroneFromMission(Drone.GetDroneSerial()); //Tell the guidance module to stop commanding drone
 	State.m_widgetControlEnabled = false; //Stop our control loop from commanding the drone
 	Drone.GoHomeAndLand();
 }
@@ -1614,8 +1631,9 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 	float labelMargin = 1.5f*ImGui::GetFontSize();
 	std::string popupStrIdentifier = drone.GetDroneSerial() + "-ContextMenu"s;
 	
-	//Get reference to vehicle state object
+	//Get reference to vehicle state object and the drone serial number
 	vehicleState & myState(m_vehicleStates.at(drone.GetDroneSerial()));
+	std::string droneSerial = drone.GetDroneSerial();
 	
 	if (Open)
 		ImGui::OpenPopup(popupStrIdentifier.c_str());
@@ -1638,6 +1656,14 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 					myState.m_targetHAGFeet = 50.0;
 				}
 				ImGui::EndMenu();
+			}
+			if ((Guidance::GuidanceEngine::Instance().IsRunning()) &&
+			    (! Guidance::GuidanceEngine::Instance().IsCommandingDrone(droneSerial))) {
+				if (MyGui::BeginMenu(u8"\uf04b", labelMargin, "Add to Current Mission")) {
+					if (ImGui::MenuItem("Confirm Command", NULL, false, true))
+						Guidance::GuidanceEngine::Instance().AddDroneToMission(droneSerial);
+					ImGui::EndMenu();
+				}
 			}
 		}
 		else {
@@ -1666,6 +1692,14 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 						StartManualControl(drone, myState);
 				}
 				ImGui::EndMenu();
+			}
+			if ((Guidance::GuidanceEngine::Instance().IsRunning()) &&
+			    (! Guidance::GuidanceEngine::Instance().IsCommandingDrone(droneSerial))) {
+				if (MyGui::BeginMenu(u8"\uf04b", labelMargin, "Add to Current Mission")) {
+					if (ImGui::MenuItem("Confirm Command", NULL, false, true))
+						Guidance::GuidanceEngine::Instance().AddDroneToMission(droneSerial);
+					ImGui::EndMenu();
+				}
 			}
 		}
 		//TODO - this should be removed once waypoint mission functionality is tested
