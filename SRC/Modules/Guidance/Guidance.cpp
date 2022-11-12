@@ -286,12 +286,13 @@ namespace Guidance {
 			}
 			MapWidget::Instance().m_guidanceOverlay.SetData_SurveyRegionPartition(m_surveyRegionPartition, compLabels);
 
-			//Plan missions for each component of the partition
+			//Plan missions for each component of the partition - we are guaranteed a mission object for each sub-region, but
+			//the missions may be empty if the region is too pathological. These should be treated as complete right off the bat.
 			m_droneMissions.clear();
 			m_droneMissions.reserve(m_surveyRegionPartition.size());
 			for (auto const & component : m_surveyRegionPartition) {
 				DroneInterface::WaypointMission Mission;
-				PlanMission(component, Mission, m_MissionParams);
+				PlanMission(component, Mission, m_MissionParams, nullptr);
 				m_droneMissions.push_back(Mission);
 			}
 			MapWidget::Instance().m_guidanceOverlay.SetData_PlannedMissions(m_droneMissions);
@@ -426,25 +427,6 @@ namespace Guidance {
 		return availableDrones;
 	}
 
-	//Get the horizontal distance (m) between two waypoints
-	static double GetHorizontalDistBetweenWaypoints(DroneInterface::Waypoint const & WPA, DroneInterface::Waypoint const & WPB) {
-		Eigen::Vector3d A_ECEF = LLA2ECEF(Eigen::Vector3d(WPA.Latitude, WPA.Longitude, 0.0)); //A - projected to ref ellipsoid
-		Eigen::Vector3d B_ECEF = LLA2ECEF(Eigen::Vector3d(WPB.Latitude, WPB.Longitude, 0.0)); //B - projected to ref ellipsoid
-		double horizontalDist  = (B_ECEF - A_ECEF).norm();
-		return horizontalDist;
-	}
-
-	//Get the total horizontal travel distance (m) for a mission, including from a start position to the first waypoint
-	static double GetTotalMissionHorizontalDistance(DroneInterface::WaypointMission const & Mission, DroneInterface::Waypoint const & StartPos) {
-		if (Mission.Waypoints.empty())
-			return 0.0;
-
-		double totalDist = GetHorizontalDistBetweenWaypoints(StartPos, Mission.Waypoints[0]);
-		for (size_t n = 0U; (n + 1U) < Mission.Waypoints.size(); n++)
-			totalDist += GetHorizontalDistBetweenWaypoints(Mission.Waypoints[n], Mission.Waypoints[n + 1U]);
-		return totalDist;
-	}
-
 	//Task a drone to an available mission and update states accordingly
 	void GuidanceEngine::TaskDroneToAvailableMission(DroneInterface::Drone * DroneToTask) {
 		if (! m_availableMissionIndices.empty()) {
@@ -455,15 +437,22 @@ namespace Guidance {
 			currentPos.Longitude = droneLLA(1);
 			currentPos.RelAltitude = 0.0;
 
-			int missionIndex = SelectSubRegion(m_TA, m_droneMissions, m_availableMissionIndices, currentPos, m_MissionParams);
+			int missionIndex = SelectSubRegion(m_TA, m_surveyRegionPartition, m_droneMissions, m_availableMissionIndices, currentPos, m_MissionParams);
 			if (missionIndex >= 0) {
-				//There is sub-region we may be able to fly - task drone
+				//There is sub-region we may be able to fly
+
+				//Re-optimize the mission for this sub-region based on the drones current (starting) position
+				//std::cerr << "Mission for sub-region " << missionIndex << " being re-optimized.\r\n";
+				PlanMission(m_surveyRegionPartition[missionIndex], m_droneMissions[missionIndex], m_MissionParams, &currentPos);
+				MapWidget::Instance().m_guidanceOverlay.SetData_PlannedMissions(m_droneMissions);
+
+				//Task drone to the updated mission
 				m_availableMissionIndices.erase(missionIndex);
 				TaskDroneWithMission(DroneToTask, m_droneMissions[missionIndex]);
 				m_droneStates.at(DroneToTask->GetDroneSerial()) = std::make_tuple(2, missionIndex, std::chrono::steady_clock::now());
 
 				//Compute the total travel distance for the mission we are tasking and initialize progress fields
-				m_taskedMissionDistances[missionIndex] = GetTotalMissionHorizontalDistance(m_droneMissions[missionIndex], currentPos);
+				m_taskedMissionDistances[missionIndex] = m_droneMissions[missionIndex].TotalMissionDistance2D(&currentPos);
 				m_taskedMissionProgress[missionIndex]  = 0.0;
 			}
 		}
@@ -550,8 +539,12 @@ namespace Guidance {
 		}
 	}
 
+	//Note: Carefully evaluate rick of deadlocking due to mutex locking. The guidance module holds it's lock for way
+	//longer than I would like and it holds the lock while it calls methods in other modules that probably also lock
+	//mutexes. Try to shorten the lock holds and avoid lock nests.
+
 	void GuidanceEngine::ModuleMain(void) {
-		double AnalysisPeriod = 1.0; //Analyse drone tasking every this many seconds
+		double AnalysisPeriod = 1.0; //Analyze drone tasking every this many seconds
 		TimePoint LastAnalysisTP = AdvanceTimepoint(std::chrono::steady_clock::now(), -1.0*AnalysisPeriod);
 		while (! m_abort) {
 			//Grab any settings that we may need before starting the loop - ensure we don't hold a lock on m_mutex while locking the options mutex
@@ -763,53 +756,75 @@ namespace Guidance {
 	//    with shadows.
 	//Arguments:
 	//TA                      - Input - Time Available function
+	//SubRegionsNM            - Input - Polygon collections representing each sub-region (in Normalized Mercator)
 	//SubregionMissions       - Input - A vector of drone Missions - Element n is the mission for sub-region n.
 	//AvailableMissionIndices - Input - Set of indices of missions in SubregionMissions to consider
 	//StartPos                - Input - The starting position of the drone (to tell us how far away from each sub-region mission it is)
 	//MissionParams           - Input - Parameters specifying speed and row spacing (see definitions in struct declaration)
 	//
-	//Returns: The index of the drone mission (and sub-region) to task the drone to. Returns -1 if none are plausable
-	int SelectSubRegion(ShadowPropagation::TimeAvailableFunction const & TA, std::vector<DroneInterface::WaypointMission> const & SubregionMissions,
-	                    std::unordered_set<int> const & AvailableMissionIndices, DroneInterface::Waypoint const & StartPos,
-	                    MissionParameters const & MissionParams) {
+	//Returns: The index of the drone mission (and sub-region) to task the drone to. Returns -1 if none are viable
+	int SelectSubRegion(ShadowPropagation::TimeAvailableFunction const & TA, std::Evector<PolygonCollection> const & SubRegionsNM,
+	                    std::vector<DroneInterface::WaypointMission> const & SubregionMissions, std::unordered_set<int> const & AvailableMissionIndices,
+	                    DroneInterface::Waypoint const & StartPos, MissionParameters const & MissionParams) {
 		using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 
 		if (AvailableMissionIndices.empty())
 			return -1;
 
-		//For each available mission, figure out if it is viable (can we fly it before getting hit with shadows?) and if so,
-		//Compute the travel time to reach and start the mission. Select the mission that we can get to the fastest, out of
-		//all viable missions.
+		//For each available mission, figure out if it is viable (can we fly it before getting hit with shadows?). Select the
+		//best viable mission. We do this based on distance from the drone to the sub-region. This heuristic is appropriate
+		//when we plan on re-planning the mission once a region is selected. If we don't, we could just go based on distance
+		//from the first waypoint. What we are doing here has one drawback - the assessment of whether a region is viable is based
+		//on the current planned mission for a region, which may not be optimal (given the drones starting point) and may be updated
+		//after a drone is tasked to the sub-region. Consequently, we may overlook some regions that are barely viable with a better
+		//mission, but not if we fly the original planned mission. This is relatively minor and means our shadow avoidance may err
+		//slightly on the cautious side in such circumstances.
+		Eigen::Vector2d StartPos_LL(StartPos.Latitude, StartPos.Longitude);
+		Eigen::Vector2d StartPos_NM = LatLonToNM(StartPos_LL);
 
-		int    bestMissionIndex       = -1;
-		double timeToReachBestMission = std::nan("");
+		int    bestSubregionIndex     = -1;
+		//double timeToReachBestMission = std::nan("");
+		double distToBestRegion       = std::nan("");
 		int    numViableRegions       = 0;
-		for (int missionIndex : AvailableMissionIndices) {
-			if (! SubregionMissions[missionIndex].Waypoints.empty()) {
-				DroneInterface::Waypoint WP0 = SubregionMissions[missionIndex].Waypoints[0];
+		for (int subregionIndex : AvailableMissionIndices) {
+			if (! SubregionMissions[subregionIndex].Waypoints.empty()) {
+				DroneInterface::Waypoint WP0 = SubregionMissions[subregionIndex].Waypoints[0];
 				double timeToReachRegion     = EstimateMissionTime(StartPos, WP0, MissionParams.TargetSpeed);
 				TimePoint missionStartTime   = AdvanceTimepoint(std::chrono::steady_clock::now(), timeToReachRegion);
 				double margin;
-				if (IsPredictedToFinishWithoutShadows(TA, SubregionMissions[missionIndex], 0.0, missionStartTime, margin)) {
+				if (IsPredictedToFinishWithoutShadows(TA, SubregionMissions[subregionIndex], 0.0, missionStartTime, margin)) {
 					//This region is viable
 					numViableRegions++;
-					if ((bestMissionIndex < 0) || (timeToReachRegion < timeToReachBestMission)) {
-						bestMissionIndex       = missionIndex;
-						timeToReachBestMission = timeToReachRegion;
+
+					//Compute distance to sub-region. This is in NM units - we could convert to m using the drones position, but
+					//since we are only using this to compare distances we can skip that and just compare distances in NM units.
+					double distToSubregion = (SubRegionsNM[subregionIndex].ProjectPoint(StartPos_NM) - StartPos_NM).norm();
+					//std::cerr << "Viable sub-region. Dist: " << distToSubregion << " NM units.\r\n";
+					if ((bestSubregionIndex < 0) || (distToSubregion < distToBestRegion)) {
+						bestSubregionIndex = subregionIndex;
+						distToBestRegion   = distToSubregion;
+						//std::cerr << "Updating best sub-region. Dist: " << distToBestRegion << " NM units.\r\n";
 					}
+
+					//TODO: Here
+
+					/*if ((bestSubregionIndex < 0) || (timeToReachRegion < timeToReachBestMission)) {
+						bestSubregionIndex     = subregionIndex;
+						timeToReachBestMission = timeToReachRegion;
+					}*/
 				}
 				//else
-				//	std::cerr << "Region " << missionIndex << " is non-viable.\r\n";
+				//	std::cerr << "Region " << subregionIndex << " is non-viable.\r\n";
 			}
 		}
 		//std::cerr << "Num viable regions: " << numViableRegions << "\r\n";
 
-		return bestMissionIndex;
+		return bestSubregionIndex;
 	}
 
 	//7 - Given a Time Available function, a collection of sub-regions (with their pre-planned missions), and a collection of drone start positions, choose
 	//    sequences (of a given length) of sub-regions for each drone to fly, in order. When the mission time exceeds our prediction horizon the time available
-	//    function is no longer useful in chosing sub-regions but they can still be chosen in a logical fashion that avoids leaving holes in the map... making the
+	//    function is no longer useful in choosing sub-regions but they can still be chosen in a logical fashion that avoids leaving holes in the map... making the
 	//    optimistic assumption that they will be shadow-free when we get there.
 	//TA                  - Input  - Time Available function
 	//SubregionMissions   - Input  - A vector of drone Missions - Element n is the mission for sub-region n.

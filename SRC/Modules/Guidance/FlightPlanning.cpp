@@ -8,79 +8,17 @@
 //System Includes
 
 //External Includes
-//#include "../../eigen/Eigen/LU"
-//#include "../../eigen/Eigen/QR"
-//#include "../../eigen/Eigen/Geometry"
 
 //Project Includes
 #include "Guidance.hpp"
-//#include "../../UI/VehicleControlWidget.hpp"
 #include "../../Utilities.hpp"
-//#include "../../Maps/MapUtils.hpp"
 
 #define PI 3.14159265358979323846
 
 // *********************************************************************************************************************************
 // *************************************************   Local Function Definitions   ************************************************
 // *********************************************************************************************************************************
-
-//Get a lower bound for the dot product of any point in a region with VHat, based on the regions AABB
-static double FindLowerBoundProjectionOntoUnitVec(Eigen::Vector4d const & AABB, Eigen::Vector2d const & VHat) {
-	Eigen::Vector2d p1(AABB(0), AABB(2));
-	Eigen::Vector2d p2(AABB(0), AABB(3));
-	Eigen::Vector2d p3(AABB(1), AABB(2));
-	Eigen::Vector2d p4(AABB(1), AABB(3));
-
-	double proj1 = p1.dot(VHat);
-	double proj2 = p2.dot(VHat);
-	double proj3 = p3.dot(VHat);
-	double proj4 = p4.dot(VHat);
-
-	return std::min(std::min(proj1, proj2), std::min(proj3, proj4));
-}
-
-//Get an upper bound for the dot product of any point in a region with VHat, based on the regions AABB
-static double FindUpperBoundProjectionOntoUnitVec(Eigen::Vector4d const & AABB, Eigen::Vector2d const & VHat) {
-	Eigen::Vector2d p1(AABB(0), AABB(2));
-	Eigen::Vector2d p2(AABB(0), AABB(3));
-	Eigen::Vector2d p3(AABB(1), AABB(2));
-	Eigen::Vector2d p4(AABB(1), AABB(3));
-
-	double proj1 = p1.dot(VHat);
-	double proj2 = p2.dot(VHat);
-	double proj3 = p3.dot(VHat);
-	double proj4 = p4.dot(VHat);
-
-	return std::max(std::max(proj1, proj2), std::max(proj3, proj4));
-}
-
-//Find the index of the segment that contains the closest endpoint to the point Pt. Return the index (or -1 if Segments is empty)
-//and populate Endpoint with 1 or 2 to indicate which endpoint is the one closest to the point. If SegmentIndicesToIgnore is not
-//null, segments with indices in the provided set will not be considered.
-static int FindSegmentWithEndpointClosestToPoint(std::Evector<LineSegment> const & Segments, Eigen::Vector2d const & Pt, int & Endpoint,
-                                                 std::unordered_set<int> * SegmentIndicesToIgnore) {
-	int bestSegIndex = -1;
-	double shortestDist = std::nan("");
-	for (int n = 0U; n < (int) Segments.size(); n++) {
-		if ((SegmentIndicesToIgnore != nullptr) && (SegmentIndicesToIgnore->count(n) > 0U))
-			continue;
-		double dist1 = (Segments[n].m_endpoint1 - Pt).norm();
-		double dist2 = (Segments[n].m_endpoint2 - Pt).norm();
-		if ((std::isnan(shortestDist)) || (dist1 < shortestDist)) {
-			shortestDist = dist1;
-			bestSegIndex = n;
-			Endpoint = 1;
-		}
-		if ((std::isnan(shortestDist)) || (dist2 < shortestDist)) {
-			shortestDist = dist2;
-			bestSegIndex = n;
-			Endpoint = 2;
-		}
-	}
-	return bestSegIndex;
-}
-
-void PlanMission_Elaina(PolygonCollection const & Region, DroneInterface::WaypointMission & Mission, Guidance::MissionParameters const & MissionParams) {
+static void PlanMission_Elaina(PolygonCollection const & Region, DroneInterface::WaypointMission & Mission, Guidance::MissionParameters const & MissionParams) {
 	auto startTime = std::chrono::steady_clock::now();
 
 	Mission.Waypoints.clear();
@@ -360,6 +298,220 @@ void PlanMission_Elaina(PolygonCollection const & Region, DroneInterface::Waypoi
 	std::cerr << "Runtime: " << runtime_ms << " ms.\r\n";
 }
 
+//Get a lower bound for the dot product of any point in a region with VHat, based on the regions AABB
+static double FindLowerBoundProjectionOntoUnitVec(Eigen::Vector4d const & AABB, Eigen::Vector2d const & VHat) {
+	Eigen::Vector2d p1(AABB(0), AABB(2));
+	Eigen::Vector2d p2(AABB(0), AABB(3));
+	Eigen::Vector2d p3(AABB(1), AABB(2));
+	Eigen::Vector2d p4(AABB(1), AABB(3));
+
+	double proj1 = p1.dot(VHat);
+	double proj2 = p2.dot(VHat);
+	double proj3 = p3.dot(VHat);
+	double proj4 = p4.dot(VHat);
+
+	return std::min(std::min(proj1, proj2), std::min(proj3, proj4));
+}
+
+//Get an upper bound for the dot product of any point in a region with VHat, based on the regions AABB
+static double FindUpperBoundProjectionOntoUnitVec(Eigen::Vector4d const & AABB, Eigen::Vector2d const & VHat) {
+	Eigen::Vector2d p1(AABB(0), AABB(2));
+	Eigen::Vector2d p2(AABB(0), AABB(3));
+	Eigen::Vector2d p3(AABB(1), AABB(2));
+	Eigen::Vector2d p4(AABB(1), AABB(3));
+
+	double proj1 = p1.dot(VHat);
+	double proj2 = p2.dot(VHat);
+	double proj3 = p3.dot(VHat);
+	double proj4 = p4.dot(VHat);
+
+	return std::max(std::max(proj1, proj2), std::max(proj3, proj4));
+}
+
+//Find the index of the segment that contains the closest endpoint to the point Pt. Return the index (or -1 if Segments is empty)
+//and populate Endpoint with 1 or 2 to indicate which endpoint is the one closest to the point. If SegmentIndicesToIgnore is not
+//null, segments with indices in the provided set will not be considered.
+static int FindSegmentWithEndpointClosestToPoint(std::Evector<LineSegment> const & Segments, Eigen::Vector2d const & Pt, int & Endpoint,
+                                                 std::unordered_set<int> * SegmentIndicesToIgnore) {
+	int bestSegIndex = -1;
+	double shortestDist = std::nan("");
+	for (int n = 0U; n < (int) Segments.size(); n++) {
+		if ((SegmentIndicesToIgnore != nullptr) && (SegmentIndicesToIgnore->count(n) > 0U))
+			continue;
+		double dist1 = (Segments[n].m_endpoint1 - Pt).norm();
+		double dist2 = (Segments[n].m_endpoint2 - Pt).norm();
+		if ((std::isnan(shortestDist)) || (dist1 < shortestDist)) {
+			shortestDist = dist1;
+			bestSegIndex = n;
+			Endpoint = 1;
+		}
+		if ((std::isnan(shortestDist)) || (dist2 < shortestDist)) {
+			shortestDist = dist2;
+			bestSegIndex = n;
+			Endpoint = 2;
+		}
+	}
+	return bestSegIndex;
+}
+
+//Given a collection of hatch lines and an initial waypoint (hatch line and endpoint), greedily build a mission by traversing hatch lines
+//and always choosing the nearest available hatch line to go to next.
+static void PopulateMissionFromHatchLines_Greedy(std::Evector<LineSegment> const & HatchLines, DroneInterface::WaypointMission & Mission,
+                                                 int FirstHatchLineIndex, int FirstEndPoint, Guidance::MissionParameters const & MissionParams) {
+	//Clear any previous waypoint contents and sanity check the inputs.
+	Mission.Waypoints.clear();
+	if ((FirstHatchLineIndex < 0) || (FirstHatchLineIndex >= (int) HatchLines.size()))
+		return;
+	if ((FirstEndPoint != 1) && (FirstEndPoint != 2))
+		return;
+
+	std::Evector<Eigen::Vector2d> waypoints_NM;
+	std::unordered_set<int> indicesOfUsedHatchLines;
+	waypoints_NM.reserve(std::max(size_t(2)*HatchLines.size(), size_t(10)));
+
+	//Traverse initial hatch line to kick us off
+	if (FirstEndPoint == 1) {
+		waypoints_NM.push_back(HatchLines[FirstHatchLineIndex].m_endpoint1);
+		waypoints_NM.push_back(HatchLines[FirstHatchLineIndex].m_endpoint2);
+	}
+	else {
+		waypoints_NM.push_back(HatchLines[FirstHatchLineIndex].m_endpoint2);
+		waypoints_NM.push_back(HatchLines[FirstHatchLineIndex].m_endpoint1);
+	}
+	indicesOfUsedHatchLines.insert(FirstHatchLineIndex);
+
+	//Now that the mission is seeded with the first hatch line, greedily traverse the remaining hatch lines
+	while (indicesOfUsedHatchLines.size() < HatchLines.size()) {
+		//Untraversed hatch lines remain
+		int nextEndpoint = 0;
+		int nextSegIndex = FindSegmentWithEndpointClosestToPoint(HatchLines, waypoints_NM.back(), nextEndpoint, &indicesOfUsedHatchLines);
+		if (nextSegIndex < 0) {
+			std::cerr << "Internal Error in PopulateMissionFromHatchLines_Greedy(): Hatch lines remain but we failed to select one.\r\n";
+			break;
+		}
+		if (nextEndpoint == 1) {
+			waypoints_NM.push_back(HatchLines[nextSegIndex].m_endpoint1);
+			waypoints_NM.push_back(HatchLines[nextSegIndex].m_endpoint2);
+		}
+		else {
+			waypoints_NM.push_back(HatchLines[nextSegIndex].m_endpoint2);
+			waypoints_NM.push_back(HatchLines[nextSegIndex].m_endpoint1);
+		}
+		indicesOfUsedHatchLines.insert(nextSegIndex);
+	}
+
+	//Build WaypointMission object from the collection of waypoints
+	Mission.Waypoints.reserve(waypoints_NM.size());
+	Mission.LandAtLastWaypoint = false;
+	Mission.CurvedTrajectory = true;
+	for (Eigen::Vector2d const & waypoint_NM : waypoints_NM) {
+		Eigen::Vector2d waypoint_LatLon = NMToLatLon(waypoint_NM);
+		Mission.Waypoints.emplace_back();
+		Mission.Waypoints.back().Latitude     = waypoint_LatLon(0);
+		Mission.Waypoints.back().Longitude    = waypoint_LatLon(1);
+		Mission.Waypoints.back().RelAltitude  = MissionParams.HAG;
+		Mission.Waypoints.back().CornerRadius = 5.0f;
+		Mission.Waypoints.back().Speed        = MissionParams.TargetSpeed;
+		Mission.Waypoints.back().LoiterTime   = std::nanf("");
+		Mission.Waypoints.back().GimbalPitch  = std::nanf("");
+	}
+}
+
+static void SelectBestMission(std::Evector<DroneInterface::WaypointMission> const & CandidateMissions, DroneInterface::Waypoint const * StartPos,
+                              DroneInterface::WaypointMission & BestMission) {
+	int bestMissionIndex = -1;
+	double lowestTravelDist = 0.0;
+	for (int missionIndex = 0; missionIndex < (int) CandidateMissions.size(); missionIndex++) {
+		double dist = CandidateMissions[missionIndex].TotalMissionDistance2D(StartPos);
+		if ((bestMissionIndex < 0) || (dist < lowestTravelDist)) {
+			bestMissionIndex = missionIndex;
+			lowestTravelDist = dist;
+		}
+	}
+	if (bestMissionIndex < 0)
+		std::cerr << "Internal Error in SelectBestMission(): Failed to select a mission based on travel distance.\r\n";
+	else
+		BestMission = CandidateMissions[bestMissionIndex];
+}
+
+//Returns true if two waypoints are so close that keeping both would not be practically useful.
+//Note that we sanitize missions before sending them to the drone (this happens quietly in RealDrone) so this is not
+//about trying to make a mission acceptable to a drone, but about the practical usefulness of waypoints for a survey flight.
+static bool AreWaypointsTooClose(DroneInterface::Waypoint const & A, DroneInterface::Waypoint const & B) {
+	if (std::abs(A.RelAltitude - B.RelAltitude) > 0.1)
+		return false;
+
+	//Project to ref ellipsoid and convert to ECEF
+	Eigen::Vector3d A_LLA(A.Latitude, A.Longitude, 0.0);
+	Eigen::Vector3d B_LLA(B.Latitude, B.Longitude, 0.0);
+	Eigen::Vector3d A_ECEF = LLA2ECEF(A_LLA);
+	Eigen::Vector3d B_ECEF = LLA2ECEF(B_LLA);
+	return ((A_ECEF - B_ECEF).norm() < 0.5);
+}
+
+//Returns true if 3 waypoints are almost co-linear.
+static bool AreWaypointsColinear(DroneInterface::Waypoint const & A, DroneInterface::Waypoint const & B, DroneInterface::Waypoint const & C) {
+	if ((std::abs(A.RelAltitude - B.RelAltitude) > 0.1) || (std::abs(B.RelAltitude - C.RelAltitude) > 0.1) || (std::abs(A.RelAltitude - C.RelAltitude) > 0.1))
+		return false;
+
+	//Project to ref ellipsoid and convert to ECEF
+	Eigen::Vector3d A_LLA(A.Latitude, A.Longitude, 0.0);
+	Eigen::Vector3d B_LLA(B.Latitude, B.Longitude, 0.0);
+	Eigen::Vector3d C_LLA(C.Latitude, C.Longitude, 0.0);
+	Eigen::Vector3d A_ECEF = LLA2ECEF(A_LLA);
+	Eigen::Vector3d B_ECEF = LLA2ECEF(B_LLA);
+	Eigen::Vector3d C_ECEF = LLA2ECEF(C_LLA);
+
+	Eigen::Vector3d V1_ECEF = B_ECEF - A_ECEF;
+	Eigen::Vector3d V2_ECEF = C_ECEF - B_ECEF;
+	V1_ECEF.normalize();
+	V2_ECEF.normalize();
+
+	//If V1 or V2 is essentially 0 then we have basically identical points and the middle is redundant
+	if ((V1_ECEF.norm() < 0.5) && (V2_ECEF.norm() < 0.5))
+		return true;
+
+	//If V1 and V2 are within 0.1 degrees of each other, we will treat them as co-linear
+	return (V1_ECEF.dot(V2_ECEF) >= 0.999998476913288);
+}
+
+//If a mission contains consecutive waypoints that are too close together or consecutive chains of co-linear waypoints,
+//remove redundant waypoints and interior waypoints from each co-linear chain. These aren't necessary and only serve to
+//slow down the drone without changing it's trajectory.
+static void RemoveRedundantWaypointsFromMission(DroneInterface::WaypointMission & Mission) {
+	if (Mission.Waypoints.empty())
+		return;
+
+	//First remove interior waypoints that are too close to adjacent waypoints. After this, waypoints n and n+1
+	//should not be too close together, for all n.
+	std::vector<DroneInterface::Waypoint> newWaypoints;
+	newWaypoints.reserve(Mission.Waypoints.size());
+	newWaypoints.push_back(Mission.Waypoints[0U]);
+	for (size_t n = 1U; n < Mission.Waypoints.size(); n++) {
+		if (! AreWaypointsTooClose(newWaypoints.back(), Mission.Waypoints[n]))
+			newWaypoints.push_back(Mission.Waypoints[n]);
+	}
+	if (newWaypoints.size() < Mission.Waypoints.size())
+		std::cerr << Mission.Waypoints.size() - newWaypoints.size() << " waypoints removed in mission cleanup due to proximity.\r\n";
+	Mission.Waypoints.swap(newWaypoints);
+
+	//Now go through looking for chains of co-linear waypoints. When we find 3 or more, remove interior waypoints.
+	newWaypoints.clear();
+	newWaypoints.reserve(Mission.Waypoints.size());
+	newWaypoints.push_back(Mission.Waypoints[0U]);
+	for (size_t n1 = 1U; n1 < Mission.Waypoints.size(); n1++) {
+		size_t n2 = n1 + 1U;
+		if (n2 >= Mission.Waypoints.size())
+			newWaypoints.push_back(Mission.Waypoints[n1]);
+		else if (! AreWaypointsColinear(newWaypoints.back(), Mission.Waypoints[n1], Mission.Waypoints[n2]))
+			newWaypoints.push_back(Mission.Waypoints[n1]);
+	}
+	if (newWaypoints.size() < Mission.Waypoints.size())
+		std::cerr << Mission.Waypoints.size() - newWaypoints.size() << " waypoints removed in mission cleanup due to co-linearity.\r\n";
+	Mission.Waypoints.swap(newWaypoints);
+}
+
+
 
 // *********************************************************************************************************************************
 // ************************************************   Public Function Definitions   ************************************************
@@ -371,17 +523,23 @@ namespace Guidance {
 	//Region        - Input  - The input survey region or sub-region to cover (polygon collection in NM coords)
 	//Mission       - Output - The planned mission that covers the input region
 	//MissionParams - Input  - Parameters specifying speed and row spacing (see definitions in struct declaration)
-	void PlanMission(PolygonCollection const & Region, DroneInterface::WaypointMission & Mission, MissionParameters const & MissionParams) {
+	//StartPos      - Input  - Optional: Initial position of vehicle (does not impact waypoints, but may impact ordering)
+	void PlanMission(PolygonCollection const & Region, DroneInterface::WaypointMission & Mission, MissionParameters const & MissionParams,
+	                 DroneInterface::Waypoint const * StartPos) {
 		//PlanMission_Elaina(Region, Mission, MissionParams);
 		//return;
 
-		//Compute row spacing in meters
+		Mission.Waypoints.clear();
 		auto startTime = std::chrono::steady_clock::now();
+
+		//Compute row spacing in meters
 		double RowSpacing_m = 2.0 * MissionParams.HAG * std::tan(0.5 * MissionParams.HFOV) * (1.0 - MissionParams.SidelapFraction);
 
 		//Lay down hatch lines separately for each disjoint component of the region.
 		std::Evector<LineSegment> hatchLines;
 		Eigen::Vector4d collectionAABB(std::nan(""), std::nan(""), std::nan(""), std::nan(""));
+		std::vector<size_t> extremeHatchLineSegmentIndices;
+		extremeHatchLineSegmentIndices.reserve(std::max((unsigned int) (2U * Region.m_components.size()), 4U));
 		for (Polygon const & comp : Region.m_components) {
 			//Get the AABB and minor axis for the polygon
 			Eigen::Vector4d AABB   = comp.GetAABB();
@@ -405,73 +563,52 @@ namespace Guidance {
 			//Lay down hatch lines orthogonal to the shortest axis to try and minimize the number of turns
 			double minProj = FindLowerBoundProjectionOntoUnitVec(AABB, VMinor);
 			double maxProj = FindUpperBoundProjectionOntoUnitVec(AABB, VMinor);
+			std::Evector<std::Evector<LineSegment>> segmentsByHatchLine;
+			segmentsByHatchLine.reserve((unsigned int) std::ceil((maxProj - minProj)/RowSpacing_NMUnits) + 2U);
 			for (double proj = minProj; proj <= maxProj; proj += RowSpacing_NMUnits) {
 				//Lay down the hatch line X dot VMinor = proj
 				std::Evector<LineSegment> segments = comp.ClipLine(VMinor, proj);
-				hatchLines.insert(hatchLines.end(), segments.begin(), segments.end());
+				if (! segments.empty())
+					segmentsByHatchLine.push_back(segments);
+			}
+
+			for (size_t n = 0U; n < segmentsByHatchLine.size(); n++) {
+				if ((n == 0U) || (n + 1U >= segmentsByHatchLine.size())) {
+					for (size_t m = 0U; m < segmentsByHatchLine[n].size(); m++)
+						extremeHatchLineSegmentIndices.push_back(hatchLines.size() + m);
+				}
+				hatchLines.insert(hatchLines.end(), segmentsByHatchLine[n].begin(), segmentsByHatchLine[n].end());
 			}
 		}
 
-		//Now we need to traverse the hatch lines in a reasonable order. Start by finding the segment with endpoint
-		//closest to the lower-left corner of the AABB (lowest)
-		Eigen::Vector2d startRefPt(collectionAABB(0), collectionAABB(2));
-		int startEndpoint = 0;
-		int startSegIndex = FindSegmentWithEndpointClosestToPoint(hatchLines, startRefPt, startEndpoint, nullptr);
-
-		std::Evector<Eigen::Vector2d> waypoints_NM;
-		std::unordered_set<int> indicesOfUsedHatchLines;
-		waypoints_NM.reserve(std::max(size_t(2)*hatchLines.size(), size_t(10)));
-		if (startSegIndex >= 0) {
-			if (startEndpoint == 1) {
-				waypoints_NM.push_back(hatchLines[startSegIndex].m_endpoint1);
-				waypoints_NM.push_back(hatchLines[startSegIndex].m_endpoint2);
-			}
-			else {
-				waypoints_NM.push_back(hatchLines[startSegIndex].m_endpoint2);
-				waypoints_NM.push_back(hatchLines[startSegIndex].m_endpoint1);
-			}
-			indicesOfUsedHatchLines.insert(startSegIndex);
-
-			//We have seeded the mission with the first hatch line. Now greedily traverse remaining hatch lines
-			while (indicesOfUsedHatchLines.size() < hatchLines.size()) {
-				//Untraversed hatch lines remain
-				int nextEndpoint = 0;
-				int nextSegIndex = FindSegmentWithEndpointClosestToPoint(hatchLines, waypoints_NM.back(), nextEndpoint, &indicesOfUsedHatchLines);
-				if (nextSegIndex < 0) {
-					std::cerr << "Internal Error in PlanMission(): Hatch lines remain but we failed to select one. \r\n";
-					break;
-				}
-
-				if (nextEndpoint == 1) {
-					waypoints_NM.push_back(hatchLines[nextSegIndex].m_endpoint1);
-					waypoints_NM.push_back(hatchLines[nextSegIndex].m_endpoint2);
-				}
-				else {
-					waypoints_NM.push_back(hatchLines[nextSegIndex].m_endpoint2);
-					waypoints_NM.push_back(hatchLines[nextSegIndex].m_endpoint1);
-				}
-				indicesOfUsedHatchLines.insert(nextSegIndex);
-			}
+		//If no hatch lines intersected the region, it is too small or narrow to effectively fly with current settings using this strategy.
+		//We could do a few things in this case:
+		// 1 - Put one waypoint in the middle of the region
+		// 2 - Make a single hatch line going parallel to the longest axis of the region and try to put it through the middle
+		// 3 - Note that this usually happens when we get a tiny region due to a less-than-ideal cut location. Just drop the mission.
+		// We go with option 3 for now, although we could change this if we change things to proactively cut tiny sub-regions after partitioning.
+		if (hatchLines.empty()) {
+			std::cerr << "Dropping mission for pathological region since no hatch lines intersect it.\r\n";
+			return;
 		}
 
-		//Build WaypointMission object from the collection of waypoints
-		Mission.Waypoints.clear();
-		Mission.Waypoints.reserve(waypoints_NM.size());
-		Mission.LandAtLastWaypoint = false;
-		Mission.CurvedTrajectory = true;
-		for (Eigen::Vector2d const & waypoint_NM : waypoints_NM) {
-			Eigen::Vector2d waypoint_LatLon = NMToLatLon(waypoint_NM);
-			Mission.Waypoints.emplace_back();
-			Mission.Waypoints.back().Latitude     = waypoint_LatLon(0);
-			Mission.Waypoints.back().Longitude    = waypoint_LatLon(1);
-			Mission.Waypoints.back().RelAltitude  = MissionParams.HAG;
-			Mission.Waypoints.back().CornerRadius = 5.0f;
-			Mission.Waypoints.back().Speed        = MissionParams.TargetSpeed;
-			Mission.Waypoints.back().LoiterTime   = std::nanf("");
-			Mission.Waypoints.back().GimbalPitch  = std::nanf("");
+		//Now build a collection of candidate missions by starting at each end of each extreme hatch line segment and greedily
+		//populating waypoints. Select the best candidate mission (the one with lowest total travel distance).
+		std::Evector<DroneInterface::WaypointMission> candidateMissions;
+		candidateMissions.reserve(2U*extremeHatchLineSegmentIndices.size());
+		for (size_t segIndex : extremeHatchLineSegmentIndices) {
+			candidateMissions.emplace_back();
+			PopulateMissionFromHatchLines_Greedy(hatchLines, candidateMissions.back(), int(segIndex), 1, MissionParams);
+
+			candidateMissions.emplace_back();
+			PopulateMissionFromHatchLines_Greedy(hatchLines, candidateMissions.back(), int(segIndex), 2, MissionParams);
 		}
+		SelectBestMission(candidateMissions, StartPos, Mission);
+
+		//Remove redundant waypoints (consecutive waypoints that are too close or chains of co-linear waypoints)
+		RemoveRedundantWaypointsFromMission(Mission);
 		
 		double runtime_ms = SecondsElapsed(startTime)*1000.0;
-		std::cerr << "Runtime: " << runtime_ms << " ms.\r\n";
+		std::cerr << "Considered " << candidateMissions.size() << " candidate missions. Runtime: " << runtime_ms << " ms.\r\n";
 	}
 }

@@ -264,6 +264,9 @@ public:
 	void RemoveTrivialHoles(void); //Remove holes with no area
 	void RemoveEmptyHoles(void);   //Remove holes with no vertices
 
+	//Get the point inside or on the edge of the polygon nearest to the provided point
+	Eigen::Vector2d ProjectPoint(Eigen::Vector2d const & Point) const;
+
 	//Test to see if polygon contains a point
 	bool ContainsPoint(Eigen::Vector2d const & Point) const;
 
@@ -334,6 +337,9 @@ public:
 	void RemoveEmptyHoles(void);        //Remove empty holes from all components
 	void RemoveTrivialComponents(void); //Remove trivial components
 	void RemoveEmptyComponents(void);   //Remove components with empty boundaries
+
+	//Get the point inside or on the boundary of the polygon collection nearest to the provided point
+	Eigen::Vector2d ProjectPoint(Eigen::Vector2d const & Point) const;
 
 	//Test to see if polygon collection contains a point
 	bool ContainsPoint(Eigen::Vector2d const & Point) const;

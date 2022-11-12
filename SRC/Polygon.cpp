@@ -1515,6 +1515,25 @@ void Polygon::RemoveEmptyHoles(void) {
 	}
 }
 
+//Get the point inside or on the edge of the polygon nearest to the provided point
+Eigen::Vector2d Polygon::ProjectPoint(Eigen::Vector2d const & Point) const {
+	if (ContainsPoint(Point))
+		return Point;
+
+	//If the point is not interior, the projection will occur on the boundary (either external or on a hole boundary)
+	Eigen::Vector2d bestBdryPt = m_boundary.ProjectPointToBoundary(Point);
+	double distToBestBdryPt = (Point - bestBdryPt).norm();
+	for (auto const & hole : m_holes) {
+		Eigen::Vector2d projection = hole.ProjectPointToBoundary(Point);
+		double dist = (Point - projection).norm();
+		if (dist < distToBestBdryPt) {
+			bestBdryPt = projection;
+			distToBestBdryPt = dist;
+		}
+	}
+	return bestBdryPt;
+}
+
 //Test to see if polygon contains a point
 bool Polygon::ContainsPoint(Eigen::Vector2d const & Point) const {
 	bool inHole = false;
@@ -2154,6 +2173,22 @@ void PolygonCollection::RemoveEmptyComponents(void) {
 		else
 			index++;
 	}
+}
+
+//Get the point inside or on the boundary of the polygon collection nearest to the provided point
+Eigen::Vector2d PolygonCollection::ProjectPoint(Eigen::Vector2d const & Point) const {
+	//Project to each component and find the projection closest to the original point
+	Eigen::Vector2d bestProjPt;
+	double distToBestProjPt = std::nan("");
+	for (auto const & comp : m_components) {
+		Eigen::Vector2d projection = comp.ProjectPoint(Point);
+		double dist = (Point - projection).norm();
+		if (std::isnan(distToBestProjPt) || (dist < distToBestProjPt)) {
+			bestProjPt = projection;
+			distToBestProjPt = dist;
+		}
+	}
+	return bestProjPt;
 }
 
 //Test to see if polygon collection contains a point

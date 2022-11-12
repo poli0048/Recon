@@ -159,7 +159,7 @@ class VehicleControlWidget {
 		static inline bool IsDroneHovered(Eigen::Vector2d const & CursorPos_ScreenSpace, Eigen::Vector2d const & drone_ScreenSpace,
 		                                  Eigen::Matrix2d const & R, float IconWidth_pixels);
 		
-		static inline void StartManualControl(DroneInterface::Drone & Drone, vehicleState & State, bool FlyAtDeck = false);
+		static inline void EnableClickAndDragControl(DroneInterface::Drone & Drone, vehicleState & State, bool FlyAtDeck = false);
 		static inline void DroneCommand_Hover(DroneInterface::Drone & Drone, vehicleState & State);
 		static inline void DroneCommand_LandNow(DroneInterface::Drone & Drone, vehicleState & State);
 		static inline void DroneCommand_GoHomeAndLand(DroneInterface::Drone & Drone, vehicleState & State);
@@ -175,7 +175,8 @@ class VehicleControlWidget {
 		inline void ControlThreadMain(void);
 
 		//Smart RTL Helpers
-		static inline int NumberOfFlyingDrones(std::vector<DroneInterface::Drone *> const & Drones);
+		inline void AbortRTLSequence(void);
+		static inline int  NumberOfFlyingDrones(std::vector<DroneInterface::Drone *> const & Drones);
 		static inline bool AllFlyingDronesReachedTargetHAG(std::vector<DroneInterface::Drone *> const & Drones,
 		                                                   std::vector<vehicleState *> const & DroneStates);
 		static inline bool AllFlyingDronesReachedTargetPositions2D(std::vector<DroneInterface::Drone *> const & Drones,
@@ -488,13 +489,37 @@ inline void VehicleControlWidget::ControlThreadMain(void) {
 		}
 		//int m_RTL_State = -1; //-1 = off, 0 = start RTL (goto RTL_HAG), 1 = 2D Go home, 2 = Drop target drone HAG, 3 = land target drone
 
-		//TODO
-
-
-
 		m_dronesAndStatesMutex.unlock();
 		
 		std::this_thread::sleep_for(std::chrono::milliseconds(int32_t(approxLoopPeriod*1000.0)));
+	}
+}
+
+inline void VehicleControlWidget::AbortRTLSequence(void) {
+	MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_messageToken); //Remove RTL message
+
+	//If no RTL is in progress, there is nothing to do
+	if (m_RTL_State < 0)
+		return;
+
+	m_RTL_State = -1; //Stop and disable RTL state machine
+	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
+
+	//Iterate through each connected drone and re-enable click & drag control based on current state (stop drone motion)
+	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
+		DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
+		if (drone == nullptr)
+			continue;
+		
+		//Skip drone if not currently flying
+		bool isFlying = false;
+		DroneInterface::Drone::TimePoint isFlyingTimestamp;
+		if ((! drone->IsCurrentlyFlying(isFlying, isFlyingTimestamp)) || (SecondsElapsed(isFlyingTimestamp) > 5.0))
+			isFlying = false;
+		if (! isFlying)
+			continue;
+
+		EnableClickAndDragControl(*drone, m_vehicleStates.at(m_currentDroneSerials[n]), false);
 	}
 }
 
@@ -941,10 +966,10 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 				else {
 					//Stop drag event - if in map widget bounds, this is a command to move the drone
 					if (CursorInBounds) {
-						if (m_RTL_State >= 0)
+						if (m_RTL_State >= 0) {
+							AbortRTLSequence();
 							std::cerr << "RTL Sequence canceled due to manual drone move command.\r\n";
-						m_RTL_State = -1; //Cancel RTL sequence if in progress
-						MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_messageToken);
+						}
 
 						//Set the target location
 						state->m_targetLatLon = NMToLatLon(CursorPos_NM);
@@ -1271,7 +1296,7 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 					if (MyGui::BeginMenu(u8"\uf5b0", labelMargin, "Take off & Hover")) {
 						if (ImGui::MenuItem("Confirm Command", NULL, false, true)) {
 							DroneCommand_Hover(*drone, *state);
-							StartManualControl(*drone, *state, false);
+							EnableClickAndDragControl(*drone, *state, false);
 							state->m_targetHAGFeet = 50.0;
 						}
 						ImGui::EndMenu();
@@ -1303,7 +1328,7 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 					}
 					if (MyGui::BeginMenu(u8"\uf8cc", labelMargin, "Click & Drag Control")) {
 						if (ImGui::MenuItem("Enable", NULL, false, true))
-							StartManualControl(*drone, *state);
+							EnableClickAndDragControl(*drone, *state);
 						ImGui::EndMenu();
 					}
 					if ((Guidance::GuidanceEngine::Instance().IsRunning()) &&
@@ -1341,11 +1366,10 @@ inline void VehicleControlWidget::AllDronesStopAndHover(void) {
 	//Abort any mission the guidance module may be running since this is an All-drone command
 	Guidance::GuidanceEngine::Instance().AbortMission();
 
-	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
-	m_RTL_State = -1; //Cancel any RTL in progress
-	MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_messageToken);
+	AbortRTLSequence(); //Abort any RTL that may be in progress
 
 	//Iterate through each connected drone and execute the command
+	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
 	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
 		DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
 		if (drone == nullptr)
@@ -1359,7 +1383,7 @@ inline void VehicleControlWidget::AllDronesStopAndHover(void) {
 		if (! isFlying)
 			continue;
 
-		StartManualControl(*drone, m_vehicleStates.at(m_currentDroneSerials[n]), false);
+		EnableClickAndDragControl(*drone, m_vehicleStates.at(m_currentDroneSerials[n]), false);
 	}
 }
 
@@ -1367,11 +1391,10 @@ inline void VehicleControlWidget::AllDronesHitTheDeck(void) {
 	//Abort any mission the guidance module may be running since this is an All-drone command
 	Guidance::GuidanceEngine::Instance().AbortMission();
 
-	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
-	m_RTL_State = -1; //Cancel any RTL in progress
-	MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_messageToken);
+	AbortRTLSequence(); //Abort any RTL that may be in progress
 
 	//Iterate through each connected drone and execute the command
+	std::scoped_lock lock(m_dronesAndStatesMutex); //Lock vector of drone serials and states
 	for (size_t n = 0; n < m_currentDroneSerials.size(); n++) {
 		DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
 		if (drone == nullptr)
@@ -1385,7 +1408,7 @@ inline void VehicleControlWidget::AllDronesHitTheDeck(void) {
 		if (! isFlying)
 			continue;
 
-		StartManualControl(*drone, m_vehicleStates.at(m_currentDroneSerials[n]), true);
+		EnableClickAndDragControl(*drone, m_vehicleStates.at(m_currentDroneSerials[n]), true);
 	}
 }
 
@@ -1463,7 +1486,7 @@ inline void VehicleControlWidget::AllDronesReturnHomeAndLand(void) {
 
 	//Step 1 - Stop horizontal motion for all drones.
 	for (size_t n = 0U; n < drones.size(); n++)
-		StartManualControl(*(drones[n]), *(droneStates[n]), false);
+		EnableClickAndDragControl(*(drones[n]), *(droneStates[n]), false);
 
 	//Step 2 - Get the max of all MSA values on all lines between drones and their respective home points
 	double maxMSA = std::nan("");
@@ -1547,7 +1570,7 @@ inline void VehicleControlWidget::SetHazardCondition(std::string Serial, bool St
 			if ((StopOnHazard || DodgeUpOnHazard) && (! state.m_hazard)) {
 				DroneInterface::Drone * drone = DroneInterface::DroneManager::Instance().GetDrone(m_currentDroneSerials[n]);
 				if (drone != nullptr) {
-					StartManualControl(*drone, state);
+					EnableClickAndDragControl(*drone, state);
 					if (DodgeUpOnHazard) {
 						std::cerr << "Drone with serial " << Serial << " is dodging up.\r\n";
 						state.m_targetHAGFeet += 12.0;
@@ -1572,8 +1595,8 @@ inline void VehicleControlWidget::ClearHazardCondition(std::string Serial) {
 	}
 }
 
-inline void VehicleControlWidget::StartManualControl(DroneInterface::Drone & Drone, vehicleState & State, bool FlyAtDeck) {
-	std::cerr << "Starting manual control for drone: " << Drone.GetDroneSerial() << ".\r\n";
+inline void VehicleControlWidget::EnableClickAndDragControl(DroneInterface::Drone & Drone, vehicleState & State, bool FlyAtDeck) {
+	//std::cerr << "Starting manual control for drone: " << Drone.GetDroneSerial() << ".\r\n";
 	
 	//Instruct the guidance module to stop commanding this drone (if it currently is)
 	Guidance::GuidanceEngine::Instance().RemoveDroneFromMission(Drone.GetDroneSerial());
@@ -1652,7 +1675,7 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 			if (MyGui::BeginMenu(u8"\uf5b0", labelMargin, "Take off & Hover")) {
 				if (ImGui::MenuItem("Confirm Command", NULL, false, true)) {
 					DroneCommand_Hover(drone, myState);
-					StartManualControl(drone, myState, false);
+					EnableClickAndDragControl(drone, myState, false);
 					myState.m_targetHAGFeet = 50.0;
 				}
 				ImGui::EndMenu();
@@ -1689,7 +1712,7 @@ inline void VehicleControlWidget::DrawContextMenu(bool Open, DroneInterface::Dro
 				}
 				else {
 					if (ImGui::MenuItem("Enable", NULL, false, true))
-						StartManualControl(drone, myState);
+						EnableClickAndDragControl(drone, myState);
 				}
 				ImGui::EndMenu();
 			}

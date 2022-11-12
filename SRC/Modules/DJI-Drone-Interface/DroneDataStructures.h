@@ -173,6 +173,32 @@ namespace DroneInterface {
 			}
 			return true;
 		}
+
+		//Get the total horizontal travel distance for a mission (in m). If StartPos is not null, includes travel from start pos to waypoint 0
+		double TotalMissionDistance2D(Waypoint const * StartPos) const {
+			if (Waypoints.empty())
+				return 0.0;
+
+			double totalDistance = 0.0;
+			if (StartPos != nullptr)
+				totalDistance += DistBetweenWaypoints2D(*StartPos, Waypoints[0]);
+			for (size_t n = 0U; n + 1U < Waypoints.size(); n++)
+				totalDistance += DistBetweenWaypoints2D(Waypoints[n], Waypoints[n + 1U]);
+			return totalDistance;
+		}
+
+		//Get the total 3D travel distance for a mission (in m). If StartPos is not null, includes travel from start pos to waypoint 0
+		double TotalMissionDistance3D(Waypoint const * StartPos) const {
+			if (Waypoints.empty())
+				return 0.0;
+
+			double totalDistance = 0.0;
+			if (StartPos != nullptr)
+				totalDistance += DistBetweenWaypoints3D(*StartPos, Waypoints[0]);
+			for (size_t n = 0U; n + 1U < Waypoints.size(); n++)
+				totalDistance += DistBetweenWaypoints3D(Waypoints[n], Waypoints[n + 1U]);
+			return totalDistance;
+		}
 	};
 
 	inline std::ostream & operator<<(std::ostream & Str, WaypointMission const & M) { 
