@@ -1019,7 +1019,23 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 		}
 	}
 	
-	//Iterate through each connected drone and draw it's last-known position (with yaw info) on the map, as well as current control task (move-to or waypoints)
+	//Iterate through each connected drone and draw it's current control task (move-to indicator or waypoint mission)
+	for (size_t n = 0; n < drones.size(); n++) {
+		DroneInterface::Drone::TimePoint Timestamp;
+		double Latitude, Longitude, Altitude;
+		if (drones[n]->GetPosition(Latitude, Longitude, Altitude, Timestamp)) {
+			Eigen::Vector2d dronePos_NM = LatLonToNM(Eigen::Vector2d(Latitude, Longitude));
+			Eigen::Vector2d dronePos_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(dronePos_NM);
+			
+			//Draw an indication of the current objective or mission for the drone (target location or current waypoint mission)
+			if (droneStates[n]->m_widgetControlEnabled && (! std::isnan(droneStates[n]->m_targetLatLon(0))) && (! std::isnan(droneStates[n]->m_targetLatLon(1))))
+				DrawMission_ManualControl(droneStates[n], dronePos_SS, DrawList);
+			else
+				DrawMission_Waypoints(n, drones[n], dronePos_SS, DrawList); //Draw waypoint mission (if flying one)
+		}
+	}
+
+	//Iterate through each connected drone and draw it's last-known position (with yaw info) on the map
 	for (size_t n = 0; n < drones.size(); n++) {
 		DroneInterface::Drone::TimePoint Timestamp;
 		double Latitude, Longitude, Altitude;
@@ -1028,15 +1044,8 @@ inline bool VehicleControlWidget::DrawMapOverlay(Eigen::Vector2d const & CursorP
 		if (drones[n]->GetPosition(Latitude, Longitude, Altitude, Timestamp) &&
 		    drones[n]->GetOrientation(Yaw, Pitch, Roll, Timestamp) &&
 		    drones[n]->IsCurrentlyFlying(IsFlying, Timestamp)) {
-			Eigen::Vector2d dronePos_LatLon(Latitude, Longitude);
-			Eigen::Vector2d dronePos_NM = LatLonToNM(dronePos_LatLon);
+			Eigen::Vector2d dronePos_NM = LatLonToNM(Eigen::Vector2d(Latitude, Longitude));
 			Eigen::Vector2d dronePos_SS = MapWidget::Instance().NormalizedMercatorToScreenCoords(dronePos_NM);
-			
-			//Draw an indication of the current objective or mission for the drone (target location or current waypoint mission)
-			if (droneStates[n]->m_widgetControlEnabled && (! std::isnan(droneStates[n]->m_targetLatLon(0))) && (! std::isnan(droneStates[n]->m_targetLatLon(1))))
-				DrawMission_ManualControl(droneStates[n], dronePos_SS, DrawList);
-			else
-				DrawMission_Waypoints(n, drones[n], dronePos_SS, DrawList); //Draw waypoint mission (if flying one)
 			
 			Eigen::Vector2d p1_SS = dronePos_SS + Eigen::Vector2d(-1.0*droneIconWidth_pixels/2.0f, -1.0*droneIconWidth_pixels/2.0f);
 			Eigen::Vector2d p2_SS = dronePos_SS + Eigen::Vector2d(     droneIconWidth_pixels/2.0f, -1.0*droneIconWidth_pixels/2.0f);
