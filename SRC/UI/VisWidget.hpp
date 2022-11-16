@@ -1,6 +1,6 @@
 //This widget exposes layer visibility and visualization parameters for data layers
 //Author: Bryan Poling
-//Copyright (c) 2020 Sentek Systems, LLC. All rights reserved. 
+//Copyright (c) 2020 Sentek Systems, LLC. All rights reserved.
 #pragma once
 
 //System Includes
@@ -25,6 +25,8 @@
 
 class VisWidget {
 	public:
+		//This object should only be accessed from the main draw thread - no locks are neaded if this is respected.
+		//This generally means only "Draw" methods in UI classes should access the singleton (since these are invoked by the main thread)
 		static VisWidget & Instance() { static VisWidget Widget; return Widget; }
 		
 		bool LayerVisible_MSA;
@@ -287,7 +289,7 @@ inline void VisWidget::Draw() {
 			ImGui::EndPopup();
 		}
 	}
-	
+
 	
 	ImGui::TextUnformatted("Survey Region");
 	ImGui::SameLine(checkBoxXPos);

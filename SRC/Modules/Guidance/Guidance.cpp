@@ -255,107 +255,121 @@ namespace Guidance {
 		}
 	}
 
-	//Do mission prep work, if necessary
+	//Do mission prep work - will lock m_mutex internally when accessing protected fields
 	void GuidanceEngine::MissionPrepWork(int PartitioningMethod) {
-		if (! m_missionPrepDone) {
-			//TODO: Copy any internal data needed for planning work, then unlock out mutex while we do the planning
-			//Re-lock and copy the results when done. This will prevent the UI from locking up if the prep work takes
-			//a non-trivial amount of time. Once done, we can also use the message overlay box to communicate state during prep.
+		//Make a local copy of the data necessary to do mission preparation
+		m_mutex.lock();
+		std::vector<DroneInterface::Drone *> dronesUnderCommand = m_dronesUnderCommand;
+		PolygonCollection surveyRegion  = m_surveyRegion;
+		MissionParameters missionParams = m_MissionParams;
+		m_mutex.unlock();
 
-			std::cerr << "Doing mission preparation work.\r\n\r\n";
-			//MapWidget::Instance().m_messageBoxOverlay.AddMessage("Preparing mission for execution..."s, m_MessageToken1);
+		std::cerr << "Doing mission preparation work.\r\n\r\n";
+		//MapWidget::Instance().m_messageBoxOverlay.AddMessage("Preparing mission for execution..."s, m_MessageToken1);
 
-			//Partition the survey region into components
-			m_surveyRegionPartition.clear();
-			if (PartitioningMethod == 0)
-				PartitionSurveyRegion_TriangleFusion(m_surveyRegion, m_surveyRegionPartition, m_MissionParams);
-			else if (PartitioningMethod == 1)
-				PartitionSurveyRegion_IteratedCuts(m_surveyRegion, m_surveyRegionPartition, m_MissionParams);
-			else
-				std::cerr << "Error: Unrecognized partitioning method. Skipping partitioning.\r\n";
-			std::vector<std::string> compLabels(m_surveyRegionPartition.size());
-			for (size_t n = 0U; n < m_surveyRegionPartition.size(); n++) {
-				Eigen::Vector4d AABB = m_surveyRegionPartition[n].GetAABB();
-				double mPerNMUnit = NMUnitsToMeters(1.0, 0.5*AABB(2) + 0.5*AABB(3));
-				double sqMPerNMAreaUnit = mPerNMUnit * mPerNMUnit;
-				double area_sqM = sqMPerNMAreaUnit * m_surveyRegionPartition[n].GetArea();
-				double area_acres = area_sqM / 4046.86;
-				std::ostringstream outSS;
-				outSS << "Sub-Region " << n << "\n" << std::fixed << std::setprecision(1) << area_acres << " acres";
-				compLabels[n] = outSS.str();
-			}
-			MapWidget::Instance().m_guidanceOverlay.SetData_SurveyRegionPartition(m_surveyRegionPartition, compLabels);
-
-			//Plan missions for each component of the partition - we are guaranteed a mission object for each sub-region, but
-			//the missions may be empty if the region is too pathological. These should be treated as complete right off the bat.
-			m_droneMissions.clear();
-			m_droneMissions.reserve(m_surveyRegionPartition.size());
-			for (auto const & component : m_surveyRegionPartition) {
-				DroneInterface::WaypointMission Mission;
-				PlanMission(component, Mission, m_MissionParams, nullptr);
-				m_droneMissions.push_back(Mission);
-			}
-			MapWidget::Instance().m_guidanceOverlay.SetData_PlannedMissions(m_droneMissions);
-
-			//Initialize states, and available indices
-			m_droneStates.clear();
-			m_taskedMissionDistances.clear();
-			m_taskedMissionProgress.clear();
-			m_dronePositions.clear();
-			m_availableMissionIndices.clear();
-			TimePoint NowTime = std::chrono::steady_clock::now();
-			for (DroneInterface::Drone * drone : m_dronesUnderCommand) {
-				std::string serial = drone->GetDroneSerial();
-				bool isFlying = false;
-				TimePoint isFlyingTimestamp;
-				if (drone->IsCurrentlyFlying(isFlying, isFlyingTimestamp) && (SecondsElapsed(isFlyingTimestamp) <= 4.0)) {
-					if (isFlying)
-						m_droneStates[serial] = std::make_tuple(1, -1, NowTime); //Loitering (available for tasking anyhow)
-					else
-						m_droneStates[serial] = std::make_tuple(0, -1, NowTime); //On ground and available for tasking
-				}
-				else {
-					std::cerr << "Bad or old telemetry for drone " << serial << ". Treating as on ground.\r\n";
-					m_droneStates[serial] = std::make_tuple(0, -1, NowTime); //On ground and available for tasking
-				}
-			}
-			for (int missionIndex = 0; missionIndex < (int) m_droneMissions.size(); missionIndex++) {
-				//Mark all non-trivial missions as available
-				if (! m_droneMissions[missionIndex].Waypoints.empty())
-					m_availableMissionIndices.insert(missionIndex);
-			}
-
-			//Populate the allowed takeoff times for all drones (use now for drones in the air) and populate
-			//the HAGs to use (m) per drone. These override mission HAG since we want height to be fixed per drone and not per mission
-			TimePoint nextAllowedTakeoffTime = std::chrono::steady_clock::now();
-			double nextAllowedHAG = m_MissionParams.HAG;
-			if (m_dronesUnderCommand.size() > 1U)
-				nextAllowedHAG += 0.5*(m_MissionParams.HeightStaggerInterval*double(m_dronesUnderCommand.size() - 1U));
-			for (DroneInterface::Drone * drone : m_dronesUnderCommand) {
-				std::string serial = drone->GetDroneSerial();
-				bool isFlying = false;
-				TimePoint isFlyingTimestamp;
-				if (drone->IsCurrentlyFlying(isFlying, isFlyingTimestamp) && (SecondsElapsed(isFlyingTimestamp) <= 4.0)) {
-					//Nothing unusual here - telemetry is recent
-					if (isFlying)
-						m_droneAllowedTakeoffTimes[serial] = std::chrono::steady_clock::now();
-					else {
-						m_droneAllowedTakeoffTimes[serial] = nextAllowedTakeoffTime;
-						nextAllowedTakeoffTime = AdvanceTimepoint(nextAllowedTakeoffTime, m_MissionParams.TakeoffStaggerInterval);
-					}
-				}
-				else {
-					std::cerr << "Bad or old telemetry for drone " << serial << ". Treating as on ground.\r\n";
-					m_droneAllowedTakeoffTimes[serial] = nextAllowedTakeoffTime;
-					nextAllowedTakeoffTime = AdvanceTimepoint(nextAllowedTakeoffTime, m_MissionParams.TakeoffStaggerInterval);
-				}
-				m_droneHAGs[serial] = nextAllowedHAG;
-				nextAllowedHAG -= m_MissionParams.HeightStaggerInterval;
-			}
-
-			m_missionPrepDone = true; //Mark the prep work as done
-			//MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_MessageToken1);
+		//Partition the survey region into components
+		std::Evector<PolygonCollection> surveyRegionPartition;
+		if (PartitioningMethod == 0)
+			PartitionSurveyRegion_TriangleFusion(surveyRegion, surveyRegionPartition, missionParams);
+		else if (PartitioningMethod == 1)
+			PartitionSurveyRegion_IteratedCuts(surveyRegion, surveyRegionPartition, missionParams);
+		else
+			std::cerr << "Error: Unrecognized partitioning method. Skipping partitioning.\r\n";
+		std::vector<std::string> compLabels(surveyRegionPartition.size());
+		for (size_t n = 0U; n < surveyRegionPartition.size(); n++) {
+			Eigen::Vector4d AABB = surveyRegionPartition[n].GetAABB();
+			double mPerNMUnit = NMUnitsToMeters(1.0, 0.5*AABB(2) + 0.5*AABB(3));
+			double sqMPerNMAreaUnit = mPerNMUnit * mPerNMUnit;
+			double area_sqM = sqMPerNMAreaUnit * surveyRegionPartition[n].GetArea();
+			double area_acres = area_sqM / 4046.86;
+			std::ostringstream outSS;
+			outSS << "Sub-Region " << n << "\n" << std::fixed << std::setprecision(1) << area_acres << " acres";
+			compLabels[n] = outSS.str();
 		}
+		MapWidget::Instance().m_guidanceOverlay.SetData_SurveyRegionPartition(surveyRegionPartition, compLabels);
+
+		//Plan missions for each component of the partition - we are guaranteed a mission object for each sub-region, but
+		//the missions may be empty if the region is too pathological. These should be treated as complete right off the bat.
+		std::vector<DroneInterface::WaypointMission> droneMissions;
+		droneMissions.reserve(surveyRegionPartition.size());
+		for (auto const & component : surveyRegionPartition) {
+			droneMissions.emplace_back();
+			PlanMission(component, droneMissions.back(), missionParams, nullptr);
+		}
+		MapWidget::Instance().m_guidanceOverlay.SetData_PlannedMissions(droneMissions);
+
+		//Set initial drone states
+		std::unordered_map<std::string, std::tuple<int, int, TimePoint>> droneStates;
+		TimePoint NowTime = std::chrono::steady_clock::now();
+		for (DroneInterface::Drone * drone : dronesUnderCommand) {
+			std::string serial = drone->GetDroneSerial();
+			bool isFlying = false;
+			TimePoint isFlyingTimestamp;
+			if (drone->IsCurrentlyFlying(isFlying, isFlyingTimestamp) && (SecondsElapsed(isFlyingTimestamp) <= 4.0)) {
+				if (isFlying)
+					droneStates[serial] = std::make_tuple(1, -1, NowTime); //Loitering (available for tasking anyhow)
+				else
+					droneStates[serial] = std::make_tuple(0, -1, NowTime); //On ground and available for tasking
+			}
+			else {
+				std::cerr << "Bad or old telemetry for drone " << serial << ". Treating as on ground.\r\n";
+				droneStates[serial] = std::make_tuple(0, -1, NowTime); //On ground and available for tasking
+			}
+		}
+
+		//Populate available mission indices
+		std::unordered_set<int> availableMissionIndices;
+		for (int missionIndex = 0; missionIndex < (int) droneMissions.size(); missionIndex++) {
+			//Mark all non-trivial missions as available
+			if (! droneMissions[missionIndex].Waypoints.empty())
+				availableMissionIndices.insert(missionIndex);
+		}
+
+		//Populate the allowed takeoff times for all drones (use now for drones in the air) and populate
+		//the HAGs to use (m) per drone. These override mission HAG since we want height to be fixed per drone and not per mission
+		std::Eunordered_map<std::string, TimePoint> droneAllowedTakeoffTimes;
+		std::Eunordered_map<std::string, double> droneHAGs;
+		TimePoint nextAllowedTakeoffTime = std::chrono::steady_clock::now();
+		double nextAllowedHAG = missionParams.HAG;
+		if (dronesUnderCommand.size() > 1U)
+			nextAllowedHAG += 0.5*(missionParams.HeightStaggerInterval*double(dronesUnderCommand.size() - 1U));
+		for (DroneInterface::Drone * drone : dronesUnderCommand) {
+			std::string serial = drone->GetDroneSerial();
+			bool isFlying = false;
+			TimePoint isFlyingTimestamp;
+			if (drone->IsCurrentlyFlying(isFlying, isFlyingTimestamp) && (SecondsElapsed(isFlyingTimestamp) <= 4.0)) {
+				//Nothing unusual here - telemetry is recent
+				if (isFlying)
+					droneAllowedTakeoffTimes[serial] = std::chrono::steady_clock::now();
+				else {
+					droneAllowedTakeoffTimes[serial] = nextAllowedTakeoffTime;
+					nextAllowedTakeoffTime = AdvanceTimepoint(nextAllowedTakeoffTime, missionParams.TakeoffStaggerInterval);
+				}
+			}
+			else {
+				std::cerr << "Bad or old telemetry for drone " << serial << ". Treating as on ground.\r\n";
+				droneAllowedTakeoffTimes[serial] = nextAllowedTakeoffTime;
+				nextAllowedTakeoffTime = AdvanceTimepoint(nextAllowedTakeoffTime, missionParams.TakeoffStaggerInterval);
+			}
+			droneHAGs[serial] = nextAllowedHAG;
+			nextAllowedHAG -= missionParams.HeightStaggerInterval;
+		}
+
+		//MapWidget::Instance().m_messageBoxOverlay.RemoveMessage(m_MessageToken1);
+
+		//Save all the mission prep work and reset progress tracking fields
+		m_mutex.lock();
+		m_surveyRegionPartition = surveyRegionPartition;
+		m_droneMissions = droneMissions;
+		m_droneStates = droneStates;
+		m_availableMissionIndices = availableMissionIndices;
+		m_droneAllowedTakeoffTimes = droneAllowedTakeoffTimes;
+		m_droneHAGs = droneHAGs;
+		m_taskedMissionDistances.clear();
+		m_taskedMissionProgress.clear();
+		m_dronePositions.clear();
+		m_missionPrepDone = true; //Mark the prep work as done
+		m_mutex.unlock();
 	}
 
 	//Assign the given drone to fly the given mission. This will override the HAG for the mission based on the drones serial number
@@ -539,7 +553,7 @@ namespace Guidance {
 		}
 	}
 
-	//Note: Carefully evaluate rick of deadlocking due to mutex locking. The guidance module holds it's lock for way
+	//Note: Carefully evaluate risk of deadlocking due to mutex locking. The guidance module holds it's lock for way
 	//longer than I would like and it holds the lock while it calls methods in other modules that probably also lock
 	//mutexes. Try to shorten the lock holds and avoid lock nests.
 
@@ -563,7 +577,11 @@ namespace Guidance {
 			}
 
 			//We are running - see if we have done the prep work yet. If not, do all the initial setup work that needs to be done
-			MissionPrepWork(partitioningMethod);
+			if (! m_missionPrepDone) {
+				m_mutex.unlock();
+				MissionPrepWork(partitioningMethod); //May take non-trivial amount of time - locks m_mutex internally when needed
+				m_mutex.lock();
+			}
 
 			//Update our record of drone positions and update progress of current missions
 			UpdateDronePositionsAndMissionProgress();

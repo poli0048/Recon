@@ -95,9 +95,9 @@ class MapWidget {
 		friend class MessageBoxOverlay;
 		
 		//Public overlays
-		MessageBoxOverlay m_messageBoxOverlay;
-		GuidanceOverlay m_guidanceOverlay;
-		ShadowMapOverlay m_shadowMapOverlay;
+		MessageBoxOverlay    m_messageBoxOverlay;
+		GuidanceOverlay      m_guidanceOverlay;
+		ShadowMapOverlay     m_shadowMapOverlay;
 		TimeAvailableOverlay m_TAOverlay;
 		
 		static MapWidget & Instance() { static MapWidget widget; return widget; }
@@ -111,9 +111,10 @@ class MapWidget {
 		void Draw(void);
 		void Update(); //Should be called from main draw loop, regardless of whether widget is being drawn
 		
+		//Each of these methods should only be called from the main draw thread - it is unsafe to call from any other thread.
 		void GetCurrentLatLonBounds(Eigen::Vector2d & LatBounds, Eigen::Vector2d & LonBounds);
-		void StartAnimation(Eigen::Vector2d const & LatBounds, Eigen::Vector2d const & LonBounds); //Should be called only from main draw thread
-		void StartAnimation(double MinLat, double MaxLat, double MinLon, double MaxLon); //Should be called only from main draw thread
+		void StartAnimation(Eigen::Vector2d const & LatBounds, Eigen::Vector2d const & LonBounds);
+		void StartAnimation(double MinLat, double MaxLat, double MinLon, double MaxLon);
 		int GetNumberOfSatTilesDrawn(void)  const { return int(numSatTilesDrawn);  }
 		int GetNumberOfDataTilesDrawn(void) const { return int(numDataTilesDrawn); }
 };

@@ -69,9 +69,9 @@ namespace Guidance {
 			bool              m_running;
 			std::atomic<bool> m_abort;
 			std::mutex        m_mutex;
-			int               m_MessageToken1;
-			int               m_MessageToken2;
-			int               m_MessageToken3;
+			int               m_MessageToken1; //Set in constructor - no locking needed to read
+			int               m_MessageToken2; //Set in constructor - no locking needed to read
+			int               m_MessageToken3; //Set in constructor - no locking needed to read
 			
 			//This block holds the variables that we are given or that we latch when starting a mission
 			std::vector<DroneInterface::Drone *> m_dronesUnderCommand; //pointers to the drones we are allowed to command for current mission
